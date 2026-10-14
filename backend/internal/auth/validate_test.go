@@ -58,20 +58,50 @@ func TestValidatePassword(t *testing.T) {
 	if msg := ValidatePassword("cavalo-bateria-grampo", "ana", "ana@empresa.com"); msg != "" {
 		t.Fatalf("senha boa rejeitada: %s", msg)
 	}
-	cases := map[string]string{
-		"curta":                        "curta1234",
-		"longa":                        strings.Repeat("x", 129),
-		"contém username":              "minhaANA-senha-1",
-		"contém parte local do e-mail": "anasilva-2026!",
+	cases := []struct {
+		name     string
+		password string
+		username string
+		email    string
+		wantMsg  string
+	}{
+		{
+			name:     "curta",
+			password: "curta1234",
+			username: "ana",
+			email:    "ana@empresa.com",
+			wantMsg:  "a senha deve ter de 10 a 128 caracteres",
+		},
+		{
+			name:     "longa",
+			password: strings.Repeat("x", 129),
+			username: "ana",
+			email:    "ana@empresa.com",
+			wantMsg:  "a senha deve ter de 10 a 128 caracteres",
+		},
+		{
+			// Username e parte local do e-mail diferentes, para que só o ramo do username dispare.
+			name:     "contém username",
+			password: "minhaANA-senha-1",
+			username: "ana",
+			email:    "bia@empresa.com",
+			wantMsg:  "a senha não pode conter o nome de usuário",
+		},
+		{
+			// O username "bia" não aparece na senha, então só o ramo da parte local do e-mail pode rejeitá-la.
+			name:     "contém parte local do e-mail",
+			password: "anasilva-2026!",
+			username: "bia",
+			email:    "anasilva@empresa.com",
+			wantMsg:  "a senha não pode conter o seu e-mail",
+		},
 	}
-	for name, pw := range cases {
-		email := "ana@empresa.com"
-		if name == "contém parte local do e-mail" {
-			email = "anasilva@empresa.com"
-		}
-		if ValidatePassword(pw, "ana", email) == "" {
-			t.Errorf("%s: %q aceita", name, pw)
-		}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if msg := ValidatePassword(tc.password, tc.username, tc.email); msg != tc.wantMsg {
+				t.Errorf("ValidatePassword(%q) = %q, quer %q", tc.password, msg, tc.wantMsg)
+			}
+		})
 	}
 }
 
