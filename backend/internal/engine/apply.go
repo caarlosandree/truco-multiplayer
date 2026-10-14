@@ -30,6 +30,10 @@ func dispatch(g *GameState, a Action) ([]Event, error) {
 		return burn(g, a)
 	case ActPlayCard:
 		return playCard(g, a)
+	case ActRequestRaise:
+		return requestRaise(g, a)
+	case ActVote:
+		return vote(g, a)
 	}
 	return nil, ruleErr(ErrInvalidChoice, "ação desconhecida: "+string(a.Kind))
 }
