@@ -1,4 +1,4 @@
-.PHONY: test test-short gen-types gen-sql dev-db
+.PHONY: test test-short gen-types gen-sql dev-db run migrate
 
 test:
 	cd backend && go test ./...
@@ -16,3 +16,9 @@ gen-sql:
 
 dev-db:
 	docker compose up -d --wait postgres
+
+run:
+	cd backend && set -a && . ../.env && set +a && go run ./cmd/server serve
+
+migrate:
+	cd backend && set -a && . ../.env && set +a && go run ./cmd/server migrate
