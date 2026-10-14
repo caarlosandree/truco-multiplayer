@@ -152,3 +152,41 @@ func expect(t *testing.T, r response, status int, code string) {
 		t.Fatalf("status %d código %q, quer %d %q; corpo %s", r.status, r.code(), status, code, r.body)
 	}
 }
+
+const password = "cavalo-bateria-grampo"
+
+// signup cadastra, verifica o e-mail e faz login; devolve o cliente já autenticado.
+func (h *harness) signup(username string) *client {
+	h.t.Helper()
+	c := h.client()
+	email := username + "@empresa.com"
+	r := c.post("/api/auth/register", map[string]string{"username": username, "email": email, "displayName": "Nome " + username, "password": password})
+	if r.status != http.StatusAccepted {
+		h.t.Fatalf("cadastro de %s: %d %s", username, r.status, r.body)
+	}
+	if r := c.post("/api/auth/verify-email", map[string]string{"token": h.mail.LastToken(email)}); r.status != http.StatusNoContent {
+		h.t.Fatalf("verificação de %s: %d %s", username, r.status, r.body)
+	}
+	if r := c.post("/api/auth/login", map[string]string{"login": username, "password": password}); r.status != http.StatusOK {
+		h.t.Fatalf("login de %s: %d %s", username, r.status, r.body)
+	}
+	return c
+}
+
+func (h *harness) makeAdmin(username string) {
+	h.t.Helper()
+	if _, err := h.pool.Exec(context.Background(), "UPDATE users SET is_admin = true WHERE username = $1", username); err != nil {
+		h.t.Fatal(err)
+	}
+}
+
+func (c *client) userID() string {
+	c.h.t.Helper()
+	var body struct {
+		User struct {
+			ID string `json:"id"`
+		} `json:"user"`
+	}
+	c.get("/api/me").decode(c.h.t, &body)
+	return body.User.ID
+}
