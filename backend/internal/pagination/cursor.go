@@ -6,6 +6,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 var ErrInvalidCursor = errors.New("pagination: cursor inválido")
@@ -23,7 +25,7 @@ func Decode(cursor string) (*time.Time, *string, error) {
 		return nil, nil, ErrInvalidCursor
 	}
 	stamp, id, ok := strings.Cut(string(raw), "|")
-	if !ok || id == "" {
+	if !ok || uuid.Validate(id) != nil {
 		return nil, nil, ErrInvalidCursor
 	}
 	at, err := time.Parse(time.RFC3339Nano, stamp)

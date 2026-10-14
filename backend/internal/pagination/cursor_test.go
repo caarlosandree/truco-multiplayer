@@ -1,6 +1,7 @@
 package pagination
 
 import (
+	"encoding/base64"
 	"errors"
 	"testing"
 	"time"
@@ -18,7 +19,8 @@ func TestDecodeEmptyAndInvalid(t *testing.T) {
 	if at, id, err := Decode(""); at != nil || id != nil || err != nil {
 		t.Fatal("cursor vazio deve ser a primeira página")
 	}
-	for _, bad := range []string{"%%%", "c2VtLXNlcGFyYWRvcg", "bm8tdGltZXxhYmM"} {
+	forged := base64.RawURLEncoding.EncodeToString([]byte("2026-10-14T12:00:00Z|abc"))
+	for _, bad := range []string{"%%%", "c2VtLXNlcGFyYWRvcg", "bm8tdGltZXxhYmM", forged} {
 		if _, _, err := Decode(bad); !errors.Is(err, ErrInvalidCursor) {
 			t.Errorf("%q: err = %v", bad, err)
 		}
