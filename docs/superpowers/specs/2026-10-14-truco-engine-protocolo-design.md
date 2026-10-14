@@ -3,7 +3,18 @@
 - **Data:** 2026-10-14
 - **Status:** aprovado em conversa, aguardando revisão escrita
 - **Escopo desta spec:** engine de regras em Go puro e contrato de mensagens WebSocket.
-- **Fora de escopo (specs futuras):** Spec 2 — servidor de salas (`net/http` + `coder/websocket`, lobby, goroutine por sala, timers, reconexão); Spec 3 — frontend (Vue 3 + TS + Pinia + Tailwind).
+- **Fora de escopo (specs futuras, nesta ordem):**
+  - Spec 2 — Contas e Persistência.
+  - Spec 3 — Servidor de salas (`net/http` + `coder/websocket`, lobby, goroutine por sala, timers, reconexão).
+  - Spec 4 — Frontend (Vue 3 + TS + Pinia + Tailwind).
+
+### Decisões já tomadas para specs futuras
+
+- **Banco:** PostgreSQL (dev via Docker Compose).
+- **Contas:** cadastro com usuário, e-mail e senha (hash argon2id); login por e-mail **ou** usuário (ambos únicos, case-insensitive); logout; recuperação de senha por e-mail via **Resend**; cadastro restrito a domínio(s) de e-mail configurável(is) da empresa; rate limit no login.
+- **Sessão:** token opaco aleatório em cookie `HttpOnly`/`Secure`/`SameSite`, apenas o hash armazenado no banco (revogável); o mesmo cookie autentica o handshake do WebSocket.
+- **Persistência de partidas:** seed + log de ações de cada partida (gravado a cada `Apply` bem-sucedido). O mesmo log serve para **replay completo** e para **recuperar partidas em andamento** após restart (reaplicando as ações). Histórico, estatísticas e ranking são derivados ao fim de cada partida.
+- **Impacto nesta spec:** nenhum além de `Player.ID` (id do usuário) e de as Actions serem serializáveis (já previsto).
 
 ## 1. Contexto e objetivo
 
@@ -11,17 +22,17 @@ Jogo de Truco (variante paulista com regras da casa) para 4 jogadores em 2 dupla
 
 1. **Servidor como única fonte da verdade.** O cliente recebe apenas uma projeção do estado filtrada para seu assento.
 2. **Regras corretas e testáveis.** Engine determinístico, sem I/O, coberto por testes unitários, de invariantes e de vazamento.
-3. **Simplicidade operacional.** Uma instância, estado em memória, salas por código, sem contas (definido na Spec 2).
+3. **Simplicidade operacional.** Uma instância; contas e persistência em PostgreSQL (Spec 2).
 
 ## 2. Decisões de arquitetura
 
 | Decisão | Escolha | Motivo |
 |---|---|---|
 | Núcleo do engine | Reducer puro `Apply(state, action) → (state, events, error)` | Determinístico, replay, testes sem mocks; a sala apenas serializa ações |
-| Tempo | Engine não lê relógio; a sala injeta `SysTimeout` / `SysStartHand` | Mantém pureza; timers são da Spec 2 |
+| Tempo | Engine não lê relógio; a sala injeta `SysTimeout` / `SysStartHand` | Mantém pureza; timers são da Spec 3 |
 | Aleatoriedade | `math/rand/v2` PCG com seed no estado | Replay determinístico |
 | Tipos TS | Gerados do Go via `tygo` | Go é a fonte; sem divergência manual |
-| HTTP/WS (Spec 2) | stdlib `net/http` (roteamento 1.22+), `coder/websocket`, `slog` | Mínimo de dependências |
+| HTTP/WS (Spec 3) | stdlib `net/http` (roteamento 1.22+), `coder/websocket`, `slog` | Mínimo de dependências |
 | Frameworks no engine | Nenhum | Engine é Go puro |
 
 ## 3. Estrutura do monorepo
@@ -30,7 +41,7 @@ Jogo de Truco (variante paulista com regras da casa) para 4 jogadores em 2 dupla
 truco/
 ├── backend/
 │   ├── go.mod                      # module github.com/caarlosandree/truco/backend
-│   ├── cmd/server/main.go          # (Spec 2)
+│   ├── cmd/server/main.go          # (Spec 3)
 │   ├── internal/
 │   │   ├── engine/                 # PURO: sem I/O, goroutines ou time.Now
 │   │   │   ├── card.go             # Rank, Suit, Card, CardID
@@ -46,10 +57,10 @@ truco/
 │   │   │   ├── scoring.go          # resolução de rodadas/mão, Mão de 11, Ferro
 │   │   │   └── view.go             # ViewFor: projeção anti-cheat
 │   │   ├── protocol/               # envelopes WS e DTOs (fonte do tygo)
-│   │   ├── room/                   # (Spec 2)
-│   │   └── transport/ws/           # (Spec 2)
+│   │   ├── room/                   # (Spec 3)
+│   │   └── transport/ws/           # (Spec 3)
 │   └── tygo.yaml
-├── frontend/                       # (Spec 3)
+├── frontend/                       # (Spec 4)
 │   └── src/protocol/types.ts       # GERADO
 ├── docs/superpowers/specs/
 └── Makefile                        # test, gen-types, dev
@@ -287,7 +298,7 @@ Envelope JSON:
 { "type": "error",  "payload": { "code": "not_your_turn", "seq": 17 } }
 ```
 
-- Tipos de cliente (engine): `choose_card`, `burn`, `pass_burn`, `play_card`, `request_raise`, `vote` (`choice ∈ accept|run|raise|play`). Mensagens de lobby (`join`, `ready` etc.) são da Spec 2.
+- Tipos de cliente (engine): `choose_card`, `burn`, `pass_burn`, `play_card`, `request_raise`, `vote` (`choice ∈ accept|run|raise|play`). Mensagens de lobby (`join`, `ready` etc.) são da Spec 3.
 - Após cada `Apply` bem-sucedido a sala envia, para cada assento, `events` filtrados e um `state` com a `PlayerView` completa (snapshot idempotente; também usado na reconexão).
 - `seq` é eco do cliente para correlacionar erros.
 - Tipos TS gerados em `frontend/src/protocol/types.ts` via `make gen-types` (tygo).
@@ -298,7 +309,7 @@ Envelope JSON:
 
 ## 13. Ação padrão por fase (para `SysTimeout`)
 
-O engine expõe `DefaultAction(state, seat) (Action, bool)`; a sala decide quando usar (Spec 2).
+O engine expõe `DefaultAction(state, seat) (Action, bool)`; a sala decide quando usar (Spec 3).
 - CutChoice/DealerChoice: `ChooseCard{Keep: 0}`.
 - BurnFours: `PassBurn`.
 - ElevenDecision: `Vote{Run}`.
