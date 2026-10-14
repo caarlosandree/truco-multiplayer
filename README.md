@@ -404,6 +404,7 @@ Rotas sob `/api`, com JSON. A sessão vai no cookie `__Host-truco_session` (ou `
 | `DELETE` | `/api/admin/email-domains/{domain}` | Remove um domínio permitido (admin) |
 | `POST` | `/api/admin/matches/{id}/abort` | Encerra uma partida em andamento (admin) |
 | `GET` | `/api/admin/audit` | Trilha de auditoria, paginada por cursor (admin) |
+| `GET` | `/healthz` | Saúde do servidor, fora de `/api`: `200` se o pool do banco responde a `SELECT 1` (sem autenticação) |
 
 Erros usam sempre o mesmo formato:
 
@@ -516,7 +517,7 @@ cd backend && go run ./cmd/server promote-admin ana@empresa.com.br
 
 | Comando | O que faz |
 |---|---|
-| `make test` | Roda toda a suíte (inclui 500 partidas aleatórias, cerca de 7s) |
+| `make test` | Roda toda a suíte (inclui 500 partidas aleatórias) |
 | `make test-short` | Suíte rápida (100 partidas aleatórias, cerca de 1s) |
 | `make gen-types` | Regenera `frontend/src/protocol/*.ts` a partir do Go (tygo v0.2.21) |
 | `make dev-db` | Sobe o Postgres 18 do `docker-compose.yml` (porta `POSTGRES_PORT`, padrão 5432) |
