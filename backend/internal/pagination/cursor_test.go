@@ -26,3 +26,14 @@ func TestDecodeEmptyAndInvalid(t *testing.T) {
 		}
 	}
 }
+
+// Formas alternativas aceitas por uuid.Parse (urn:uuid:) são normalizadas para a canônica,
+// a única que o Postgres sempre aceita.
+func TestDecodeNormalizesUUIDForm(t *testing.T) {
+	const id = "0199e7a4-0000-7000-8000-000000000001"
+	raw := base64.RawURLEncoding.EncodeToString([]byte("2026-10-14T12:00:00Z|urn:uuid:" + id))
+	_, got, err := Decode(raw)
+	if err != nil || got == nil || *got != id {
+		t.Fatalf("id = %v err = %v", got, err)
+	}
+}

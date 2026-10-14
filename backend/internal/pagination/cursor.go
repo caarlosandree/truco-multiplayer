@@ -25,12 +25,18 @@ func Decode(cursor string) (*time.Time, *string, error) {
 		return nil, nil, ErrInvalidCursor
 	}
 	stamp, id, ok := strings.Cut(string(raw), "|")
-	if !ok || uuid.Validate(id) != nil {
+	if !ok {
+		return nil, nil, ErrInvalidCursor
+	}
+	u, err := uuid.Parse(id)
+	if err != nil {
 		return nil, nil, ErrInvalidCursor
 	}
 	at, err := time.Parse(time.RFC3339Nano, stamp)
 	if err != nil {
 		return nil, nil, ErrInvalidCursor
 	}
-	return &at, &id, nil
+	// uuid.Parse aceita formas que o Postgres rejeita (urn:uuid:, chaves); devolve a canônica.
+	canonical := u.String()
+	return &at, &canonical, nil
 }
