@@ -101,3 +101,26 @@ func TestLoadRejectsBaseURLWithPath(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestAppOriginIsNormalized(t *testing.T) {
+	cases := map[string]string{
+		"https://Truco.Empresa.COM:443/": "https://truco.empresa.com",
+		"http://Truco.Test:80":           "http://truco.test",
+		"HTTP://localhost:5173":          "http://localhost:5173",
+		"https://truco.test:8443":        "https://truco.test:8443",
+		"http://truco.test:443":          "http://truco.test:443",
+		"https://[::1]:443":              "https://[::1]",
+		"https://[::1]:8443":             "https://[::1]:8443",
+	}
+	for raw, want := range cases {
+		values := validEnv()
+		values["APP_BASE_URL"] = raw
+		cfg, err := Load(env(values))
+		if err != nil {
+			t.Fatalf("%s: %v", raw, err)
+		}
+		if cfg.AppOrigin != want || cfg.AppBaseURL != want {
+			t.Errorf("%s: base %q origin %q, quer %q", raw, cfg.AppBaseURL, cfg.AppOrigin, want)
+		}
+	}
+}

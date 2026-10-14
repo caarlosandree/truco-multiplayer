@@ -507,7 +507,7 @@ make test
 ### Subir o backend
 
 ```bash
-cp .env.example .env        # ajuste ALLOWED_EMAIL_DOMAINS e o e-mail
+cp .env.example .env        # ajuste ALLOWED_EMAIL_DOMAINS; e-mails vão para o log (MAIL_DRIVER=log)
 make dev-db                 # Postgres 18 no Docker
 make run                    # aplica migrations e sobe em :8080
 cd backend && go run ./cmd/server promote-admin ana@empresa.com.br
@@ -541,11 +541,11 @@ Copie `.env.example` para `.env` (não versionado) e ajuste os valores.
 |---|---|---|
 | `DATABASE_URL` | obrigatória | Conexão com o Postgres |
 | `HTTP_ADDR` | `:8080` | Endereço de escuta |
-| `APP_BASE_URL` | obrigatória | Ex.: `https://truco.empresa.com.br`; a origem (esquema + host) é o `APP_ORIGIN` |
+| `APP_BASE_URL` | obrigatória | Ex.: `https://truco.empresa.com.br`; a origem (esquema + host em minúsculas, sem porta padrão) é o `APP_ORIGIN` |
 | `COOKIE_SECURE` | `true` | `false` troca o nome do cookie para `truco_session` e remove `Secure` (só para HTTP fora de `localhost`) |
 | `TRUST_PROXY` | `false` | Com `true`, o IP do rate limit vem do último endereço de `X-Forwarded-For` |
 | `ALLOWED_EMAIL_DOMAINS` | — | Domínios separados por vírgula; só popula a tabela quando ela está vazia. Tabela vazia e variável vazia impedem o start |
-| `MAIL_DRIVER` | `resend` | `resend` ou `log` (registra os e-mails no log, sem enviar) |
+| `MAIL_DRIVER` | `resend` | `resend` ou `log` (registra os e-mails no log, sem enviar; é o valor do `.env.example`) |
 | `RESEND_API_KEY` | — | Obrigatória com `resend` |
 | `MAIL_FROM` | — | Obrigatória com `resend`; ex.: `Truco <truco@empresa.com.br>` |
 | `RANKING_MIN_MATCHES` | `5` | Partidas mínimas para aparecer no ranking |

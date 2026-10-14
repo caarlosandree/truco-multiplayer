@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -130,6 +131,16 @@ func parseBaseURL(raw string) (base, origin string, err error) {
 	if strings.Trim(u.Path, "/") != "" || u.RawQuery != "" || u.Fragment != "" {
 		return "", "", fmt.Errorf("APP_BASE_URL não pode ter caminho, query ou fragmento: %q", raw)
 	}
-	origin = u.Scheme + "://" + u.Host
+	// Navegadores mandam Origin com host em minúsculas e sem a porta padrão do esquema.
+	host, port := strings.ToLower(u.Hostname()), u.Port()
+	if (u.Scheme == "https" && port == "443") || (u.Scheme == "http" && port == "80") {
+		port = ""
+	}
+	if port != "" {
+		host = net.JoinHostPort(host, port)
+	} else if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	origin = u.Scheme + "://" + host
 	return origin, origin, nil
 }
