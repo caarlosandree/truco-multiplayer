@@ -338,12 +338,49 @@ func TestRecomputeStatsRestoresAggregates(t *testing.T) {
 		return out
 	}
 	before := snapshot()
-	_, _ = e.pool.Exec(ctx, "UPDATE player_stats SET wins = 999")
+	if _, err := e.pool.Exec(ctx, "UPDATE player_stats SET wins = 999"); err != nil {
+		t.Fatal(err)
+	}
 	skipped, err := e.store.RecomputeStats(ctx)
 	if err != nil || len(skipped) != 0 {
 		t.Fatalf("skipped=%v err=%v", skipped, err)
 	}
 	if after := snapshot(); !reflect.DeepEqual(before, after) {
 		t.Fatalf("recálculo divergente:\nantes %v\ndepois %v", before, after)
+	}
+}
+
+func TestRecomputeStatsSkipsCorruptFinishedMatch(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	goodID, _ := e.persist(t, 41, -1)
+	if err := e.store.Finish(ctx, goodID); err != nil {
+		t.Fatal(err)
+	}
+	badID, _ := e.persist(t, 42, -1)
+	if err := e.store.Finish(ctx, badID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.pool.Exec(ctx, "UPDATE match_actions SET action = '\"lixo\"'::jsonb WHERE match_id = $1 AND ply = 0", badID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.pool.Exec(ctx, "UPDATE player_stats SET wins = 999"); err != nil {
+		t.Fatal(err)
+	}
+	skipped, err := e.store.RecomputeStats(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(skipped, []string{badID}) {
+		t.Fatalf("skipped = %v, want [%s]", skipped, badID)
+	}
+	var rows int
+	_ = e.pool.QueryRow(ctx, "SELECT count(*) FROM match_player_stats WHERE match_id = $1", goodID).Scan(&rows)
+	var bad int
+	_ = e.pool.QueryRow(ctx, "SELECT count(*) FROM match_player_stats WHERE match_id = $1", badID).Scan(&bad)
+	var wins999 int
+	_ = e.pool.QueryRow(ctx, "SELECT count(*) FROM player_stats WHERE wins = 999").Scan(&wins999)
+	if rows != 4 || bad != 0 || wins999 != 0 {
+		t.Fatalf("good=%d bad=%d wins999=%d", rows, bad, wins999)
 	}
 }

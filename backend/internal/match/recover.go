@@ -87,9 +87,13 @@ func (s *Store) RecomputeStats(ctx context.Context) (skipped []string, err error
 				return err
 			}
 			rec, err := loadRecord(ctx, q, m)
-			if err != nil {
+			var corrupt *replay.CorruptLogError
+			if errors.As(err, &corrupt) {
 				skipped = append(skipped, id)
 				continue
+			}
+			if err != nil {
+				return err
 			}
 			perSeat, err := stats.Derive(rec)
 			if err != nil {
