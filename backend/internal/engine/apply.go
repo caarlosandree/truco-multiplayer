@@ -24,6 +24,12 @@ func dispatch(g *GameState, a Action) ([]Event, error) {
 	switch a.Kind {
 	case ActSysStartHand:
 		return startHand(g)
+	case ActSysTimeout:
+		fallback, ok := DefaultAction(*g, a.Seat)
+		if !ok {
+			return nil, ruleErr(ErrInvalidPhase, "nenhuma decisão pendente para este assento")
+		}
+		return dispatch(g, fallback)
 	case ActChooseCard:
 		return chooseCard(g, a)
 	case ActBurn, ActPassBurn:
