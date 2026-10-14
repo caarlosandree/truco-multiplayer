@@ -201,3 +201,24 @@ func TestCreateSessionToleratesInvalidIP(t *testing.T) {
 		}
 	}
 }
+
+func TestCreateSessionNormalizesIP(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	userID := f.newUser(t, "ana", "senha-da-ana-123")
+	for ip, want := range map[string]string{"fe80::1%eth0": "fe80::1", "::ffff:1.2.3.4": "1.2.3.4"} {
+		if _, err := f.pool.Exec(ctx, "DELETE FROM sessions"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.svc.createSession(ctx, f.svc.q, userID, SessionMeta{IP: ip}); err != nil {
+			t.Fatalf("ip %q: %v", ip, err)
+		}
+		var got string
+		if err := f.pool.QueryRow(ctx, "SELECT host(ip) FROM sessions").Scan(&got); err != nil {
+			t.Fatalf("ip %q: %v", ip, err)
+		}
+		if got != want {
+			t.Fatalf("ip %q gravado como %q, quer %q", ip, got, want)
+		}
+	}
+}

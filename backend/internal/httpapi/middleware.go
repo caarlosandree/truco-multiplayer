@@ -172,7 +172,7 @@ func (s *Server) clientIP(r *http.Request) string {
 		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 			parts := strings.Split(xff, ",")
 			if addr, err := netip.ParseAddr(strings.TrimSpace(parts[len(parts)-1])); err == nil {
-				return addr.String()
+				return normalizeIP(addr)
 			}
 		}
 	}
@@ -185,7 +185,13 @@ func (s *Server) clientIP(r *http.Request) string {
 	if err != nil {
 		return ""
 	}
-	return addr.String()
+	return normalizeIP(addr)
+}
+
+// normalizeIP tira a zona IPv6 (inválida em inet) e desfaz o mapeamento IPv4-em-IPv6,
+// para que o mesmo cliente caia sempre na mesma chave de limite.
+func normalizeIP(addr netip.Addr) string {
+	return addr.WithZone("").Unmap().String()
 }
 
 func (s *Server) sessionMeta(r *http.Request) auth.SessionMeta {

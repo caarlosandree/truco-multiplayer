@@ -115,3 +115,19 @@ func TestClientIP(t *testing.T) {
 		t.Fatalf("XFF inválido deve cair no RemoteAddr: %q", got)
 	}
 }
+
+func TestClientIPDropsZoneAndUnmaps(t *testing.T) {
+	direct := &Server{deps: Deps{Config: config.Config{TrustProxy: false}}}
+	proxied := &Server{deps: Deps{Config: config.Config{TrustProxy: true}}}
+	for raw, want := range map[string]string{"fe80::1%eth0": "fe80::1", "::ffff:1.2.3.4": "1.2.3.4"} {
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.RemoteAddr = "[" + raw + "]:5555"
+		if got := direct.clientIP(r); got != want {
+			t.Errorf("RemoteAddr %q: %q, quer %q", raw, got, want)
+		}
+		r.Header.Set("X-Forwarded-For", raw)
+		if got := proxied.clientIP(r); got != want {
+			t.Errorf("X-Forwarded-For %q: %q, quer %q", raw, got, want)
+		}
+	}
+}

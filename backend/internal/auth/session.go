@@ -44,7 +44,7 @@ func (s *Service) createSession(ctx context.Context, q *dbgen.Queries, userID st
 	// A coluna é inet: IP inválido faria o INSERT falhar, então grava vazio (NULL).
 	ip := ""
 	if parsed, err := netip.ParseAddr(meta.IP); err == nil {
-		ip = parsed.Unmap().String()
+		ip = parsed.WithZone("").Unmap().String()
 	}
 	_, err := q.CreateSession(ctx, dbgen.CreateSessionParams{
 		UserID: userID, TokenHash: hash, Now: now, ExpiresAt: now.Add(SessionIdleTTL),
