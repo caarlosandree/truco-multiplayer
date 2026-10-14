@@ -28,6 +28,8 @@ func dispatch(g *GameState, a Action) ([]Event, error) {
 		return chooseCard(g, a)
 	case ActBurn, ActPassBurn:
 		return burn(g, a)
+	case ActPlayCard:
+		return playCard(g, a)
 	}
 	return nil, ruleErr(ErrInvalidChoice, "ação desconhecida: "+string(a.Kind))
 }
