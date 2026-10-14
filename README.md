@@ -9,7 +9,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-tipos%20gerados-3178C6?logo=typescript&logoColor=white)](frontend/src/protocol)
 [![Cobertura](https://img.shields.io/badge/cobertura-98.9%25-brightgreen)](#-testes)
 [![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-yellow.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/status-engine%20conclu%C3%ADdo-blue)](#-status-e-roadmap)
+[![Status](https://img.shields.io/badge/status-contas%20e%20persist%C3%AAncia-blue)](#-status-e-roadmap)
 
 </div>
 
@@ -35,8 +35,10 @@
   - [Eventos e visibilidade](#eventos-e-visibilidade)
   - [Timeouts sem relógio no engine](#timeouts-sem-relógio-no-engine)
 - [Protocolo WebSocket](#-protocolo-websocket)
+- [API HTTP](#-api-http)
 - [Estrutura do repositório](#-estrutura-do-repositório)
 - [Como começar](#-como-começar)
+  - [Variáveis de ambiente](#variáveis-de-ambiente)
 - [Usando o engine](#-usando-o-engine)
 - [Testes](#-testes)
 - [Decisões de design](#-decisões-de-design)
@@ -59,7 +61,7 @@ O **Truco Multiplayer** é uma implementação completa do Truco paulista (com r
 |---|---|
 | Motor de regras | Go puro (somente biblioteca padrão) |
 | Servidor | Go `net/http` + [`coder/websocket`](https://github.com/coder/websocket) + `log/slog` *(planejado)* |
-| Persistência | PostgreSQL *(planejado)* |
+| Persistência | PostgreSQL 18 + pgx + sqlc + goose |
 | Frontend | Vue 3 (Composition API, `<script setup>`), TypeScript, Pinia, TailwindCSS *(planejado)* |
 | Tipos compartilhados | [`tygo`](https://github.com/gzuidhof/tygo) (Go → TypeScript) |
 
@@ -72,19 +74,16 @@ O projeto foi decomposto em quatro sub-projetos, cada um com spec, plano e imple
 | # | Sub-projeto | Escopo | Status |
 |---|---|---|---|
 | 1 | **Engine de regras + protocolo** | Baralho, força, distribuição, queima, rodadas, apostas, pontuação, projeção anti-cheat, mensagens WebSocket, tipos TS | ✅ **Concluído** |
-| 2 | **Contas e persistência** | Cadastro e login (usuário, e-mail e senha), sessão em cookie `HttpOnly`, recuperação de senha, histórico, ranking, replay | 🗓️ Planejado |
+| 2 | **Contas e persistência** | Cadastro e login (usuário, e-mail e senha), sessão em cookie `HttpOnly`, recuperação de senha, histórico, ranking, replay | ✅ **Concluído** |
 | 3 | **Servidor de salas** | Lobby, salas por código, goroutine por sala, WebSocket, timers, reconexão | 🗓️ Planejado |
 | 4 | **Frontend** | Mesa em Vue 3, alternância entre baralho francês e espanhol, stores Pinia sincronizadas com o servidor | 🗓️ Planejado |
 
-> Ainda não dá para jogar pelo navegador: hoje o repositório contém o motor de regras completo e testado, o pacote de protocolo e os tipos TypeScript gerados. As próximas etapas constroem servidor, persistência e interface sobre essa base.
+> Ainda não dá para jogar pelo navegador: o repositório já tem a API de contas, a persistência de partidas e o ranking, além do motor de regras. Faltam o servidor de salas com WebSocket (Spec 3) e a interface (Spec 4).
 
 ### Decisões já tomadas para as próximas etapas
 
-- **Banco:** PostgreSQL (Docker Compose no desenvolvimento).
-- **Contas:** usuário, e-mail e senha com hash **argon2id**; login por e-mail **ou** usuário; limite de tentativas no login; cadastro restrito ao(s) domínio(s) de e-mail da empresa (configurável).
-- **Sessão:** token opaco aleatório em cookie `HttpOnly`/`Secure`/`SameSite`, com apenas o hash guardado no banco, o que torna o logout revogável. O mesmo cookie autentica o handshake do WebSocket.
-- **Recuperação de senha:** e-mail via [Resend](https://resend.com/).
-- **Partidas:** a seed e o log de ações de cada partida são persistidos. Como o engine é determinístico, esse log serve ao mesmo tempo para **replay completo**, para **recuperar partidas em andamento** após um restart e para derivar **histórico, estatísticas e ranking**.
+- **WebSocket (Spec 3):** o handshake será autenticado pelo mesmo cookie de sessão, com `auth.SessionFromRequest` e `auth.CheckOrigin`.
+- **Interface (Spec 4):** as páginas de verificação de e-mail e de redefinição de senha fazem o `POST` dos tokens recebidos por e-mail.
 
 ---
 
@@ -373,12 +372,76 @@ Os tipos TypeScript correspondentes ficam em [`frontend/src/protocol/engine.ts`]
 
 ---
 
+## 🔐 API HTTP
+
+Rotas sob `/api`, com JSON. A sessão vai no cookie `__Host-truco_session` (ou `truco_session` com `COOKIE_SECURE=false`). Rotas autenticadas respondem `401 unauthenticated` sem sessão válida; as de administração respondem `403 forbidden` para quem não é administrador. Requisições de escrita exigem `Origin` igual à origem do app.
+
+| Método | Rota | Descrição |
+|---|---|---|
+| `POST` | `/api/auth/register` | Cadastro com o e-mail da empresa; envia o link de verificação (`202`) |
+| `POST` | `/api/auth/verify-email` | Confirma o e-mail com o token recebido |
+| `POST` | `/api/auth/resend-verification` | Reenvia a verificação de conta pendente (sempre `202`) |
+| `POST` | `/api/auth/login` | Entra com usuário ou e-mail; cria a sessão em cookie |
+| `POST` | `/api/auth/logout` | Encerra a sessão atual |
+| `POST` | `/api/auth/logout-all` | Encerra todas as sessões do usuário (autenticada) |
+| `POST` | `/api/auth/password/forgot` | Envia o link de redefinição de senha (sempre `202`) |
+| `POST` | `/api/auth/password/reset` | Define nova senha com o token e encerra todas as sessões |
+| `GET` | `/api/me` | Usuário da sessão (autenticada) |
+| `PATCH` | `/api/me` | Altera o nome de exibição (autenticada) |
+| `POST` | `/api/me/password` | Troca a senha, encerra as outras sessões e renova a atual (autenticada) |
+| `GET` | `/api/ranking` | Ranking de jogadores (autenticada) |
+| `GET` | `/api/users/{username}` | Perfil e estatísticas de um jogador (autenticada) |
+| `GET` | `/api/matches` | Histórico de partidas de um jogador, paginado por cursor (autenticada) |
+| `GET` | `/api/matches/{id}` | Resumo de uma partida (autenticada) |
+| `GET` | `/api/matches/{id}/replay` | Replay completo de partida encerrada; `409` se ainda estiver em andamento (autenticada) |
+| `GET` | `/api/admin/users` | Busca e lista usuários, paginado por cursor (admin) |
+| `POST` | `/api/admin/users/{id}/disable` | Desativa a conta e encerra as sessões (admin) |
+| `POST` | `/api/admin/users/{id}/enable` | Reativa a conta (admin) |
+| `POST` | `/api/admin/users/{id}/force-password-reset` | Obriga a redefinição de senha no próximo acesso (admin) |
+| `PUT` | `/api/admin/users/{id}/admin` | Concede ou remove o papel de administrador (admin) |
+| `GET` | `/api/admin/email-domains` | Lista os domínios de e-mail permitidos (admin) |
+| `POST` | `/api/admin/email-domains` | Adiciona um domínio permitido (admin) |
+| `DELETE` | `/api/admin/email-domains/{domain}` | Remove um domínio permitido (admin) |
+| `POST` | `/api/admin/matches/{id}/abort` | Encerra uma partida em andamento (admin) |
+| `GET` | `/api/admin/audit` | Trilha de auditoria, paginada por cursor (admin) |
+
+Erros usam sempre o mesmo formato:
+
+```json
+{ "error": { "code": "validation_failed", "message": "Verifique os campos destacados.", "fields": { "password": "..." } } }
+```
+
+`fields` aparece só em erros de validação. Códigos:
+
+| `code` | Quando ocorre |
+|---|---|
+| `validation_failed` | Campos inválidos (detalhados em `fields`) |
+| `invalid_request` | JSON malformado, `Content-Type` diferente de `application/json` ou corpo grande demais |
+| `invalid_credentials` | Usuário ou senha incorretos |
+| `email_not_verified` | Login antes de confirmar o e-mail (só após senha correta) |
+| `account_disabled` | Conta desativada (só após senha correta) |
+| `password_reset_required` | Redefinição de senha exigida pelo administrador (só após senha correta) |
+| `email_domain_not_allowed` | E-mail fora dos domínios permitidos |
+| `username_taken` | Nome de usuário já em uso |
+| `invalid_token` | Token de verificação ou redefinição inválido, usado ou expirado |
+| `unauthenticated` | Rota autenticada sem sessão válida |
+| `forbidden` | Rota de administração para quem não é administrador |
+| `forbidden_origin` | Escrita com `Origin` não permitido |
+| `too_many_attempts` | Limite de tentativas excedido (a resposta traz `Retry-After`) |
+| `not_found` | Recurso inexistente |
+| `match_in_progress` | Replay pedido para partida ainda em andamento |
+| `conflict` | Operação incompatível com o estado atual |
+| `internal` | Erro interno; é registrado no servidor com o `request_id` |
+
+---
+
 ## 📁 Estrutura do repositório
 
 ```
 truco-multiplayer/
 ├── backend/
 │   ├── go.mod                         # módulo github.com/caarlosandree/truco-multiplayer/backend
+│   ├── cmd/server/                    # binário: serve, migrate, promote-admin, recompute-stats
 │   ├── tygo.yaml                      # configuração da geração de tipos TS
 │   └── internal/
 │       ├── engine/                    # motor de regras PURO (somente stdlib)
@@ -396,13 +459,27 @@ truco-multiplayer/
 │       │   ├── timeout.go             # DefaultAction (ação padrão por fase)
 │       │   ├── view.go                # PlayerView e ViewFor (anti-cheat)
 │       │   └── *_test.go              # testes de tabela, propriedade e vazamento
-│       └── protocol/                  # envelopes WebSocket e decodificação segura
+│       ├── protocol/                  # envelopes WebSocket e decodificação segura
+│       ├── config/                    # carrega e valida variáveis de ambiente, com falha clara no start
+│       ├── db/                        # pool pgx, migrations goose embutidas, queries e código gerado (dbgen, não editar)
+│       ├── auth/                      # senha argon2id, tokens, normalização, cadastro, login, sessão e recuperação
+│       ├── mail/                      # Mailer: Resend, log e fake para testes; templates em pt-BR
+│       ├── ratelimit/                 # limitadores por chave e bloqueio por falhas de login
+│       ├── replay/                    # reconstrução pura de partidas a partir do log de ações (sem banco)
+│       ├── match/                     # persistência de partidas, recuperação no start e recálculo de estatísticas
+│       ├── stats/                     # derivação de estatísticas e consultas de ranking, perfil e histórico
+│       ├── admin/                     # operações de administração, sempre com auditoria
+│       ├── httpapi/                   # roteador, handlers, middlewares, erros JSON e SPA estática
+│       └── pagination/                # cursores opacos (instante + id) para paginação por keyset
 ├── frontend/
 │   └── src/protocol/                  # tipos TypeScript GERADOS (não editar à mão)
 ├── docs/superpowers/
 │   ├── specs/                         # especificações de design aprovadas
 │   └── plans/                         # planos de implementação
-├── Makefile                           # test, test-short, gen-types
+├── .env.example                       # variáveis documentadas (copie para .env)
+├── .github/workflows/ci.yml           # vet, test -race com Postgres e diff dos arquivos gerados
+├── docker-compose.yml                 # Postgres 18 para desenvolvimento
+├── Makefile                           # test, test-short, gen-types, dev-db, run, migrate, gen-sql
 └── LICENSE
 ```
 
@@ -413,6 +490,8 @@ truco-multiplayer/
 ### Pré-requisitos
 
 - [Go](https://go.dev/dl/) **1.27** ou superior
+- [Docker](https://docs.docker.com/get-docker/) (Postgres local e testes de integração)
+- `gcc` (para o `sqlc`)
 - `make`
 - *(opcional)* Node.js, para validar os tipos TypeScript gerados
 
@@ -424,6 +503,15 @@ cd truco-multiplayer
 make test
 ```
 
+### Subir o backend
+
+```bash
+cp .env.example .env        # ajuste ALLOWED_EMAIL_DOMAINS e o e-mail
+make dev-db                 # Postgres 18 no Docker
+make run                    # aplica migrations e sobe em :8080
+cd backend && go run ./cmd/server promote-admin ana@empresa.com.br
+```
+
 ### Comandos disponíveis
 
 | Comando | O que faz |
@@ -431,6 +519,10 @@ make test
 | `make test` | Roda toda a suíte (inclui 500 partidas aleatórias, cerca de 7s) |
 | `make test-short` | Suíte rápida (100 partidas aleatórias, cerca de 1s) |
 | `make gen-types` | Regenera `frontend/src/protocol/*.ts` a partir do Go (tygo v0.2.21) |
+| `make dev-db` | Sobe o Postgres 18 do `docker-compose.yml` (porta `POSTGRES_PORT`, padrão 5432) |
+| `make run` | Aplica as migrations e sobe o servidor em `:8080` |
+| `make migrate` | Aplica as migrations pendentes e encerra |
+| `make gen-sql` | Regenera `backend/internal/db/dbgen` a partir de `queries/` (sqlc v1.31.1) |
 
 Outros comandos úteis:
 
@@ -439,6 +531,27 @@ cd backend && go test -race -cover ./...
 cd backend && go test ./internal/engine/ -run TestRandomGames -v
 cd backend && go vet ./...
 ```
+
+### Variáveis de ambiente
+
+Copie `.env.example` para `.env` (não versionado) e ajuste os valores.
+
+| Variável | Padrão | Notas |
+|---|---|---|
+| `DATABASE_URL` | obrigatória | Conexão com o Postgres |
+| `HTTP_ADDR` | `:8080` | Endereço de escuta |
+| `APP_BASE_URL` | obrigatória | Ex.: `https://truco.empresa.com.br`; a origem (esquema + host) é o `APP_ORIGIN` |
+| `COOKIE_SECURE` | `true` | `false` troca o nome do cookie para `truco_session` e remove `Secure` (só para HTTP fora de `localhost`) |
+| `TRUST_PROXY` | `false` | Com `true`, o IP do rate limit vem do último endereço de `X-Forwarded-For` |
+| `ALLOWED_EMAIL_DOMAINS` | — | Domínios separados por vírgula; só popula a tabela quando ela está vazia. Tabela vazia e variável vazia impedem o start |
+| `MAIL_DRIVER` | `resend` | `resend` ou `log` (registra os e-mails no log, sem enviar) |
+| `RESEND_API_KEY` | — | Obrigatória com `resend` |
+| `MAIL_FROM` | — | Obrigatória com `resend`; ex.: `Truco <truco@empresa.com.br>` |
+| `RANKING_MIN_MATCHES` | `5` | Partidas mínimas para aparecer no ranking |
+| `MIGRATE_ON_START` | `true` | Aplica as migrations ao subir o servidor |
+| `LOG_LEVEL` | `info` | `debug`, `info`, `warn` ou `error` |
+| `LOG_FORMAT` | `json` | `json` ou `text` |
+| `STATIC_DIR` | — | Diretório do frontend compilado, servido em modo SPA |
 
 ---
 
@@ -488,7 +601,7 @@ func main() {
 
 ## 🧪 Testes
 
-A estratégia é **TDD**: todo comportamento foi escrito primeiro como teste que falha. São **56 funções de teste** (mais subtestes de tabela), com **98,9%** de cobertura no engine e **100%** no protocolo.
+A estratégia é **TDD**: todo comportamento foi escrito primeiro como teste que falha. São **209 funções de teste** (mais subtestes de tabela), com **98,9%** de cobertura no engine e **100%** no protocolo.
 
 | Tipo | O que garante |
 |---|---|
@@ -501,6 +614,15 @@ A estratégia é **TDD**: todo comportamento foi escrito primeiro como teste que
 | **Propriedade** | Centenas de partidas completas com ações legais aleatórias até o fim, verificando invariantes a cada passo (cartas conservadas, placar monotônico) |
 | **Vazamento** | Em cada passo dessas partidas, a visão e os eventos de cada assento são serializados em JSON e conferidos contra a lista de cartas proibidas, calculada de forma **independente** de `view.go` |
 | **Protocolo** | Decodificação de todas as mensagens, rejeição de ações de sistema, assento injetado, payload vazio e mapeamento dos códigos de erro |
+| **Replay** | Round-trip com centenas de partidas aleatórias: o estado reconstruído a partir do log é idêntico ao estado ao vivo (`reflect.DeepEqual`) |
+| **Integração (Postgres real)** | Migrations up/down/up, `match.Store`, `auth.Service` e `admin.Service` contra o `postgres:18` do testcontainers, com um banco clonado por teste a partir de um banco-template |
+| **HTTP ponta a ponta** | Cadastro, verificação, login, `/api/me`, logout, redefinição de senha, respostas anti-enumeração, `403 forbidden_origin`, `429` com `Retry-After` e rotas de administração |
+
+Os testes de integração sobem um contêiner Postgres real. Sem Docker, são pulados com uma mensagem clara. Com `TRUCO_REQUIRE_DB=1`, que é o modo do CI (`.github/workflows/ci.yml`), a ausência do banco vira falha:
+
+```bash
+cd backend && TRUCO_REQUIRE_DB=1 go test -race ./...
+```
 
 O detector de vazamento foi validado por **mutação**: ao introduzir de propósito vazamentos em `view.go` (revelar cartas cobertas ou mãos ocultas), o teste falha e aponta seed, fase, assento e carta.
 
@@ -538,6 +660,8 @@ O desenho de cada etapa fica versionado no repositório:
 
 - **Spec 1 – Engine de regras e protocolo:** [`docs/superpowers/specs/2026-10-14-truco-engine-protocolo-design.md`](docs/superpowers/specs/2026-10-14-truco-engine-protocolo-design.md)
 - **Plano de implementação do engine:** [`docs/superpowers/plans/2026-10-14-truco-engine.md`](docs/superpowers/plans/2026-10-14-truco-engine.md)
+- **Spec 2 – Contas e persistência:** [`docs/superpowers/specs/2026-10-14-truco-contas-persistencia-design.md`](docs/superpowers/specs/2026-10-14-truco-contas-persistencia-design.md)
+- **Plano de implementação da Spec 2:** [`docs/superpowers/plans/2026-10-14-truco-contas-persistencia.md`](docs/superpowers/plans/2026-10-14-truco-contas-persistencia.md)
 
 ---
 

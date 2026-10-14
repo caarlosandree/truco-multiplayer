@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    env:
+      TRUCO_REQUIRE_DB: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: go vet
+        run: cd backend && go vet ./...
+      - name: testes (com Postgres via testcontainers)
+        run: cd backend && go test -race ./...
+      - name: código gerado está em dia
+        run: |
+          make gen-sql gen-types
+          git diff --exit-code
