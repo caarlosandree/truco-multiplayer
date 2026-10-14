@@ -1,6 +1,9 @@
 package engine
 
-import "slices"
+import (
+	"errors"
+	"slices"
+)
 
 // Seat é a posição na mesa (0..3, sentido horário).
 type Seat uint8
@@ -154,3 +157,9 @@ func (h HandState) clone() HandState {
 	}
 	return clone
 }
+
+var errStateNotSerializable = errors.New("engine: GameState é privado; use ViewFor")
+
+// MarshalJSON impede que o estado completo vaze por um json.Marshal acidental.
+// O estado só sai do servidor via ViewFor; o banco guarda ações, não estado.
+func (GameState) MarshalJSON() ([]byte, error) { return nil, errStateNotSerializable }

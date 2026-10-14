@@ -209,6 +209,15 @@ export interface PendingRaise {
 }
 
 //////////
+// source: version.go
+
+/**
+ * RulesVersion identifica a versão das regras. Incremente sempre que uma mudança
+ * fizer Apply produzir resultado diferente para um log de ações já gravado.
+ */
+export const RulesVersion = 1;
+
+//////////
 // source: view.go
 
 export interface PlayerInfo {
