@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/db/dbgen"
 )
 
 const goodPassword = "cavalo-bateria-grampo"
@@ -310,5 +312,65 @@ func TestUpdateDisplayName(t *testing.T) {
 	var fields FieldErrors
 	if _, err := f.svc.UpdateDisplayName(ctx, res.User.ID, ""); !errors.As(err, &fields) {
 		t.Fatalf("nome vazio: %v", err)
+	}
+}
+
+// Username é público: ocupado precisa dar o mesmo erro exista ou não o e-mail informado.
+func TestRegisterUsernameTakenRegardlessOfEmail(t *testing.T) {
+	f := newFixture(t)
+	f.register(t, "ana")
+	f.register(t, "bia")
+	before := len(f.mail.Sent())
+	for _, email := range []string{"bia@empresa.com", "ana@empresa.com", "nova@empresa.com"} {
+		err := f.svc.Register(context.Background(), RegisterInput{Username: "ana", Email: email, DisplayName: "X", Password: goodPassword})
+		if !errors.Is(err, ErrUsernameTaken) {
+			t.Fatalf("e-mail %s: err = %v", email, err)
+		}
+	}
+	if len(f.mail.Sent()) != before {
+		t.Fatal("username ocupado não pode disparar e-mail")
+	}
+}
+
+func TestChangePasswordInvalidatesPendingResetLinks(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	email := f.registerVerified(t, "ana")
+	if err := f.svc.ForgotPassword(ctx, email); err != nil {
+		t.Fatal(err)
+	}
+	pending := f.mail.LastToken(email)
+	res, _ := f.svc.Login(ctx, "ana", goodPassword, SessionMeta{})
+	p, _ := f.svc.Authenticate(ctx, res.Token)
+	if _, err := f.svc.ChangePassword(ctx, p, goodPassword, "nova-senha-segura-1", SessionMeta{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.svc.ResetPassword(ctx, pending, "outra-senha-segura-2"); !errors.Is(err, ErrInvalidToken) {
+		t.Fatalf("link de reset emitido antes da troca ainda vale: %v", err)
+	}
+}
+
+func TestResetPasswordInvalidatesOtherPendingResetLinks(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	email := f.registerVerified(t, "ana")
+	if err := f.svc.ForgotPassword(ctx, email); err != nil {
+		t.Fatal(err)
+	}
+	used := f.mail.LastToken(email)
+	var userID string
+	if err := f.pool.QueryRow(ctx, "SELECT id::text FROM users WHERE username = 'ana'").Scan(&userID); err != nil {
+		t.Fatal(err)
+	}
+	// Um segundo link pendente (o fluxo normal já invalida o anterior ao emitir; aqui é a defesa extra).
+	extra, extraHash := NewToken()
+	if err := f.svc.q.CreateUserToken(ctx, dbgen.CreateUserTokenParams{UserID: userID, Purpose: purposeReset, TokenHash: extraHash, Now: f.clock.Now(), ExpiresAt: f.clock.Now().Add(resetTTL)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.svc.ResetPassword(ctx, used, "nova-senha-segura-1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.svc.ResetPassword(ctx, extra, "outra-senha-segura-2"); !errors.Is(err, ErrInvalidToken) {
+		t.Fatalf("outro link pendente ainda vale após o reset: %v", err)
 	}
 }

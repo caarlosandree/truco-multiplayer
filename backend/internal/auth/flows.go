@@ -77,6 +77,13 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) error {
 	if !allowed {
 		return ErrEmailDomainNotAllowed
 	}
+	// Username é público: ocupado responde 409 antes de olhar o e-mail, senão a resposta
+	// (202 ou 409) revelaria se o e-mail informado já tem conta.
+	if _, err := s.q.GetUserByUsername(ctx, username); err == nil {
+		return ErrUsernameTaken
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
 	// O hash vem antes da checagem de e-mail existente para os dois caminhos levarem o mesmo tempo.
 	hash, err := s.hasher.Hash(in.Password)
 	if err != nil {
@@ -275,6 +282,9 @@ func (s *Service) ResetPassword(ctx context.Context, token, password string) err
 		if err := q.CompletePasswordReset(ctx, dbgen.CompletePasswordResetParams{PasswordHash: passwordHash, Now: now, ID: user.ID}); err != nil {
 			return err
 		}
+		if err := q.DeleteUnusedTokens(ctx, dbgen.DeleteUnusedTokensParams{UserID: user.ID, Purpose: purposeReset}); err != nil {
+			return err
+		}
 		return q.DeleteUserSessions(ctx, user.ID)
 	})
 	if err != nil {
@@ -308,6 +318,10 @@ func (s *Service) ChangePassword(ctx context.Context, p Principal, current, next
 	err = db.WithTx(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
 		if err := q.SetPasswordHash(ctx, dbgen.SetPasswordHashParams{PasswordHash: passwordHash, Now: s.now(), ID: user.ID}); err != nil {
+			return err
+		}
+		// Links de reset emitidos antes da troca não podem desfazê-la.
+		if err := q.DeleteUnusedTokens(ctx, dbgen.DeleteUnusedTokensParams{UserID: user.ID, Purpose: purposeReset}); err != nil {
 			return err
 		}
 		if err := q.DeleteUserSessions(ctx, user.ID); err != nil {

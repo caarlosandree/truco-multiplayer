@@ -47,7 +47,7 @@ func TestValidateDisplayName(t *testing.T) {
 	if _, msg := ValidateDisplayName(strings.Repeat("é", 30)); msg != "" {
 		t.Fatal("30 runes devem ser aceitas, mesmo com mais de 30 bytes")
 	}
-	for _, bad := range []string{"", "   ", strings.Repeat("a", 31), "ana\x00", "ana\nbia"} {
+	for _, bad := range []string{"", "   ", strings.Repeat("a", 31), "ana\x00", "ana\nbia", "ana\u200bbia", "ana\u202ebia", "\ufeffana", "ana\u2066"} {
 		if _, msg := ValidateDisplayName(bad); msg == "" {
 			t.Errorf("%q aceito", bad)
 		}

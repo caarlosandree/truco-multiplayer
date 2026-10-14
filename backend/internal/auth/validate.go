@@ -56,8 +56,9 @@ func ValidateDisplayName(n string) (string, string) {
 	if count < 1 || count > 30 {
 		return "", "o nome de exibição deve ter de 1 a 30 caracteres"
 	}
-	if strings.ContainsFunc(n, unicode.IsControl) {
-		return "", "o nome de exibição não pode ter caracteres de controle"
+	// Cf cobre caracteres invisíveis de formato (U+200B, U+202E, U+FEFF…), usados para disfarçar nomes.
+	if strings.ContainsFunc(n, func(r rune) bool { return unicode.IsControl(r) || unicode.Is(unicode.Cf, r) }) {
+		return "", "o nome de exibição não pode ter caracteres de controle ou invisíveis"
 	}
 	return n, ""
 }
