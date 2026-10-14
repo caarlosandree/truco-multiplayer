@@ -62,7 +62,7 @@ frontend/src/protocol/engine.ts, messages.ts   (gerados)
 
 ---
 
-### Tarefa 1: Módulo, cartas e baralho
+### Task 1: Módulo, cartas e baralho
 
 **Arquivos:**
 - Criar: `Makefile`, `.gitignore`, `backend/go.mod`
@@ -251,7 +251,7 @@ git commit -m "feat(engine): adiciona modelo de cartas e baralho determinístico
 
 ---
 
-### Tarefa 2: Força das cartas e vencedor da rodada
+### Task 2: Força das cartas e vencedor da rodada
 
 **Arquivos:**
 - Criar: `backend/internal/engine/state.go` (apenas helpers de assento nesta tarefa)
@@ -477,7 +477,7 @@ git commit -m "feat(engine): adiciona força das cartas, manilhas e vencedor da 
 
 ---
 
-### Tarefa 3: Resolução da mão (melar paulista)
+### Task 3: Resolução da mão (melar paulista)
 
 **Arquivos:**
 - Criar: `backend/internal/engine/scoring.go`
@@ -612,7 +612,7 @@ git commit -m "feat(engine): adiciona resolução da mão com regra de empate pa
 
 ---
 
-### Tarefa 4: Estado, Apply e distribuição completa (corte, entrega, queima, vira)
+### Task 4: Estado, Apply e distribuição completa (corte, entrega, queima, vira)
 
 **Arquivos:**
 - Modificar: `backend/internal/engine/state.go` (anexar tipos de estado e Clone)
@@ -1491,7 +1491,7 @@ git commit -m "feat(engine): adiciona reducer Apply e distribuição com corte, 
 
 ---
 
-### Tarefa 5: Jogar cartas, fechar rodadas e pontuar a mão
+### Task 5: Jogar cartas, fechar rodadas e pontuar a mão
 
 **Arquivos:**
 - Modificar: `backend/internal/engine/scoring.go` (anexar funções)
@@ -1729,7 +1729,7 @@ git commit -m "feat(engine): adiciona jogadas, fechamento de rodadas e pontuaç�
 
 ---
 
-### Tarefa 6: Apostas (Truco/6/9/12), voto da dupla, punição e Mão de 11
+### Task 6: Apostas (Truco/6/9/12), voto da dupla, punição e Mão de 11
 
 **Arquivos:**
 - Criar: `backend/internal/engine/betting.go`
@@ -2053,7 +2053,7 @@ git commit -m "feat(engine): adiciona apostas com voto da dupla, punição e mã
 
 ---
 
-### Tarefa 7: Ação padrão por fase e `SysTimeout`
+### Task 7: Ação padrão por fase e `SysTimeout`
 
 **Arquivos:**
 - Criar: `backend/internal/engine/timeout.go`
@@ -2202,7 +2202,7 @@ git commit -m "feat(engine): adiciona ação padrão por fase para timeouts"
 
 ---
 
-### Tarefa 8: Projeção anti-cheat (`ViewFor`)
+### Task 8: Projeção anti-cheat (`ViewFor`)
 
 **Arquivos:**
 - Criar: `backend/internal/engine/view.go`
@@ -2496,7 +2496,7 @@ git commit -m "feat(engine): adiciona projeção anti-cheat por assento"
 
 ---
 
-### Tarefa 9: Partidas aleatórias com invariantes e teste de vazamento
+### Task 9: Partidas aleatórias com invariantes e teste de vazamento
 
 **Arquivos:**
 - Teste: `backend/internal/engine/random_test.go`
@@ -2733,7 +2733,7 @@ git commit -m "test(engine): adiciona partidas aleatórias com invariantes e det
 
 ---
 
-### Tarefa 10: Pacote de protocolo e geração de tipos TypeScript
+### Task 10: Pacote de protocolo e geração de tipos TypeScript
 
 **Arquivos:**
 - Criar: `backend/internal/protocol/protocol.go`, `backend/tygo.yaml`
