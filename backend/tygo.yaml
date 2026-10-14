@@ -1,0 +1,10 @@
+packages:
+  - path: "github.com/caarlosandree/truco/backend/internal/engine"
+    output_path: "../frontend/src/protocol/engine.ts"
+  - path: "github.com/caarlosandree/truco/backend/internal/protocol"
+    output_path: "../frontend/src/protocol/messages.ts"
+    frontmatter: |
+      import * as engine from "./engine";
+    type_mappings:
+      json.RawMessage: "unknown"
+      engine.VoteChoice: "engine.VoteChoice"
