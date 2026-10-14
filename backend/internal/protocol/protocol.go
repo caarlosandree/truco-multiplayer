@@ -61,25 +61,25 @@ func DecodeAction(msg ClientMessage, seat engine.Seat) (engine.Action, error) {
 	switch action.Kind {
 	case engine.ActChooseCard:
 		var p ChooseCardPayload
-		if err := decodePayload(msg.Payload, &p); err != nil {
+		if err := decodePayload(msg.Payload, &p, "keep"); err != nil {
 			return engine.Action{}, err
 		}
 		action.Keep = p.Keep
 	case engine.ActBurn:
 		var p BurnPayload
-		if err := decodePayload(msg.Payload, &p); err != nil {
+		if err := decodePayload(msg.Payload, &p, "slots"); err != nil {
 			return engine.Action{}, err
 		}
 		action.Slots = p.Slots
 	case engine.ActPlayCard:
 		var p PlayCardPayload
-		if err := decodePayload(msg.Payload, &p); err != nil {
+		if err := decodePayload(msg.Payload, &p, "slot"); err != nil {
 			return engine.Action{}, err
 		}
 		action.Slot, action.Covered = p.Slot, p.Covered
 	case engine.ActVote:
 		var p VotePayload
-		if err := decodePayload(msg.Payload, &p); err != nil {
+		if err := decodePayload(msg.Payload, &p, "choice"); err != nil {
 			return engine.Action{}, err
 		}
 		action.Choice = p.Choice
@@ -90,9 +90,17 @@ func DecodeAction(msg ClientMessage, seat engine.Seat) (engine.Action, error) {
 	return action, nil
 }
 
-func decodePayload(raw json.RawMessage, target any) error {
-	if len(raw) == 0 {
-		return errors.New("protocol: payload ausente")
+// decodePayload exige um objeto JSON com os campos obrigatórios presentes,
+// para que um payload vazio ou nulo não vire uma jogada com valores zero.
+func decodePayload(raw json.RawMessage, target any, required ...string) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil || fields == nil {
+		return errors.New("protocol: payload ausente ou inválido")
+	}
+	for _, name := range required {
+		if _, present := fields[name]; !present {
+			return fmt.Errorf("protocol: campo obrigatório ausente: %s", name)
+		}
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()

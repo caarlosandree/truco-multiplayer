@@ -84,3 +84,15 @@ func TestViewJSONEncodesCutOfferAsArray(t *testing.T) {
 		t.Fatalf("JSON inesperado: %s", raw)
 	}
 }
+
+func TestExportedSeatAPIsDoNotPanicOnInvalidSeat(t *testing.T) {
+	g := playingState(fixtureBWinsTwice(), HandNormal)
+	g, _ = mustApply(t, g, Action{Kind: ActRequestRaise, Seat: 1})
+	v := ViewFor(g, 9)
+	if len(v.MyHand) != 0 || v.PartnerHand != nil || v.CutOffer != nil {
+		t.Fatalf("assento inválido não recebe dados privados: %+v", v)
+	}
+	if _, ok := DefaultAction(g, 9); ok {
+		t.Fatal("assento inválido não tem ação padrão")
+	}
+}

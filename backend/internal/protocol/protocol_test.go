@@ -86,3 +86,17 @@ func TestStateAndEventsMessagesAreFilteredPerSeat(t *testing.T) {
 		t.Fatal("CutOffered só para quem corta (assento 3)")
 	}
 }
+
+func TestDecodeActionRejectsEmptyOrNullPayload(t *testing.T) {
+	for _, raw := range []string{
+		`{"type":"play_card","seq":1,"payload":null}`,
+		`{"type":"play_card","seq":1,"payload":{}}`,
+		`{"type":"choose_card","seq":1,"payload":{}}`,
+		`{"type":"burn","seq":1,"payload":{}}`,
+		`{"type":"vote","seq":1,"payload":{}}`,
+	} {
+		if _, err := DecodeAction(msg(t, raw), 0); err == nil {
+			t.Fatalf("%s: payload sem campos obrigatórios deve ser rejeitado", raw)
+		}
+	}
+}

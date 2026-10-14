@@ -100,6 +100,9 @@ func ViewFor(g GameState, seat Seat) PlayerView {
 		}
 		v.Rounds = append(v.Rounds, rv)
 	}
+	if seat > 3 {
+		return v // assento inválido recebe só a parte pública
+	}
 	v.MyHand = handSlotsFor(h, seat, h.Kind == HandIron)
 	if chooser, choosing := currentChooser(g); choosing && chooser == seat {
 		for keep, card := range h.CutOffer {

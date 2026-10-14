@@ -3,6 +3,9 @@ package engine
 // DefaultAction é o que acontece quando o tempo do jogador acaba.
 // ok=false significa que o assento não tem decisão pendente.
 func DefaultAction(g GameState, seat Seat) (Action, bool) {
+	if seat > 3 {
+		return Action{}, false
+	}
 	h := g.Hand
 	switch g.Phase {
 	case PhaseCutChoice:
