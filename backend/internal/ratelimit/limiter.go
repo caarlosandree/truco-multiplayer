@@ -9,7 +9,8 @@ import (
 	"golang.org/x/time/rate"
 )
 
-const idleTTL = 30 * time.Minute
+// minIdleTTL é o tempo ocioso mínimo antes de uma chave ser descartada pelo Sweep.
+const minIdleTTL = 30 * time.Minute
 
 type limiterEntry struct {
 	lim      *rate.Limiter
@@ -20,13 +21,17 @@ type Limiter struct {
 	mu      sync.Mutex
 	limit   rate.Limit
 	burst   int
+	idleTTL time.Duration
 	now     func() time.Time
 	entries map[string]*limiterEntry
 }
 
 // NewLimiter permite `events` eventos por `per`, com rajada de `events`.
+// Uma chave só é descartada pelo Sweep depois de ficar ociosa por max(30min, per):
+// assim um balde esgotado não volta cheio antes de ter tido tempo de se recompor.
 func NewLimiter(events int, per time.Duration, now func() time.Time) *Limiter {
-	return &Limiter{limit: rate.Every(per / time.Duration(events)), burst: events, now: now, entries: map[string]*limiterEntry{}}
+	idleTTL := max(minIdleTTL, per)
+	return &Limiter{limit: rate.Every(per / time.Duration(events)), burst: events, idleTTL: idleTTL, now: now, entries: map[string]*limiterEntry{}}
 }
 
 func (l *Limiter) Allow(key string) (bool, time.Duration) {
@@ -50,7 +55,7 @@ func (l *Limiter) Allow(key string) (bool, time.Duration) {
 func (l *Limiter) Sweep() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	cutoff := l.now().Add(-idleTTL)
+	cutoff := l.now().Add(-l.idleTTL)
 	for key, e := range l.entries {
 		if e.lastSeen.Before(cutoff) {
 			delete(l.entries, key)

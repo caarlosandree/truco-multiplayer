@@ -45,13 +45,39 @@ func TestLimiterRejectionDoesNotConsume(t *testing.T) {
 
 func TestLimiterSweepRemovesIdleKeys(t *testing.T) {
 	clock := testclock.New(t0)
-	l := NewLimiter(5, time.Hour, clock.Now)
+	l := NewLimiter(5, time.Minute, clock.Now)
 	l.Allow("a")
 	clock.Advance(31 * time.Minute)
 	l.Allow("b")
 	l.Sweep()
 	if l.Len() != 1 {
 		t.Fatalf("Len = %d, quer 1", l.Len())
+	}
+	if _, ok := l.entries["b"]; !ok {
+		t.Fatal("a chave restante deveria ser \"b\"")
+	}
+}
+
+func TestLimiterSweepKeepsExhaustedKeyOfHourlyLimit(t *testing.T) {
+	clock := testclock.New(t0)
+	l := NewLimiter(5, time.Hour, clock.Now)
+	for range 5 {
+		l.Allow("k")
+	}
+	clock.Advance(31 * time.Minute)
+	l.Sweep()
+	if l.Len() != 1 {
+		t.Fatalf("Len = %d após Sweep, quer 1 (chave ociosa de 31 min não pode sair em limite de 1h)", l.Len())
+	}
+	// Em 31 min o balde recompõe 31/12 ≈ 2,58 fichas: exatamente 2 requisições passam.
+	allowed := 0
+	for range 5 {
+		if ok, _ := l.Allow("k"); ok {
+			allowed++
+		}
+	}
+	if allowed != 2 {
+		t.Fatalf("permitidas = %d, quer 2 (balde não pode voltar cheio)", allowed)
 	}
 }
 
