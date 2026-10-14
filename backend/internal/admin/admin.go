@@ -130,6 +130,8 @@ func (s *Service) EnableUser(ctx context.Context, actor auth.Principal, userID s
 	})
 }
 
+// ForcePasswordReset marca a conta para redefinição, encerra suas sessões e audita na mesma
+// transação. Falhas no envio do link, depois do commit, são apenas registradas em log.
 func (s *Service) ForcePasswordReset(ctx context.Context, actor auth.Principal, userID string) error {
 	err := s.audited(ctx, actor, "user.force_password_reset", "user", userID, nil, func(q *dbgen.Queries, now time.Time) error {
 		if err := requireRow(q.SetMustResetPassword(ctx, dbgen.SetMustResetPasswordParams{Now: now, ID: userID})); err != nil {
@@ -140,7 +142,12 @@ func (s *Service) ForcePasswordReset(ctx context.Context, actor auth.Principal, 
 	if err != nil {
 		return err
 	}
-	return s.auth.SendPasswordReset(ctx, userID, true)
+	// O estado já foi confirmado: uma falha ao emitir/enviar o link não desfaz a
+	// ação, então é só registrada (o admin pode repetir a ação para reenviar).
+	if err := s.auth.SendPasswordReset(ctx, userID, true); err != nil {
+		s.log.ErrorContext(ctx, "falha ao enviar o link de redefinição forçada", "user_id", userID, "err", err)
+	}
+	return nil
 }
 
 func (s *Service) SetAdmin(ctx context.Context, actor auth.Principal, userID string, isAdmin bool) error {

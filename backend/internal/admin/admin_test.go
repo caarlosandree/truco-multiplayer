@@ -125,6 +125,37 @@ func TestForcePasswordReset(t *testing.T) {
 	}
 }
 
+func TestForcePasswordResetIgnoresPostCommitSendFailure(t *testing.T) {
+	cases := map[string]func(e env, t *testing.T){
+		"mailer falha": func(e env, _ *testing.T) { e.mail.Err = errors.New("smtp fora do ar") },
+		"emissão do token falha": func(e env, t *testing.T) {
+			_, err := e.pool.Exec(context.Background(), `
+				CREATE FUNCTION falha_token() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'token indisponível'; END $$;
+				CREATE TRIGGER falha_token BEFORE INSERT ON user_tokens FOR EACH ROW EXECUTE FUNCTION falha_token()`)
+			if err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+	for name, breakSend := range cases {
+		t.Run(name, func(t *testing.T) {
+			e := newEnv(t)
+			ctx := context.Background()
+			target := testdb.CreateUser(t, e.pool, "ana")
+			e.addSession(t, target)
+			breakSend(e, t)
+			if err := e.svc.ForcePasswordReset(ctx, e.actor, target); err != nil {
+				t.Fatalf("falha pós-commit no envio não pode virar erro: %v", err)
+			}
+			var must bool
+			_ = e.pool.QueryRow(ctx, "SELECT must_reset_password FROM users WHERE id = $1", target).Scan(&must)
+			if !must || e.sessionCount(t, target) != 0 || e.auditCount(t, "user.force_password_reset") != 1 {
+				t.Fatalf("estado não aplicado: must=%v sessões=%d", must, e.sessionCount(t, target))
+			}
+		})
+	}
+}
+
 func TestSetAdminProtectsLastAdmin(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
