@@ -1,7 +1,7 @@
 packages:
-  - path: "github.com/caarlosandree/truco/backend/internal/engine"
+  - path: "github.com/caarlosandree/truco-multiplayer/backend/internal/engine"
     output_path: "../frontend/src/protocol/engine.ts"
-  - path: "github.com/caarlosandree/truco/backend/internal/protocol"
+  - path: "github.com/caarlosandree/truco-multiplayer/backend/internal/protocol"
     output_path: "../frontend/src/protocol/messages.ts"
     frontmatter: |
       import * as engine from "./engine";

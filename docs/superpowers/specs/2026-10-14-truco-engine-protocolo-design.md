@@ -40,7 +40,7 @@ Jogo de Truco (variante paulista com regras da casa) para 4 jogadores em 2 dupla
 ```
 truco/
 ├── backend/
-│   ├── go.mod                      # module github.com/caarlosandree/truco/backend
+│   ├── go.mod                      # module github.com/caarlosandree/truco-multiplayer/backend
 │   ├── cmd/server/main.go          # (Spec 3)
 │   ├── internal/
 │   │   ├── engine/                 # PURO: sem I/O, goroutines ou time.Now

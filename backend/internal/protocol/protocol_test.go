@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/caarlosandree/truco/backend/internal/engine"
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/engine"
 )
 
 func msg(t *testing.T, raw string) ClientMessage {

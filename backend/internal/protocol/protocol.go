@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/caarlosandree/truco/backend/internal/engine"
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/engine"
 )
 
 type ClientMessage struct {

@@ -12,7 +12,7 @@
 
 ## Restrições Globais
 
-- Módulo Go: `github.com/caarlosandree/truco/backend`, em `backend/`.
+- Módulo Go: `github.com/caarlosandree/truco-multiplayer/backend`, em `backend/`.
 - `internal/engine` importa **apenas** a stdlib; sem goroutines, I/O ou `time.Now`.
 - Identificadores em inglês; comentários e mensagens de erro em pt-BR.
 - Assentos `0..3` em sentido horário; `Team(seat) = seat % 2`; parceiro `(s+2)%4`; quem corta `(dealer+3)%4`.
@@ -76,7 +76,7 @@ frontend/src/protocol/engine.ts, messages.ts   (gerados)
 
 ```bash
 mkdir -p backend/internal/engine
-cd backend && go mod init github.com/caarlosandree/truco/backend
+cd backend && go mod init github.com/caarlosandree/truco-multiplayer/backend
 ```
 
 `Makefile` (raiz):
@@ -2757,7 +2757,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/caarlosandree/truco/backend/internal/engine"
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/engine"
 )
 
 func msg(t *testing.T, raw string) ClientMessage {
@@ -2858,7 +2858,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/caarlosandree/truco/backend/internal/engine"
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/engine"
 )
 
 type ClientMessage struct {
@@ -2979,9 +2979,9 @@ Expected: PASS
 
 ```yaml
 packages:
-  - path: "github.com/caarlosandree/truco/backend/internal/engine"
+  - path: "github.com/caarlosandree/truco-multiplayer/backend/internal/engine"
     output_path: "../frontend/src/protocol/engine.ts"
-  - path: "github.com/caarlosandree/truco/backend/internal/protocol"
+  - path: "github.com/caarlosandree/truco-multiplayer/backend/internal/protocol"
     output_path: "../frontend/src/protocol/messages.ts"
     frontmatter: |
       import * as engine from "./engine";
