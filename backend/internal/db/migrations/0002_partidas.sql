@@ -10,7 +10,10 @@ CREATE TABLE matches (
     score_b        smallint,
     created_at     timestamptz NOT NULL DEFAULT now(),
     finished_at    timestamptz,
-    abandon_reason text
+    abandon_reason text,
+    CONSTRAINT matches_finished_at_check CHECK ((status = 'in_progress') = (finished_at IS NULL)),
+    CONSTRAINT matches_result_check CHECK (status <> 'finished' OR (winner_team IS NOT NULL AND score_a IS NOT NULL AND score_b IS NOT NULL)),
+    CONSTRAINT matches_score_check CHECK (score_a BETWEEN 0 AND 12 AND score_b BETWEEN 0 AND 12)
 );
 CREATE INDEX matches_in_progress_idx ON matches (created_at) WHERE status = 'in_progress';
 CREATE INDEX matches_closed_idx ON matches (finished_at DESC, id DESC) WHERE status <> 'in_progress';
@@ -39,20 +42,20 @@ CREATE TABLE match_player_stats (
     user_id            uuid NOT NULL REFERENCES users (id),
     team               smallint NOT NULL CHECK (team IN (0, 1)),
     won                boolean NOT NULL,
-    points_for         integer NOT NULL,
-    points_against     integer NOT NULL,
-    hands_played       integer NOT NULL,
-    hands_won          integer NOT NULL,
-    raises_called      integer NOT NULL,
-    raises_folded      integer NOT NULL,
-    raises_won_by_fold integer NOT NULL,
-    eleven_hands       integer NOT NULL,
-    eleven_runs        integer NOT NULL,
-    eleven_won         integer NOT NULL,
-    iron_hands         integer NOT NULL,
-    iron_won           integer NOT NULL,
-    punished           integer NOT NULL,
-    timeouts           integer NOT NULL,
+    points_for         integer NOT NULL DEFAULT 0,
+    points_against     integer NOT NULL DEFAULT 0,
+    hands_played       integer NOT NULL DEFAULT 0,
+    hands_won          integer NOT NULL DEFAULT 0,
+    raises_called      integer NOT NULL DEFAULT 0,
+    raises_folded      integer NOT NULL DEFAULT 0,
+    raises_won_by_fold integer NOT NULL DEFAULT 0,
+    eleven_hands       integer NOT NULL DEFAULT 0,
+    eleven_runs        integer NOT NULL DEFAULT 0,
+    eleven_won         integer NOT NULL DEFAULT 0,
+    iron_hands         integer NOT NULL DEFAULT 0,
+    iron_won           integer NOT NULL DEFAULT 0,
+    punished           integer NOT NULL DEFAULT 0,
+    timeouts           integer NOT NULL DEFAULT 0,
     PRIMARY KEY (match_id, user_id)
 );
 
