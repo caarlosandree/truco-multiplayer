@@ -30,7 +30,7 @@ Jogo de Truco (variante paulista com regras da casa) para 4 jogadores em 2 dupla
 |---|---|---|
 | Núcleo do engine | Reducer puro `Apply(state, action) → (state, events, error)` | Determinístico, replay, testes sem mocks; a sala apenas serializa ações |
 | Tempo | Engine não lê relógio; a sala injeta `SysTimeout` / `SysStartHand` | Mantém pureza; timers são da Spec 3 |
-| Aleatoriedade | `math/rand/v2` PCG com seed no estado | Replay determinístico |
+| Aleatoriedade | `math/rand/v2` PCG derivado de `(Seed, HandNumber)` a cada mão | Replay determinístico sem estado de RNG mutável |
 | Tipos TS | Gerados do Go via `tygo` | Go é a fonte; sem divergência manual |
 | HTTP/WS (Spec 3) | stdlib `net/http` (roteamento 1.22+), `coder/websocket`, `slog` | Mínimo de dependências |
 | Frameworks no engine | Nenhum | Engine é Go puro |
@@ -61,7 +61,7 @@ truco/
 │   │   └── transport/ws/           # (Spec 3)
 │   └── tygo.yaml
 ├── frontend/                       # (Spec 4)
-│   └── src/protocol/types.ts       # GERADO
+│   └── src/protocol/engine.ts, messages.ts  # GERADOS
 ├── docs/superpowers/specs/
 └── Makefile                        # test, gen-types, dev
 ```
@@ -109,7 +109,7 @@ Fases entre colchetes são automáticas (executadas dentro do mesmo `Apply`).
 
 ### 6.1 Início da mão (`SysStartHand`)
 
-Embaralha o monte com o RNG do estado. Determina o tipo de mão:
+Embaralha o monte com `rand.New(rand.NewPCG(Seed, HandNumber))`. Determina o tipo de mão:
 - **Normal:** nenhuma dupla com 11.
 - **Mão de 11:** exatamente uma dupla com 11.
 - **Mão de Ferro:** ambas com 11.
@@ -206,7 +206,7 @@ Com resultados `r1, r2, r3 ∈ {A, B, Tie}`:
 
 **Privado ao assento:**
 - Própria mão como `[]HandSlot{Slot, Card *CardID, Hidden bool}`; na Mão de Ferro todos `Hidden: true` e `Card: nil`.
-- Opções do corte (2 cartas) somente para quem está escolhendo, durante sua fase.
+- Opções do corte (2 cartas, como `[{keep, card}]`) somente para quem está escolhendo, durante sua fase.
 - `PartnerHand` quando a dupla do assento está votando (truco ou ElevenDecision).
 - Voto do parceiro, durante votação da própria dupla.
 
@@ -225,7 +225,7 @@ type HandKind string // "normal", "eleven", "iron"
 
 type GameState struct {
     Seed    uint64
-    RNG     RNGState      // estado serializável do PCG
+    HandNumber int          // RNG da mão = PCG(Seed, HandNumber)
     Players [4]Player
     Score   [2]int
     Dealer  Seat
@@ -301,11 +301,11 @@ Envelope JSON:
 - Tipos de cliente (engine): `choose_card`, `burn`, `pass_burn`, `play_card`, `request_raise`, `vote` (`choice ∈ accept|run|raise|play`). Mensagens de lobby (`join`, `ready` etc.) são da Spec 3.
 - Após cada `Apply` bem-sucedido a sala envia, para cada assento, `events` filtrados e um `state` com a `PlayerView` completa (snapshot idempotente; também usado na reconexão).
 - `seq` é eco do cliente para correlacionar erros.
-- Tipos TS gerados em `frontend/src/protocol/types.ts` via `make gen-types` (tygo).
+- Tipos TS gerados em `frontend/src/protocol/engine.ts` e `messages.ts` via `make gen-types` (tygo).
 
 ## 12. Erros
 
-`Apply` retorna `*RuleError{Code, Msg}` e o estado inalterado. Códigos: `invalid_phase`, `not_your_turn`, `invalid_slot`, `invalid_choice`, `illegal_raise`, `already_voted`, `not_voting_team`, `covered_not_allowed`, `burn_not_four`, `game_over`.
+`Apply` retorna `*RuleError{Code, Msg}` e o estado inalterado. Códigos: `invalid_phase`, `not_your_turn`, `invalid_slot`, `invalid_choice`, `illegal_raise`, `already_voted`, `not_voting_team`, `covered_not_allowed`, `burn_not_four`, `game_over`, `already_decided` (queima já decidida), `invalid_seat` (assento fora de 0..3).
 
 ## 13. Ação padrão por fase (para `SysTimeout`)
 
@@ -329,6 +329,6 @@ TDD com `go test`, sem dependências externas.
 ## 15. Critérios de pronto (Spec 1)
 
 - `go test ./...` passa com cobertura alta do pacote `engine`.
-- `make gen-types` gera `types.ts` válido.
+- `make gen-types` gera `engine.ts` e `messages.ts`.
 - Teste de vazamento e de partidas aleatórias verdes.
 - Nenhuma importação fora da stdlib em `internal/engine`.
