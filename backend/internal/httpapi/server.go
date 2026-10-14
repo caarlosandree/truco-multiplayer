@@ -35,7 +35,7 @@ type Server struct {
 	handler       http.Handler
 	static        http.Handler // build do frontend; nil sem STATIC_DIR
 	loginIP       *ratelimit.Limiter
-	loginLockout  *ratelimit.Lockout
+	pwLockout     *ratelimit.Lockout // falhas de senha no login ("login:") e na troca de senha ("pw:")
 	registerIP    *ratelimit.Limiter
 	recoveryIP    *ratelimit.Limiter
 	recoveryEmail *ratelimit.Limiter
@@ -52,7 +52,7 @@ func New(d Deps) *Server {
 	s := &Server{
 		deps: d, log: d.Logger, mux: http.NewServeMux(),
 		loginIP:       ratelimit.NewLimiter(10, time.Minute, d.Now),
-		loginLockout:  ratelimit.NewLockout(5, 15*time.Minute, 15*time.Minute, d.Now),
+		pwLockout:     ratelimit.NewLockout(5, 15*time.Minute, 15*time.Minute, d.Now),
 		registerIP:    ratelimit.NewLimiter(5, time.Hour, d.Now),
 		recoveryIP:    ratelimit.NewLimiter(5, time.Hour, d.Now),
 		recoveryEmail: ratelimit.NewLimiter(3, time.Hour, d.Now),
@@ -107,7 +107,7 @@ func (s *Server) RunMaintenance(ctx context.Context) {
 			for _, l := range []*ratelimit.Limiter{s.loginIP, s.registerIP, s.recoveryIP, s.recoveryEmail, s.tokenIP} {
 				l.Sweep()
 			}
-			s.loginLockout.Sweep()
+			s.pwLockout.Sweep()
 		case <-cleanup.C:
 			sessions, tokens, err := s.deps.Auth.CleanupExpired(ctx)
 			if err != nil {

@@ -2,8 +2,10 @@ package httpapi_test
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -197,4 +199,79 @@ func TestPasswordResetRequiredBlocksLogin(t *testing.T) {
 	h.makeAdmin("ana") // nem administrador escapa da redefinição obrigatória
 	_, _ = h.pool.Exec(t.Context(), "UPDATE users SET must_reset_password = true WHERE username = 'ana'")
 	expect(t, h.client().post("/api/auth/login", map[string]string{"login": "ana", "password": password}), http.StatusForbidden, "password_reset_required")
+}
+
+// Username é público: ocupado responde 409 exista ou não o e-mail informado.
+func TestRegisterTakenUsernameDoesNotRevealEmail(t *testing.T) {
+	h := newHarness(t)
+	h.signup("ana")
+	h.signup("bia")
+	existingEmail := h.client().post("/api/auth/register", registerBody("ana", "bia@empresa.com"))
+	freshEmail := h.client().post("/api/auth/register", registerBody("ana", "nova@empresa.com"))
+	expect(t, existingEmail, http.StatusConflict, "username_taken")
+	if !bytes.Equal(existingEmail.body, freshEmail.body) || existingEmail.status != freshEmail.status {
+		t.Fatalf("respostas diferentes: %d %s vs %d %s", existingEmail.status, existingEmail.body, freshEmail.status, freshEmail.body)
+	}
+}
+
+func TestChangePasswordLockout(t *testing.T) {
+	h := newHarness(t)
+	ana := h.signup("ana")
+	wrong := map[string]string{"currentPassword": "errada-errada-1", "newPassword": "nova-senha-segura-1"}
+	right := map[string]string{"currentPassword": password, "newPassword": "nova-senha-segura-1"}
+	for range 5 {
+		expect(t, ana.post("/api/me/password", wrong), http.StatusUnauthorized, "invalid_credentials")
+	}
+	r := ana.post("/api/me/password", right)
+	expect(t, r, http.StatusTooManyRequests, "too_many_attempts")
+	if r.header.Get("Retry-After") != "900" {
+		t.Fatalf("Retry-After = %q", r.header.Get("Retry-After"))
+	}
+	// O bloqueio da troca de senha não afeta o login (chaves independentes).
+	if r := h.client().post("/api/auth/login", map[string]string{"login": "ana", "password": password}); r.status != http.StatusOK {
+		t.Fatalf("login durante bloqueio da troca: %d %s", r.status, r.body)
+	}
+	h.clock.Advance(15 * time.Minute)
+	if r := ana.post("/api/me/password", right); r.status != http.StatusNoContent {
+		t.Fatalf("após o bloqueio: %d %s", r.status, r.body)
+	}
+}
+
+func TestLoginLockoutHoldsUnderConcurrentBurst(t *testing.T) {
+	h := newHarness(t)
+	h.signup("ana")
+	const burst = 10
+	var (
+		wg       sync.WaitGroup
+		start    = make(chan struct{})
+		mu       sync.Mutex
+		statuses = map[int]int{}
+	)
+	for i := range burst {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			body := strings.NewReader(`{"login":"ana","password":"senha-errada-123"}`)
+			req, _ := http.NewRequest(http.MethodPost, h.srv.URL+"/api/auth/login", body)
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Origin", origin)
+			req.Header.Set("X-Forwarded-For", fmt.Sprintf("203.0.113.%d", i+1))
+			<-start
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			resp.Body.Close()
+			mu.Lock()
+			statuses[resp.StatusCode]++
+			mu.Unlock()
+		}()
+	}
+	close(start)
+	wg.Wait()
+	if statuses[http.StatusUnauthorized] > 5 || statuses[http.StatusUnauthorized]+statuses[http.StatusTooManyRequests] != burst {
+		t.Fatalf("rajada de %d logins errados: %v (no máximo 5 verificações de senha)", burst, statuses)
+	}
+	expect(t, h.client().post("/api/auth/login", map[string]string{"login": "ana", "password": password}), http.StatusTooManyRequests, "too_many_attempts")
 }

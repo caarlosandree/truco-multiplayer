@@ -118,20 +118,19 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, r, err)
 		return
 	}
-	key := strings.ToLower(strings.TrimSpace(req.Login))
-	if locked, retry := s.loginLockout.Locked(key); locked {
-		s.writeTooMany(w, r, retry)
+	var res auth.LoginResult
+	key := "login:" + strings.ToLower(strings.TrimSpace(req.Login))
+	ran, err := s.passwordAttempt(w, r, key, func() (err error) {
+		res, err = s.deps.Auth.Login(r.Context(), req.Login, req.Password, s.sessionMeta(r))
+		return err
+	})
+	if !ran {
 		return
-	}
-	res, err := s.deps.Auth.Login(r.Context(), req.Login, req.Password, s.sessionMeta(r))
-	if errors.Is(err, auth.ErrInvalidCredentials) {
-		s.loginLockout.Fail(key)
 	}
 	if err != nil {
 		s.writeError(w, r, err)
 		return
 	}
-	s.loginLockout.Reset(key)
 	s.deps.Auth.Cookies().Set(w, res.Token)
 	writeJSON(w, http.StatusOK, map[string]auth.User{"user": res.User})
 }
@@ -214,11 +213,45 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request, p 
 		s.writeError(w, r, err)
 		return
 	}
-	token, err := s.deps.Auth.ChangePassword(r.Context(), p, req.CurrentPassword, req.NewPassword, s.sessionMeta(r))
+	var token string
+	ran, err := s.passwordAttempt(w, r, "pw:"+p.UserID, func() (err error) {
+		token, err = s.deps.Auth.ChangePassword(r.Context(), p, req.CurrentPassword, req.NewPassword, s.sessionMeta(r))
+		return err
+	})
+	if !ran {
+		return
+	}
 	if err != nil {
 		s.writeError(w, r, err)
 		return
 	}
 	s.deps.Auth.Cookies().Set(w, token)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// passwordAttempt envolve uma verificação de senha com o bloqueio por identificador. A vaga é
+// reservada antes do argon2: sem isso, uma rajada paralela passaria inteira pela checagem de
+// bloqueio antes da primeira falha ser registrada. ran=false significa que já respondeu 429.
+func (s *Server) passwordAttempt(w http.ResponseWriter, r *http.Request, key string, attempt func() error) (ran bool, err error) {
+	if ok, retry := s.pwLockout.Begin(key); !ok {
+		s.writeTooMany(w, r, retry)
+		return false, nil
+	}
+	settled := false
+	defer func() {
+		if !settled { // pânico em attempt: devolve a vaga para não vazar a reserva
+			s.pwLockout.Release(key)
+		}
+	}()
+	err = attempt()
+	settled = true
+	switch {
+	case errors.Is(err, auth.ErrInvalidCredentials):
+		s.pwLockout.Fail(key)
+	case err == nil:
+		s.pwLockout.Reset(key)
+	default:
+		s.pwLockout.Release(key) // senha certa com outro impedimento, ou erro interno: não conta como falha
+	}
+	return true, err
 }

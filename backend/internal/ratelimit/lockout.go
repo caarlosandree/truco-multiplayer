@@ -8,9 +8,16 @@ import (
 type failures struct {
 	times       []time.Time
 	lockedUntil time.Time
+	inFlight    int // tentativas reservadas por Begin e ainda sem desfecho
 }
 
+// inFlightRetry é o Retry-After sugerido quando a chave está cheia de tentativas em andamento.
+const inFlightRetry = time.Second
+
 // Lockout bloqueia uma chave por `lock` depois de `maxFailures` falhas dentro de `window`.
+//
+// Uso com reserva (resistente a rajadas paralelas): Begin antes de verificar a senha e, depois,
+// exatamente um entre Fail (credencial errada), Reset (sucesso) ou Release (outro desfecho).
 type Lockout struct {
 	mu          sync.Mutex
 	maxFailures int
@@ -37,6 +44,38 @@ func (l *Lockout) Locked(key string) (bool, time.Duration) {
 	return false, 0
 }
 
+// Begin reserva uma tentativa: falhas recentes mais tentativas em andamento nunca passam de
+// maxFailures, então N requisições simultâneas não verificam mais senhas do que o limite permite.
+func (l *Lockout) Begin(key string) (bool, time.Duration) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := l.now()
+	f, ok := l.entries[key]
+	if !ok {
+		f = &failures{}
+		l.entries[key] = f
+	}
+	if remaining := f.lockedUntil.Sub(now); remaining > 0 {
+		return false, remaining
+	}
+	f.times = recent(f.times, now.Add(-l.window))
+	if len(f.times)+f.inFlight >= l.maxFailures {
+		return false, inFlightRetry
+	}
+	f.inFlight++
+	return true, 0
+}
+
+// Release devolve a reserva de uma tentativa que terminou sem ser falha de credencial.
+func (l *Lockout) Release(key string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if f, ok := l.entries[key]; ok && f.inFlight > 0 {
+		f.inFlight--
+	}
+}
+
+// Fail registra uma falha; se havia reserva de Begin, ela é consumida.
 func (l *Lockout) Fail(key string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -45,6 +84,9 @@ func (l *Lockout) Fail(key string) {
 	if !ok {
 		f = &failures{}
 		l.entries[key] = f
+	}
+	if f.inFlight > 0 {
+		f.inFlight--
 	}
 	f.times = recent(f.times, now.Add(-l.window))
 	f.times = append(f.times, now)
@@ -66,7 +108,7 @@ func (l *Lockout) Sweep() {
 	now := l.now()
 	for key, f := range l.entries {
 		f.times = recent(f.times, now.Add(-l.window))
-		if len(f.times) == 0 && !f.lockedUntil.After(now) {
+		if len(f.times) == 0 && f.inFlight == 0 && !f.lockedUntil.After(now) {
 			delete(l.entries, key)
 		}
 	}
