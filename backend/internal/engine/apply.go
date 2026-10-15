@@ -30,6 +30,8 @@ func dispatch(g *GameState, a Action) ([]Event, error) {
 			return nil, ruleErr(ErrInvalidPhase, "nenhuma decisão pendente para este assento")
 		}
 		return dispatch(g, fallback)
+	case ActSysForfeit:
+		return forfeit(g, a)
 	case ActChooseCard:
 		return chooseCard(g, a)
 	case ActBurn, ActPassBurn:

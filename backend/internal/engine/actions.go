@@ -11,6 +11,8 @@ const (
 	ActVote         ActionKind = "vote"
 	ActSysStartHand ActionKind = "sys_start_hand"
 	ActSysTimeout   ActionKind = "sys_timeout"
+	// ActSysForfeit encerra a partida por W.O.; Team é a dupla que perde. Só a sala envia.
+	ActSysForfeit ActionKind = "sys_forfeit"
 )
 
 // Action é plana para ser serializável no log de partidas.
@@ -23,4 +25,5 @@ type Action struct {
 	Slot    int        `json:"slot,omitempty"`
 	Covered bool       `json:"covered,omitempty"`
 	Choice  VoteChoice `json:"choice,omitempty"`
+	Team    Team       `json:"team,omitempty"`
 }

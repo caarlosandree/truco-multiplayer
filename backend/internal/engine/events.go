@@ -49,6 +49,7 @@ const (
 	EvRaisePunished  EventKind = "raise_punished"
 	EvHandEnded      EventKind = "hand_ended"
 	EvGameOver       EventKind = "game_over"
+	EvForfeited      EventKind = "forfeited"
 )
 
 // Event serve para animações; nunca carrega cartas privadas.
