@@ -210,7 +210,7 @@ Se `AppendAction` falhar com erro diferente de `ErrMatchClosed`, a sala descarta
 
 ### 5.8 Reconexão
 
-Nova conexão de um usuário presente no índice: o lobby troca a conexão e notifica a sala (`connected=true`, fim da ausência, `timeoutsSeguidos=0`). O usuário recebe `room_state`; em `playing`, também `state` (com `deadline`) e o `forfeit_available` corrente, se for o caso. Eventos perdidos não são reenviados — o `state` é snapshot idempotente.
+Nova conexão de um usuário presente no índice: o lobby troca a conexão e notifica a sala (`connected=true`, fim da ausência, `timeoutsSeguidos=0`). O usuário recebe `room_state`; em `playing`, também `state` (com `deadlines`) e o `forfeit_available` corrente, se for o caso. Eventos perdidos não são reenviados — o `state` é snapshot idempotente.
 
 ## 6. Mudanças no engine
 
