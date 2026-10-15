@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -184,7 +186,10 @@ func (s *Store) Finish(ctx context.Context, id string) error {
 }
 
 func writeStats(ctx context.Context, q *dbgen.Queries, matchID string, perSeat [4]stats.PlayerMatchStats, now time.Time) error {
-	for _, p := range perSeat {
+	// Ordem fixa por user_id: dois Finish com os mesmos jogadores travam as linhas na mesma ordem.
+	ordered := perSeat
+	slices.SortFunc(ordered[:], func(a, b stats.PlayerMatchStats) int { return strings.Compare(a.UserID, b.UserID) })
+	for _, p := range ordered {
 		err := q.InsertMatchPlayerStats(ctx, dbgen.InsertMatchPlayerStatsParams{
 			MatchID: matchID, UserID: p.UserID, Team: int16(p.Team), Won: p.Won,
 			PointsFor: int32(p.PointsFor), PointsAgainst: int32(p.PointsAgainst),

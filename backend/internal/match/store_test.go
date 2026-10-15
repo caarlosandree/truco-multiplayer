@@ -431,3 +431,106 @@ func TestAppendActionWaitsForConcurrentAbandon(t *testing.T) {
 		t.Fatalf("ação depois de abandono confirmado: %v", err)
 	}
 }
+
+// persistFull grava uma partida aleatória completa (até GameOver), sem finalizá-la.
+func (e env) persistFull(t *testing.T, seed uint64, players [4]replay.PlayerSeat) string {
+	t.Helper()
+	ctx := context.Background()
+	rec, _ := enginetest.RandomRecord(seed)
+	id, err := e.store.Create(ctx, rec.Seed, rec.FirstDealer, players)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, logged := range rec.Actions {
+		if err := e.store.AppendAction(ctx, id, logged.Ply, logged.Action, logged.Source); err != nil {
+			t.Fatalf("ply %d: %v", logged.Ply, err)
+		}
+	}
+	return id
+}
+
+func TestConcurrentFinishWithSameUsersDoesNotDeadlock(t *testing.T) {
+	e := newEnv(t)
+	reversed := [4]replay.PlayerSeat{e.players[3], e.players[2], e.players[1], e.players[0]}
+	for i := range 5 {
+		a := e.persistFull(t, uint64(100+i), e.players)
+		b := e.persistFull(t, uint64(200+i), reversed)
+		start := make(chan struct{})
+		errs := make([]error, 2)
+		var wg sync.WaitGroup
+		for j, id := range []string{a, b} {
+			wg.Go(func() {
+				<-start
+				errs[j] = e.store.Finish(context.Background(), id)
+			})
+		}
+		close(start)
+		wg.Wait()
+		for _, err := range errs {
+			if err != nil {
+				t.Fatalf("iteração %d: %v", i, err)
+			}
+		}
+	}
+}
+
+func TestRecomputeStatsConcurrentWithFinishKeepsTotals(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	for i := range 3 {
+		if err := e.store.Finish(ctx, e.persistFull(t, uint64(300+i), e.players)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pending := e.persistFull(t, 400, e.players)
+	var wg sync.WaitGroup
+	var finishErr, recomputeErr error
+	wg.Go(func() { finishErr = e.store.Finish(ctx, pending) })
+	wg.Go(func() { _, recomputeErr = e.store.RecomputeStats(ctx) })
+	wg.Wait()
+	if finishErr != nil || recomputeErr != nil {
+		t.Fatalf("finish %v, recompute %v", finishErr, recomputeErr)
+	}
+	var mismatched, total int
+	err := e.pool.QueryRow(ctx, `SELECT count(*) FROM player_stats ps
+		WHERE ps.wins + ps.losses <> (SELECT count(*) FROM match_player_stats m WHERE m.user_id = ps.user_id)`).Scan(&mismatched)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.pool.QueryRow(ctx, `SELECT coalesce(sum(wins + losses), 0) FROM player_stats`).Scan(&total); err != nil {
+		t.Fatal(err)
+	}
+	if mismatched != 0 || total != 16 {
+		t.Fatalf("divergentes %d, total %d (quer 0 e 16)", mismatched, total)
+	}
+}
+
+func TestRecoverSkipsTransientFailuresAndAcceptsNilLogger(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	over := e.persistFull(t, 11, e.players) // em GameOver, ainda in_progress
+	alive, _ := e.persist(t, 12, 10)
+	_, err := e.pool.Exec(ctx, `CREATE FUNCTION fail_stats() RETURNS trigger LANGUAGE plpgsql AS $$
+		BEGIN IF NEW.match_id = '`+over+`' THEN RAISE EXCEPTION 'falha simulada'; END IF; RETURN NEW; END $$`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.pool.Exec(ctx, `CREATE TRIGGER fail_stats BEFORE INSERT ON match_player_stats
+		FOR EACH ROW EXECUTE FUNCTION fail_stats()`); err != nil {
+		t.Fatal(err)
+	}
+	got, err := e.store.Recover(ctx, nil)
+	if err != nil {
+		t.Fatalf("Recover não deve falhar por uma partida: %v", err)
+	}
+	if len(got) != 1 || got[0].Record.ID != alive {
+		t.Fatalf("recuperadas = %+v", got)
+	}
+	var status string
+	if err := e.pool.QueryRow(ctx, "SELECT status FROM matches WHERE id = $1", over).Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status != "in_progress" {
+		t.Fatalf("partida com falha transitória deve ficar in_progress, está %s", status)
+	}
+}
