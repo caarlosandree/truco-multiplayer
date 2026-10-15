@@ -9,14 +9,27 @@ import (
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/replay"
 )
 
-// settle executa o que já venceu (uma ação por volta, reavaliando a cada uma) e arma
-// um único timer para o próximo vencimento futuro.
+// settle registra ausências, executa o que já venceu (uma ação por volta, reavaliando a cada uma),
+// atualiza a oferta de W.O. e arma um único timer para o próximo vencimento futuro.
 func (r *Room) settle() {
 	for !r.closed {
 		now := r.now()
-		if r.status == protocol.RoomPlaying && r.runDue(now) {
-			continue
+		r.updateAbsence(now)
+		switch r.status {
+		case protocol.RoomWaiting:
+			if r.removeStaleDisconnected(now) {
+				continue
+			}
+		case protocol.RoomPlaying:
+			if at, all := r.allAbsentAt(); all && !now.Before(at) {
+				r.abandonAllAbsent()
+				return
+			}
+			if r.runDue(now) {
+				continue
+			}
 		}
+		r.offerForfeit(now)
 		r.reschedule(now)
 		return
 	}
@@ -91,14 +104,28 @@ func (r *Room) nextWakeup(now time.Time) (time.Time, bool) {
 
 // wakeups lista os instantes em que algo da sala vence.
 func (r *Room) wakeups(consider func(time.Time)) {
-	if r.status != protocol.RoomPlaying {
-		return
-	}
-	if r.game.Phase == engine.PhaseHandEnd {
-		consider(r.pauseUntil)
-	}
-	for _, d := range r.deadlines {
-		consider(d)
+	switch r.status {
+	case protocol.RoomWaiting:
+		for _, st := range r.seats {
+			if st != nil && !st.connected {
+				consider(st.disconnectedAt.Add(r.opt.Timing.WaitingDisconnect))
+			}
+		}
+	case protocol.RoomPlaying:
+		if r.game.Phase == engine.PhaseHandEnd {
+			consider(r.pauseUntil)
+		}
+		for _, d := range r.deadlines {
+			consider(d)
+		}
+		for _, st := range r.seats {
+			if st != nil && !st.absentSince.IsZero() {
+				consider(r.forfeitAt(st))
+			}
+		}
+		if at, all := r.allAbsentAt(); all {
+			consider(at)
+		}
 	}
 }
 
