@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // MailDriver escolhe como os e-mails são enviados.
@@ -20,6 +21,15 @@ const (
 	// MailLog escreve os e-mails no log, sem envio real.
 	MailLog MailDriver = "log"
 )
+
+// GameTiming reúne os tempos das salas (Spec 3 §12). Tem os mesmos campos, na mesma
+// ordem, de room.Timing, para permitir a conversão direta room.Timing(cfg.Game).
+type GameTiming struct {
+	Play, Vote, Choice, Burn, Absent time.Duration
+	HandPause                        time.Duration
+	AbsenceGrace, AbsenceBudget      time.Duration
+	WaitingDisconnect                time.Duration
+}
 
 // Config reúne as opções do servidor já validadas.
 type Config struct {
@@ -38,6 +48,9 @@ type Config struct {
 	LogLevel            slog.Level
 	LogFormat           string
 	StaticDir           string
+	Game                GameTiming
+	MaxRooms            int
+	ShutdownTimeout     time.Duration
 }
 
 // Load lê e valida a configuração; devolve todos os problemas de uma vez.
@@ -109,6 +122,35 @@ func Load(getenv func(string) string) (Config, error) {
 		errs = append(errs, errors.New("RANKING_MIN_MATCHES deve ser um inteiro >= 1"))
 	}
 	cfg.RankingMinMatches = minMatches
+
+	intIn := func(key string, fallback, lo, hi int) int {
+		raw := get(key, strconv.Itoa(fallback))
+		v, err := strconv.Atoi(raw)
+		if err != nil || v < lo || v > hi {
+			errs = append(errs, fmt.Errorf("%s deve ser um inteiro entre %d e %d, não %q", key, lo, hi, raw))
+			return fallback
+		}
+		return v
+	}
+	seconds := func(key string, fallback, lo, hi int) time.Duration {
+		return time.Duration(intIn(key, fallback, lo, hi)) * time.Second
+	}
+	cfg.Game = GameTiming{
+		Play:              seconds("TIMER_PLAY_SECONDS", 30, 5, 300),
+		Vote:              seconds("TIMER_VOTE_SECONDS", 20, 5, 300),
+		Choice:            seconds("TIMER_CHOICE_SECONDS", 15, 5, 300),
+		Burn:              seconds("TIMER_BURN_SECONDS", 15, 5, 300),
+		Absent:            seconds("TIMER_ABSENT_SECONDS", 5, 1, 60),
+		HandPause:         seconds("HAND_PAUSE_SECONDS", 4, 0, 30),
+		AbsenceGrace:      seconds("ABSENCE_GRACE_SECONDS", 120, 10, 3600),
+		AbsenceBudget:     seconds("ABSENCE_BUDGET_SECONDS", 300, 10, 7200),
+		WaitingDisconnect: seconds("WAITING_DISCONNECT_SECONDS", 60, 5, 3600),
+	}
+	if cfg.Game.AbsenceBudget < cfg.Game.AbsenceGrace {
+		errs = append(errs, errors.New("ABSENCE_BUDGET_SECONDS deve ser >= ABSENCE_GRACE_SECONDS"))
+	}
+	cfg.MaxRooms = intIn("MAX_ROOMS", 50, 1, 1000)
+	cfg.ShutdownTimeout = seconds("SHUTDOWN_TIMEOUT_SECONDS", 15, 1, 120)
 
 	if err := cfg.LogLevel.UnmarshalText([]byte(get("LOG_LEVEL", "info"))); err != nil {
 		errs = append(errs, fmt.Errorf("LOG_LEVEL inválido: %v", err))
