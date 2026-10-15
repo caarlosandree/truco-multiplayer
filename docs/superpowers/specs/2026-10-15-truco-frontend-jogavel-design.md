@@ -250,7 +250,7 @@ frontend/
 - **Mão de Ferro:** as cartas da mão vêm com `hidden: true` inclusive para mim; a mão mostra versos clicáveis ("carta 1/2/3") e a carta só é revelada ao bater na mesa.
 - **Mão de 11:** só a dupla com 11 vê o painel `eleven_decision`; a outra dupla vê "Aguardando a dupla com 11 decidir".
 - **Confirmação de pedido proibido:** se `raiseIsSuicide`, o botão de aumento abre um modal "Pedir truco na Mão de 11/de Ferro faz sua dupla perder a partida. Confirmar?".
-- **Sinais:** barra com `truco`, `boa`, `vamos`, `calma`, `desculpa`, `valeu`; o sinal recebido aparece como balão sobre o assento por ~3 s. Envio com limite local de 1 por segundo (o servidor também limita).
+- **Sinais:** barra com `truco`, `boa`, `vamos`, `calma`, `desculpa`, `valeu`; o sinal recebido aparece como balão sobre o assento por ~3 s. Botões ficam em espera por 3 s após cada envio, o mesmo intervalo que o servidor impõe (`rate_limited`).
 - **Presença:** assento com `connected=false` ou `absent=true` fica esmaecido com ícone e dica. `forfeit_available{team}` mostra o banner "Adversários ausentes — pedir W.O." com botão (`claim_forfeit`); `team: null` retira o banner.
 - **Fim de partida:** `match_ended` abre modal com resultado (vitória/derrota da minha dupla), motivo (`game_over`, `forfeit`, `aborted`, `abandoned`) e placar. "Revanche" fecha o modal e mostra a sala de espera (o servidor já voltou a `waiting` com `ready=false`); "Sair da sala" envia `leave_room`.
 - **Celular (< 768 px):** adversários e parceiro numa faixa compacta no topo, centro reduzido, mão e painel de ação embaixo em largura total.
