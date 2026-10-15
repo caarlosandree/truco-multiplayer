@@ -26,6 +26,7 @@ type Deps struct {
 	Pool    *pgxpool.Pool
 	Logger  *slog.Logger
 	Now     func() time.Time
+	WS      http.Handler // GET /ws (Spec 3); nil desliga o WebSocket
 }
 
 type Server struct {
@@ -62,6 +63,9 @@ func New(d Deps) *Server {
 	s.registerReadRoutes()
 	s.registerAdminRoutes()
 	s.mux.HandleFunc("GET /healthz", s.handleHealth)
+	if d.WS != nil {
+		s.mux.Handle("GET /ws", d.WS)
+	}
 	if d.Config.StaticDir != "" {
 		s.static = spaHandler(d.Config.StaticDir)
 	}

@@ -59,3 +59,12 @@ func TestStaticSPAFallback(t *testing.T) {
 	}
 	expect(t, c.get("/api/nao-existe"), http.StatusNotFound, "not_found")
 }
+
+func TestWebSocketRouteIsMountedWhenConfigured(t *testing.T) {
+	h := newHarness(t, func(d *httpapi.Deps) {
+		d.WS = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusTeapot) })
+	})
+	if r := h.client().get("/ws"); r.status != http.StatusTeapot {
+		t.Fatalf("GET /ws = %d", r.status)
+	}
+}

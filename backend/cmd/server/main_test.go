@@ -3,12 +3,16 @@ package main
 import (
 	"bytes"
 	"context"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/db"
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/enginetest"
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/match"
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/replay"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/testdb"
 )
 
@@ -70,34 +74,82 @@ func TestMigratePromoteAndRecompute(t *testing.T) {
 	}
 }
 
-func TestServeStartsAndShutsDown(t *testing.T) {
-	url := testdb.NewURL(t)
+// startServer sobe "serve" e devolve o endereço e uma função que desliga e devolve o erro de run.
+func startServer(t *testing.T, url string, out io.Writer) (string, func() error) {
+	t.Helper()
 	addrCh := make(chan string, 1)
 	onListen = func(addr string) { addrCh <- addr }
 	t.Cleanup(func() { onListen = func(string) {} })
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- run(ctx, nil, envFor(baseEnv(url)), &bytes.Buffer{}) }()
-	var addr string
+	go func() { done <- run(ctx, nil, envFor(baseEnv(url)), out) }()
 	select {
-	case addr = <-addrCh:
+	case addr := <-addrCh:
+		return addr, func() error {
+			cancel()
+			select {
+			case err := <-done:
+				return err
+			case <-time.After(20 * time.Second):
+				t.Fatal("servidor não desligou")
+				return nil
+			}
+		}
 	case err := <-done:
 		t.Fatalf("servidor saiu antes de ouvir: %v", err)
 	case <-time.After(30 * time.Second):
 		t.Fatal("servidor não começou a ouvir")
 	}
+	cancel()
+	return "", nil
+}
+
+func TestServeStartsAndShutsDown(t *testing.T) {
+	addr, stop := startServer(t, testdb.NewURL(t), &bytes.Buffer{})
 	resp, err := http.Get("http://" + addr + "/healthz")
 	if err != nil || resp.StatusCode != http.StatusOK {
 		t.Fatalf("healthz: %v %v", resp, err)
 	}
 	resp.Body.Close()
-	cancel()
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("desligamento: %v", err)
+	if err := stop(); err != nil {
+		t.Fatalf("desligamento: %v", err)
+	}
+}
+
+func TestServeResumesInProgressMatchesAndMountsWebSocket(t *testing.T) {
+	url := testdb.NewURL(t)
+	ctx := context.Background()
+	pool, err := db.Open(ctx, url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	var players [4]replay.PlayerSeat
+	for i, name := range []string{"ana", "bia", "caio", "duda"} {
+		players[i] = replay.PlayerSeat{UserID: testdb.CreateUser(t, pool, name), DisplayName: name}
+	}
+	rec, _ := enginetest.RandomRecord(21)
+	store := match.NewStore(pool, nil)
+	id, err := store.Create(ctx, rec.Seed, rec.FirstDealer, players)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, logged := range rec.Actions[:10] {
+		if err := store.AppendAction(ctx, id, logged.Ply, logged.Action, logged.Source); err != nil {
+			t.Fatal(err)
 		}
-	case <-time.After(15 * time.Second):
-		t.Fatal("servidor não desligou")
+	}
+	var out bytes.Buffer
+	addr, stop := startServer(t, url, &out)
+	resp, err := http.Get("http://" + addr + "/ws")
+	if err != nil || resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("GET /ws sem sessão: %v %v", resp, err)
+	}
+	resp.Body.Close()
+	if err := stop(); err != nil {
+		t.Fatalf("desligamento: %v", err)
+	}
+	if !strings.Contains(out.String(), "partidas retomadas") || !strings.Contains(out.String(), "count=1") {
+		t.Fatalf("log do boot não registra a partida retomada:\n%s", out.String())
 	}
 }

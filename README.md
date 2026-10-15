@@ -75,14 +75,13 @@ O projeto foi decomposto em quatro sub-projetos, cada um com spec, plano e imple
 |---|---|---|---|
 | 1 | **Engine de regras + protocolo** | Baralho, força, distribuição, queima, rodadas, apostas, pontuação, projeção anti-cheat, mensagens WebSocket, tipos TS | ✅ **Concluído** |
 | 2 | **Contas e persistência** | Cadastro e login (usuário, e-mail e senha), sessão em cookie `HttpOnly`, recuperação de senha, histórico, ranking, replay | ✅ **Concluído** |
-| 3 | **Servidor de salas** | Lobby, salas por código, goroutine por sala, WebSocket, timers, reconexão | 🗓️ Planejado |
+| 3 | **Servidor de salas** | Lobby ao vivo, salas públicas e privadas, ator por sala, WebSocket, timers, W.O., reconexão e retomada após restart | ✅ **Concluído** |
 | 4 | **Frontend** | Mesa em Vue 3, alternância entre baralho francês e espanhol, stores Pinia sincronizadas com o servidor | 🗓️ Planejado |
 
-> Ainda não dá para jogar pelo navegador: o repositório já tem a API de contas, a persistência de partidas e o ranking, além do motor de regras. Faltam o servidor de salas com WebSocket (Spec 3) e a interface (Spec 4).
+> O servidor já joga partidas completas por WebSocket (lobby, salas, timers, W.O. e retomada após restart). Falta a interface (Spec 4).
 
 ### Decisões já tomadas para as próximas etapas
 
-- **WebSocket (Spec 3):** o handshake será autenticado pelo mesmo cookie de sessão, com `auth.SessionFromRequest` e `auth.CheckOrigin`.
 - **Interface (Spec 4):** as páginas de verificação de e-mail e de redefinição de senha fazem o `POST` dos tokens recebidos por e-mail.
 
 ---
@@ -331,44 +330,30 @@ O engine expõe `DefaultAction(state, seat)`, a ação aplicada quando o tempo d
 
 ## 🔌 Protocolo WebSocket
 
-Todas as mensagens são JSON com um envelope comum.
+Conexão em `GET /ws`, autenticada pelo mesmo cookie de sessão da API e com `Origin` igual a `APP_ORIGIN`. Cada usuário tem **uma** conexão: abrir outra aba fecha a anterior. Todas as mensagens são JSON com envelope `{ "type", "seq"?, "payload"? }`; o `seq` do cliente volta nos erros.
 
 **Cliente → servidor**
 
-```json
-{ "type": "play_card", "seq": 17, "payload": { "slot": 1, "covered": false } }
-```
-
-| `type` | `payload` | Descrição |
+| `type` | `payload` | Quando |
 |---|---|---|
-| `choose_card` | `{ "keep": 0 \| 1 }` | Escolhe uma das 2 cartas do corte |
-| `burn` | `{ "slots": [0, 2] }` | Queima os 4 nos slots informados |
-| `pass_burn` | — | Não queima nada |
-| `play_card` | `{ "slot": 0..2, "covered": bool }` | Joga uma carta, aberta ou coberta |
-| `request_raise` | — | Pede truco ou o próximo aumento |
-| `vote` | `{ "choice": "accept" \| "run" \| "raise" \| "play" }` | Vota no aumento ou na Mão de 11 |
+| `create_room` | `{ "visibility": "public" \| "private" }` | fora de sala |
+| `join_room` | `{ "roomId" \| "code", "seat"? }` | fora de sala; sala privada só por código |
+| `leave_room`, `take_seat {seat}`, `set_ready {ready}`, `kick {seat}` | — | sala em espera (`kick` só o anfitrião) |
+| `choose_card`, `burn`, `pass_burn`, `play_card`, `request_raise`, `vote` | como no engine | durante a partida |
+| `claim_forfeit` | — | quando o W.O. está disponível para a sua dupla |
+| `signal` | `{ "id": "truco" \| "boa" \| "vamos" \| "calma" \| "desculpa" \| "valeu" }` | durante a partida, 1 a cada 3 s |
 
-Regras de segurança aplicadas por `protocol.DecodeAction`:
+**Servidor → cliente:** `hello`, `lobby_snapshot`, `room_upserted`, `room_removed`, `room_state`, `left_room`, `state` (`PlayerView` + `deadlines` + `pendingSeats`), `events`, `forfeit_available`, `match_ended`, `signal` e `error`. Os tipos TypeScript são **gerados**: payloads em [`messages.ts`](frontend/src/protocol/messages.ts) e uniões discriminadas `ClientMessage`/`ServerMessage` em [`union.ts`](frontend/src/protocol/union.ts).
 
-- o **assento vem da sessão** do servidor e nunca do payload;
-- ações de sistema (`sys_start_hand`, `sys_timeout`) **não são aceitas** do cliente;
-- campos desconhecidos (por exemplo, um `"seat"` injetado) e payloads vazios, nulos ou sem campos obrigatórios são **rejeitados**.
+**Regras da partida em tempo real**
 
-**Servidor → cliente**
+- Cada decisão tem prazo (jogar 30 s, votar 20 s, corte 15 s, queima 15 s); ao estourar, o servidor joga a ação padrão e a grava como `timeout`.
+- Desconectado **ou** com 3 timeouts seguidos = ausente: o prazo dele cai para 5 s.
+- Ausente por 2 min seguidos (ou 5 min somados na partida) libera o **W.O.** para a dupla adversária, que decide se pede. A partida conta no ranking. Todos ausentes por 5 min = partida abandonada.
+- Depois do fim, a sala volta a esperar com os mesmos assentos (revanche).
+- Restart do servidor: as partidas em andamento voltam como salas públicas; ao reconectar, cada jogador cai direto na mesa.
 
-```json
-{ "type": "state",  "payload": { "seat": 2, "phase": "playing", "myHand": [ ... ], ... } }
-{ "type": "events", "payload": [ { "kind": "card_played", "seat": 1, "card": 27 } ] }
-{ "type": "error",  "payload": { "code": "not_your_turn", "message": "...", "seq": 17 } }
-```
-
-- `state` é o snapshot **completo e idempotente** da `PlayerView`, enviado a cada mudança. O cliente nunca precisa reconciliar diffs, e a reconexão é trivial.
-- `events` serve apenas para animações.
-- `error` devolve o `seq` do cliente para correlacionar a resposta.
-
-**Códigos de erro:** `invalid_phase`, `not_your_turn`, `invalid_slot`, `invalid_choice`, `illegal_raise`, `already_voted`, `not_voting_team`, `covered_not_allowed`, `burn_not_four`, `game_over`, `already_decided`, `invalid_seat` e `bad_request` (erro de decodificação).
-
-Os tipos TypeScript correspondentes ficam em [`frontend/src/protocol/engine.ts`](frontend/src/protocol/engine.ts) e [`frontend/src/protocol/messages.ts`](frontend/src/protocol/messages.ts), **gerados** a partir do Go.
+**Fechamentos:** `4001` conexão substituída, `4003` sessão inválida, `4008` mensagem grande (> 4 KB) ou mensagens demais, `1001` servidor desligando, `1013` cliente lento.
 
 ---
 
@@ -449,7 +434,8 @@ truco-multiplayer/
 │       │   ├── card.go                # Suit, Rank, Card, CardID
 │       │   ├── deck.go                # baralho de 40 cartas, embaralhamento determinístico
 │       │   ├── strength.go            # ManilhaRank, Strength, RoundWinner
-│       │   ├── state.go               # GameState, HandState, fases, Clone
+│       │   ├── state.go               # Seat, Team, fases, tipos públicos
+│       │   ├── gamestate.go           # GameState e HandState (privados, fora do tygo)
 │       │   ├── actions.go             # Action e tipos de ação
 │       │   ├── events.go              # Event, Visibility, FilterEvents
 │       │   ├── errors.go              # RuleError e códigos
@@ -460,7 +446,7 @@ truco-multiplayer/
 │       │   ├── timeout.go             # DefaultAction (ação padrão por fase)
 │       │   ├── view.go                # PlayerView e ViewFor (anti-cheat)
 │       │   └── *_test.go              # testes de tabela, propriedade e vazamento
-│       ├── protocol/                  # envelopes WebSocket e decodificação segura
+│       ├── protocol/                  # mensagens WebSocket tipadas, registro e gerador de uniões TS
 │       ├── config/                    # carrega e valida variáveis de ambiente, com falha clara no start
 │       ├── db/                        # pool pgx, migrations goose embutidas, queries e código gerado (dbgen, não editar)
 │       ├── auth/                      # senha argon2id, tokens, normalização, cadastro, login, sessão e recuperação
@@ -471,7 +457,11 @@ truco-multiplayer/
 │       ├── stats/                     # derivação de estatísticas e consultas de ranking, perfil e histórico
 │       ├── admin/                     # operações de administração, sempre com auditoria
 │       ├── httpapi/                   # roteador, handlers, middlewares, erros JSON e SPA estática
-│       └── pagination/                # cursores opacos (instante + id) para paginação por keyset
+│       ├── pagination/                # cursores opacos (instante + id) para paginação por keyset
+│       ├── clock/                     # relógio injetável (Real e Manual para testes)
+│       ├── room/                      # ator da sala: assentos, partida, timers, presença, W.O.
+│       ├── lobby/                     # registro de salas e conexões, lista ao vivo, restore
+│       └── transport/ws/              # handler /ws: autenticação, conexão, limites
 ├── frontend/
 │   └── src/protocol/                  # tipos TypeScript GERADOS (não editar à mão)
 ├── docs/superpowers/
@@ -553,6 +543,14 @@ Copie `.env.example` para `.env` (não versionado) e ajuste os valores.
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn` ou `error` |
 | `LOG_FORMAT` | `json` | `json` ou `text` |
 | `STATIC_DIR` | — | Diretório do frontend compilado, servido em modo SPA |
+| `TIMER_PLAY_SECONDS` / `TIMER_VOTE_SECONDS` | `30` / `20` | Prazo para jogar e para votar |
+| `TIMER_CHOICE_SECONDS` / `TIMER_BURN_SECONDS` | `15` / `15` | Prazo do corte e da queima |
+| `TIMER_ABSENT_SECONDS` | `5` | Prazo de quem está ausente |
+| `HAND_PAUSE_SECONDS` | `4` | Pausa entre mãos |
+| `ABSENCE_GRACE_SECONDS` / `ABSENCE_BUDGET_SECONDS` | `120` / `300` | Ausência que libera o W.O. (seguida / somada) |
+| `WAITING_DISCONNECT_SECONDS` | `60` | Quem cai numa sala em espera perde o assento depois disso |
+| `MAX_ROOMS` | `50` | Salas simultâneas |
+| `SHUTDOWN_TIMEOUT_SECONDS` | `15` | Orçamento do desligamento gracioso |
 
 ---
 

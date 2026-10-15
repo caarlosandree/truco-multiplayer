@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -20,12 +22,16 @@ import (
 
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/admin"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/auth"
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/clock"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/config"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/db"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/httpapi"
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/lobby"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/mail"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/match"
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/room"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/stats"
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/transport/ws"
 )
 
 // onListen é um gancho de teste chamado com o endereço real em que o servidor ouve.
@@ -115,21 +121,36 @@ func serve(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, logger *s
 	if err := authSvc.BootstrapDomains(ctx, cfg.AllowedEmailDomains); err != nil {
 		return err
 	}
+	store := match.NewStore(pool, nil)
+	recovered, err := store.Recover(ctx, logger)
+	if err != nil {
+		return fmt.Errorf("recuperar partidas: %w", err)
+	}
+	lob := lobby.New(context.Background(), lobby.Options{Timing: room.Timing(cfg.Game), MaxRooms: cfg.MaxRooms,
+		Store: lobby.NewMatchStore(store), Clock: clock.Real{}, Rand: rand.Reader, Log: logger})
+	if err := lob.Restore(recovered); err != nil {
+		return fmt.Errorf("restaurar salas: %w", err)
+	}
+	logger.Info("partidas retomadas", "count", len(recovered))
 	api := httpapi.New(httpapi.Deps{
-		Config: cfg, Auth: authSvc, Stats: stats.NewReader(pool, cfg.RankingMinMatches), Matches: match.NewStore(pool, nil),
-		Admin: admin.NewService(admin.Options{Pool: pool, Auth: authSvc, Aborter: admin.NoopAborter{}, Logger: logger}),
+		Config: cfg, Auth: authSvc, Stats: stats.NewReader(pool, cfg.RankingMinMatches), Matches: store,
+		Admin: admin.NewService(admin.Options{Pool: pool, Auth: authSvc, Aborter: lob, Logger: logger}),
+		WS:    &ws.Handler{Auth: authSvc, Lobby: lob, Origin: cfg.AppOrigin, Limits: ws.DefaultLimits, Log: logger},
 		Pool:  pool, Logger: logger,
 	})
 	listener, err := net.Listen("tcp", cfg.HTTPAddr)
 	if err != nil {
 		return fmt.Errorf("ouvir em %s: %w", cfg.HTTPAddr, err)
 	}
+	// Os timeouts valem para a API; o handler /ws zera os deadlines da conexão longa.
 	srv := &http.Server{
 		Handler: api.Handler(), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second,
 		WriteTimeout: 60 * time.Second, IdleTimeout: 120 * time.Second,
 		ErrorLog: slog.NewLogLogger(logger.Handler(), slog.LevelError),
 	}
-	go api.RunMaintenance(ctx)
+	maintCtx, stopMaint := context.WithCancel(context.Background())
+	var maint sync.WaitGroup
+	maint.Go(func() { api.RunMaintenance(maintCtx) })
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.Serve(listener) }()
 	logger.Info("servidor ouvindo", "addr", listener.Addr().String())
@@ -137,17 +158,34 @@ func serve(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, logger *s
 
 	select {
 	case err := <-errCh:
+		stopMaint()
+		maint.Wait()
 		return err
 	case <-ctx.Done():
 	}
 	logger.Info("desligando o servidor")
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		return err
+	return shutdown(shutdownCtx, logger, lob, srv, errCh, stopMaint, &maint, authSvc)
+}
+
+// shutdown segue a Spec 3 §9.2: salas e conexões, HTTP, manutenção e e-mails em envio.
+func shutdown(ctx context.Context, logger *slog.Logger, lob *lobby.Lobby, srv *http.Server, errCh <-chan error,
+	stopMaint context.CancelFunc, maint *sync.WaitGroup, authSvc *auth.Service) error {
+	var errs []error
+	if err := lob.Shutdown(ctx); err != nil {
+		errs = append(errs, fmt.Errorf("salas: %w", err))
+	}
+	if err := srv.Shutdown(ctx); err != nil {
+		errs = append(errs, fmt.Errorf("http: %w", err))
 	}
 	if err := <-errCh; !errors.Is(err, http.ErrServerClosed) {
-		return err
+		errs = append(errs, err)
 	}
-	return nil
+	stopMaint()
+	maint.Wait()
+	if err := authSvc.Wait(ctx); err != nil {
+		logger.Warn("e-mails ainda em envio no desligamento", "err", err)
+	}
+	return errors.Join(errs...)
 }
