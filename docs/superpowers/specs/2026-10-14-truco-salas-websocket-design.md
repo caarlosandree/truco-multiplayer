@@ -30,7 +30,7 @@ Colegas de empresa (dezenas de usuários, uma instância) jogam partidas de 4 jo
 
 | Decisão | Escolha | Motivo |
 |---|---|---|
-| Concorrência | Ator por sala (goroutine + caixa de entrada) e ator de lobby | Sem locks no domínio; timers, jogadas e abort serializados; testável com relógio manual |
+| Concorrência | Ator por sala (goroutine + caixa de entrada sem limite) e lobby como registro protegido por mutex | Sem locks no domínio da partida; timers, jogadas e abort serializados; o lobby não tem timers nem I/O, e um mutex evita o deadlock de dois atores com filas limitadas trocando mensagens |
 | Conexão | Um único endpoint `/ws` por usuário, multiplexando lobby e sala | Um protocolo; troca de aba = substituição atômica |
 | Biblioteca WS | `github.com/coder/websocket` | Decidido na Spec 1 |
 | Encontro | Salas listadas em tempo real + salas privadas por código | Duplas combinadas entre colegas; link para privadas |
@@ -59,7 +59,7 @@ backend/
     │   ├── presence.go         # conectado, timeouts seguidos, relógios de ausência, W.O.
     │   ├── signals.go          # sinais rápidos
     │   └── ports.go            # MatchStore, Outbox
-    ├── lobby/                  # ator do lobby: registro, códigos, índice usuário→sala,
+    ├── lobby/                  # registro (mutex): salas, códigos, índice usuário→sala, conexões,
     │                           # lista ao vivo, Restore, Abort (MatchAborter), Shutdown
     ├── protocol/               # REDEFINIDO: envelopes e payloads tipados, registro de tipos
     └── transport/ws/           # handler /ws: autenticação, Accept, leitura/escrita, limites
@@ -69,7 +69,7 @@ backend/
 
 - `engine` continua importando apenas a stdlib.
 - `room` depende de `engine`, `protocol`, `clock`, `replay` (tipos `PlayerSeat`, `Source`) e das próprias interfaces. Não importa `match`, `net/http`, `websocket` nem `db`.
-- `lobby` depende de `room`, `protocol`, `clock` e de uma interface sobre `match.Store`.
+- `lobby` depende de `room`, `protocol`, `clock` e `match` (adaptador `NewMatchStore`, que traduz `match.ErrMatchClosed` para `room.ErrMatchClosed`, e `Restore([]match.Recovered)`).
 - `transport/ws` depende de `auth`, `lobby` e `protocol`; é o único a importar `coder/websocket`.
 - `cmd/server` faz a montagem.
 - `internal/testclock` é substituído por `internal/clock` (o `Manual` cobre o uso atual); usos existentes migram.
@@ -146,7 +146,8 @@ Estados: `waiting → playing → waiting`. Ao fim (`game_over`, W.O.) ou abort,
 - **Uma sala por usuário:** `create_room`/`join_room` com entrada no índice → `already_in_room`.
 - **Lista ao vivo:** salas `public` em `waiting` e `playing`, com `{id, name, status, seats[4]{displayName}|null, score?}`. Ao ficar fora de sala, o usuário recebe `lobby_snapshot`; depois, deltas `room_upserted`/`room_removed`. As salas notificam o lobby de mudanças relevantes para a lista.
 - `MAX_ROOMS` salas simultâneas → `too_many_rooms`.
-- **Roteamento:** a conexão envia mensagens de sala diretamente para a caixa de entrada da sala corrente (referência atualizada pelo lobby ao entrar/sair); mensagens de lobby vão para o ator do lobby.
+- **Roteamento:** a conexão entrega toda mensagem ao lobby (`Dispatch`); `create_room`/`join_room` são tratadas pelo lobby, as demais são empurradas para a caixa de entrada da sala do usuário (consulta ao índice sob mutex, sem I/O).
+- **Concorrência:** o lobby é um registro protegido por `sync.Mutex`. Chamadas da sala ao lobby (`Send`, `Update`, `Released`, `Destroyed`) tomam o mutex; o lobby só empurra mensagens para salas por `Actor.Push`, que nunca bloqueia (caixa sem limite). Envios a clientes também nunca bloqueiam (fila de saída da conexão), então podem ocorrer sob o mutex, o que preserva a ordem das mensagens por cliente.
 
 ### 4.5 Restore (após restart)
 
@@ -258,7 +259,7 @@ Payloads com campos desconhecidos ou obrigatórios ausentes → `error{bad_reque
 | `room_upserted` | `{room: RoomSummary}` |
 | `room_removed` | `{roomId}` |
 | `room_state` | `{id, code, name, visibility, host: seat, status, seats: (SeatInfo\|null)[4], matchId?, yourSeat}` |
-| `left_room` | `{reason: "left"\|"kicked"\|"aborted"\|"destroyed"}` |
+| `left_room` | `{reason: "left"\|"kicked"\|"destroyed"}` |
 | `state` | `{view: PlayerView, deadlines: {[seat]: epochMs}, pendingSeats: Seat[]}` |
 | `events` | `Event[]` filtrados por assento |
 | `forfeit_available` | `{team: Team\|null}` |
@@ -288,7 +289,7 @@ Códigos de erro novos: `already_in_room`, `room_full`, `room_not_found`, `seat_
 - **Deadlines (pendência 2):** o `http.Server` mantém `ReadTimeout`/`WriteTimeout` para a API; o handler `/ws` zera os deadlines de leitura e escrita com `http.ResponseController` antes do `Accept`. A conexão passa a ser regida por:
   - ping a cada 20 s, pong em até 10 s;
   - timeout de 5 s por escrita;
-  - `SetReadLimit(4096)`;
+  - mensagens acima de 4096 bytes fecham a conexão com `4008` (checagem própria após a leitura; o `SetReadLimit` da biblioteca fica em 64 KiB como teto rígido, acima do qual ela mesma fecha com `1009`);
   - limite de taxa de 20 msg/s (burst 40) por conexão.
 - **Violações:** mensagem acima do limite ou taxa excedida → fechamento `4008 policy_violation`. Mensagem malformada ou tipo desconhecido → `error{bad_request}` (conexão segue).
 - **Fila de saída:** 64 mensagens por conexão; cheia → conexão fechada (`1013 try_again_later`); o cliente reconecta e recebe snapshot.
