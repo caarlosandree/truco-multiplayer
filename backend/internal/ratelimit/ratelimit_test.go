@@ -4,13 +4,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/caarlosandree/truco-multiplayer/backend/internal/testclock"
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/clock"
 )
 
 var t0 = time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
 
 func TestLimiterBurstThenRefill(t *testing.T) {
-	clock := testclock.New(t0)
+	clock := clock.NewManual(t0)
 	l := NewLimiter(10, time.Minute, clock.Now)
 	for i := range 10 {
 		if ok, _ := l.Allow("1.2.3.4"); !ok {
@@ -31,7 +31,7 @@ func TestLimiterBurstThenRefill(t *testing.T) {
 }
 
 func TestLimiterRejectionDoesNotConsume(t *testing.T) {
-	clock := testclock.New(t0)
+	clock := clock.NewManual(t0)
 	l := NewLimiter(1, time.Hour, clock.Now)
 	l.Allow("k")
 	for range 5 {
@@ -44,7 +44,7 @@ func TestLimiterRejectionDoesNotConsume(t *testing.T) {
 }
 
 func TestLimiterSweepRemovesIdleKeys(t *testing.T) {
-	clock := testclock.New(t0)
+	clock := clock.NewManual(t0)
 	l := NewLimiter(5, time.Minute, clock.Now)
 	l.Allow("a")
 	clock.Advance(31 * time.Minute)
@@ -59,7 +59,7 @@ func TestLimiterSweepRemovesIdleKeys(t *testing.T) {
 }
 
 func TestLimiterSweepKeepsExhaustedKeyOfHourlyLimit(t *testing.T) {
-	clock := testclock.New(t0)
+	clock := clock.NewManual(t0)
 	l := NewLimiter(5, time.Hour, clock.Now)
 	for range 5 {
 		l.Allow("k")
@@ -82,7 +82,7 @@ func TestLimiterSweepKeepsExhaustedKeyOfHourlyLimit(t *testing.T) {
 }
 
 func TestLockoutBlocksAfterMaxFailuresInWindow(t *testing.T) {
-	clock := testclock.New(t0)
+	clock := clock.NewManual(t0)
 	l := NewLockout(5, 15*time.Minute, 15*time.Minute, clock.Now)
 	for range 4 {
 		l.Fail("ana")
@@ -102,7 +102,7 @@ func TestLockoutBlocksAfterMaxFailuresInWindow(t *testing.T) {
 }
 
 func TestLockoutForgetsOldFailures(t *testing.T) {
-	clock := testclock.New(t0)
+	clock := clock.NewManual(t0)
 	l := NewLockout(5, 15*time.Minute, 15*time.Minute, clock.Now)
 	for range 4 {
 		l.Fail("ana")
@@ -115,7 +115,7 @@ func TestLockoutForgetsOldFailures(t *testing.T) {
 }
 
 func TestLockoutResetAndSweep(t *testing.T) {
-	clock := testclock.New(t0)
+	clock := clock.NewManual(t0)
 	l := NewLockout(2, time.Minute, time.Minute, clock.Now)
 	l.Fail("ana")
 	l.Reset("ana")
@@ -132,7 +132,7 @@ func TestLockoutResetAndSweep(t *testing.T) {
 }
 
 func TestLockoutBeginReservesAttemptsInFlight(t *testing.T) {
-	clock := testclock.New(t0)
+	clock := clock.NewManual(t0)
 	l := NewLockout(3, 15*time.Minute, 15*time.Minute, clock.Now)
 	for i := range 3 {
 		if ok, _ := l.Begin("ana"); !ok {
@@ -163,7 +163,7 @@ func TestLockoutBeginReservesAttemptsInFlight(t *testing.T) {
 }
 
 func TestLockoutBeginThenResetAndSweepKeepsInFlight(t *testing.T) {
-	clock := testclock.New(t0)
+	clock := clock.NewManual(t0)
 	l := NewLockout(2, time.Minute, time.Minute, clock.Now)
 	l.Begin("ana")
 	l.Reset("ana")

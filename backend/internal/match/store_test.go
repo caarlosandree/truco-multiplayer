@@ -12,12 +12,12 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/clock"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/engine"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/enginetest"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/match"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/replay"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/stats"
-	"github.com/caarlosandree/truco-multiplayer/backend/internal/testclock"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/testdb"
 )
 
@@ -26,14 +26,14 @@ func TestMain(m *testing.M) { testdb.Run(m) }
 type env struct {
 	store   *match.Store
 	pool    *pgxpool.Pool
-	clock   *testclock.Clock
+	clock   *clock.Manual
 	players [4]replay.PlayerSeat
 }
 
 func newEnv(t *testing.T) env {
 	t.Helper()
 	pool := testdb.New(t)
-	clock := testclock.New(time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC))
+	clock := clock.NewManual(time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC))
 	e := env{store: match.NewStore(pool, clock.Now), pool: pool, clock: clock}
 	for i, name := range []string{"ana", "bia", "caio", "duda"} {
 		e.players[i] = replay.PlayerSeat{UserID: testdb.CreateUser(t, pool, name), DisplayName: name}

@@ -9,8 +9,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/clock"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/mail"
-	"github.com/caarlosandree/truco-multiplayer/backend/internal/testclock"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/testdb"
 )
 
@@ -22,13 +22,13 @@ type fixture struct {
 	svc   *Service
 	pool  *pgxpool.Pool
 	mail  *mail.Fake
-	clock *testclock.Clock
+	clock *clock.Manual
 }
 
 func newFixture(t *testing.T) fixture {
 	t.Helper()
 	pool := testdb.New(t)
-	f := fixture{pool: pool, mail: &mail.Fake{}, clock: testclock.New(t0)}
+	f := fixture{pool: pool, mail: &mail.Fake{}, clock: clock.NewManual(t0)}
 	f.svc = NewService(Options{
 		Pool: pool, Mailer: f.mail, Hasher: NewHasher(TestingParams, 4), Now: f.clock.Now,
 		BaseURL: "https://truco.test", Cookies: CookieConfig{Secure: true},

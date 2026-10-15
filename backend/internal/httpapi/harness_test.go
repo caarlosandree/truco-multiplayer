@@ -18,12 +18,12 @@ import (
 
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/admin"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/auth"
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/clock"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/config"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/httpapi"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/mail"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/match"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/stats"
-	"github.com/caarlosandree/truco-multiplayer/backend/internal/testclock"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/testdb"
 )
 
@@ -35,7 +35,7 @@ type harness struct {
 	t      *testing.T
 	srv    *httptest.Server
 	mail   *mail.Fake
-	clock  *testclock.Clock
+	clock  *clock.Manual
 	pool   *pgxpool.Pool
 	store  *match.Store
 	nextIP atomic.Int32
@@ -44,7 +44,7 @@ type harness struct {
 func newHarness(t *testing.T, mutate ...func(*httpapi.Deps)) *harness {
 	t.Helper()
 	pool := testdb.New(t)
-	h := &harness{t: t, mail: &mail.Fake{}, clock: testclock.New(time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)), pool: pool}
+	h := &harness{t: t, mail: &mail.Fake{}, clock: clock.NewManual(time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)), pool: pool}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	// TrustProxy permite que cada cliente de teste tenha seu próprio IP via X-Forwarded-For.
 	cfg := config.Config{AppBaseURL: origin, AppOrigin: origin, CookieSecure: false, TrustProxy: true, RankingMinMatches: 1}

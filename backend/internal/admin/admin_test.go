@@ -14,10 +14,10 @@ import (
 
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/admin"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/auth"
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/clock"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/mail"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/match"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/replay"
-	"github.com/caarlosandree/truco-multiplayer/backend/internal/testclock"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/testdb"
 )
 
@@ -47,7 +47,7 @@ type env struct {
 func newEnv(t *testing.T) env {
 	t.Helper()
 	pool := testdb.New(t)
-	clock := testclock.New(time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC))
+	clock := clock.NewManual(time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC))
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	e := env{pool: pool, mail: &mail.Fake{}, aborter: &recordingAborter{}}
 	e.auth = auth.NewService(auth.Options{Pool: pool, Mailer: e.mail, Hasher: auth.NewHasher(auth.TestingParams, 4),
