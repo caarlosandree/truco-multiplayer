@@ -42,7 +42,7 @@ func TestDecodeActionUsesSessionSeat(t *testing.T) {
 }
 
 func TestDecodeActionRejectsSystemAndUnknownTypes(t *testing.T) {
-	for _, typ := range []string{"sys_start_hand", "sys_timeout", "hack"} {
+	for _, typ := range []string{"sys_start_hand", "sys_timeout", "sys_forfeit", "hack"} {
 		_, err := DecodeAction(msg(t, `{"type":"`+typ+`","seq":1}`), 0)
 		if !errors.Is(err, ErrUnknownType) {
 			t.Fatalf("%s: erro = %v", typ, err)
@@ -79,10 +79,14 @@ func TestStateAndEventsMessagesAreFilteredPerSeat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if StateMessage(g, 0).Payload.(engine.PlayerView).CutOffer != nil {
+	if StateMessage(g, 0, nil).Payload.(StatePayload).View.CutOffer != nil {
 		t.Fatal("assento 0 não corta nesta mão")
 	}
-	if len(EventsMessage(evs, 3).Payload.([]engine.Event)) != 2 || len(EventsMessage(evs, 0).Payload.([]engine.Event)) != 1 {
+	visible := func(seat engine.Seat) int {
+		m, _ := EventsMessage(evs, seat)
+		return len(m.Payload.([]engine.Event))
+	}
+	if visible(3) != 2 || visible(0) != 1 {
 		t.Fatal("CutOffered só para quem corta (assento 3)")
 	}
 }
