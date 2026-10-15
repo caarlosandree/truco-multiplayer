@@ -160,7 +160,7 @@ export interface RoomSummary {
   id: string;
   name: string;
   status: RoomStatus;
-  seats: (SeatSummary | undefined)[];
+  seats: (SeatSummary | null)[];
   score?: number /* int */[];
 }
 export interface LobbySnapshotPayload {
@@ -189,7 +189,7 @@ export interface RoomStatePayload {
   visibility: Visibility;
   host: engine.Seat;
   status: RoomStatus;
-  seats: (SeatInfo | undefined)[];
+  seats: (SeatInfo | null)[];
   matchId?: string;
   yourSeat: engine.Seat;
 }
@@ -205,14 +205,14 @@ export interface LeftRoomPayload {
  */
 export interface StatePayload {
   view: engine.PlayerView;
-  deadlines: { [key: engine.Seat]: number /* int64 */};
+  deadlines: { [seat: number]: number };
   pendingSeats: number /* int */[];
 }
 /**
  * ForfeitAvailablePayload: Team é a dupla ausente contra a qual o W.O. pode ser pedido; null retira a oferta.
  */
 export interface ForfeitAvailablePayload {
-  team?: engine.Team;
+  team: engine.Team | null;
 }
 export type EndReason = string;
 export const EndGameOver: EndReason = "game_over";
@@ -221,7 +221,7 @@ export const EndAborted: EndReason = "aborted";
 export const EndAbandoned: EndReason = "abandoned";
 export interface MatchEndedPayload {
   reason: EndReason;
-  winner?: engine.Team;
+  winner: engine.Team | null;
   score: number /* int */[];
 }
 export interface SignalBroadcastPayload {

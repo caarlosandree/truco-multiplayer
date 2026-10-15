@@ -29,7 +29,7 @@ type RoomSummary struct {
 	ID     string          `json:"id"`
 	Name   string          `json:"name"`
 	Status RoomStatus      `json:"status"`
-	Seats  [4]*SeatSummary `json:"seats"`
+	Seats  [4]*SeatSummary `json:"seats" tstype:"(SeatSummary | null)[],required"`
 	Score  *[2]int         `json:"score,omitempty"`
 }
 
@@ -61,7 +61,7 @@ type RoomStatePayload struct {
 	Visibility Visibility   `json:"visibility"`
 	Host       engine.Seat  `json:"host"`
 	Status     RoomStatus   `json:"status"`
-	Seats      [4]*SeatInfo `json:"seats"`
+	Seats      [4]*SeatInfo `json:"seats" tstype:"(SeatInfo | null)[],required"`
 	MatchID    string       `json:"matchId,omitempty"`
 	YourSeat   engine.Seat  `json:"yourSeat"`
 }
@@ -81,13 +81,13 @@ type LeftRoomPayload struct {
 // StatePayload leva a projeção do assento e os prazos (epoch ms UTC) dos assentos pendentes.
 type StatePayload struct {
 	View         engine.PlayerView     `json:"view"`
-	Deadlines    map[engine.Seat]int64 `json:"deadlines"`
+	Deadlines    map[engine.Seat]int64 `json:"deadlines" tstype:"{ [seat: number]: number }"`
 	PendingSeats []int                 `json:"pendingSeats"`
 }
 
 // ForfeitAvailablePayload: Team é a dupla ausente contra a qual o W.O. pode ser pedido; null retira a oferta.
 type ForfeitAvailablePayload struct {
-	Team *engine.Team `json:"team"`
+	Team *engine.Team `json:"team" tstype:"engine.Team | null,required"`
 }
 
 type EndReason string
@@ -101,7 +101,7 @@ const (
 
 type MatchEndedPayload struct {
 	Reason EndReason    `json:"reason"`
-	Winner *engine.Team `json:"winner"`
+	Winner *engine.Team `json:"winner" tstype:"engine.Team | null,required"`
 	Score  [2]int       `json:"score"`
 }
 
