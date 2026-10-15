@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -35,6 +36,7 @@ type Service struct {
 	cookies    CookieConfig
 	log        *slog.Logger
 	background func(func())
+	pending    sync.WaitGroup // e-mails em envio
 }
 
 func NewService(o Options) *Service {
@@ -105,11 +107,28 @@ func (s *Service) link(path string) string { return s.baseURL + path }
 
 // sendLater envia fora da requisição: o tempo de resposta não revela se houve envio.
 func (s *Service) sendLater(m mail.Message) {
+	s.pending.Add(1)
 	s.background(func() {
+		defer s.pending.Done()
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if err := s.mailer.Send(ctx, m); err != nil {
 			s.log.Error("falha ao enviar e-mail", "to", m.To, "subject", m.Subject, "err", err)
 		}
 	})
+}
+
+// Wait aguarda os e-mails em envio até ctx terminar; usado no desligamento gracioso.
+func (s *Service) Wait(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() {
+		s.pending.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
