@@ -135,12 +135,18 @@ func (c *client) writeLoop(ctx context.Context) {
 				c.closeWith(0, "")
 			}
 		case <-revalidate.C:
-			if _, err := c.h.Auth.Authenticate(ctx, c.token); errors.Is(err, auth.ErrUnauthenticated) {
+			actx, cancel := context.WithTimeout(ctx, revalidateTimeout)
+			_, err := c.h.Auth.Authenticate(actx, c.token)
+			cancel()
+			if errors.Is(err, auth.ErrUnauthenticated) {
 				c.closeWith(codeSessionInvalid, "session_invalid")
 			}
 		}
 	}
 }
+
+// revalidateTimeout limita a consulta de sessão para que um banco lento não trave o laço de escrita.
+const revalidateTimeout = 5 * time.Second
 
 func (c *client) write(ctx context.Context, m protocol.ServerMessage) error {
 	data, err := json.Marshal(m)
