@@ -113,7 +113,7 @@ func (r *Room) command(m Command) {
 	case protocol.TypeKick:
 		r.kick(seat, m.Message)
 	default:
-		r.reply(m.UserID, protocol.CodeBadRequest, m.Message.Seq)
+		r.playerAction(seat, m.Message)
 	}
 }
 
@@ -170,6 +170,7 @@ func (r *Room) setReady(seat engine.Seat, msg protocol.ClientMessage) {
 	}
 	st.ready = p.Ready
 	r.publish()
+	r.maybeStart()
 }
 
 func (r *Room) kick(seat engine.Seat, msg protocol.ClientMessage) {
@@ -211,6 +212,7 @@ func (r *Room) destroy() {
 	r.opt.Registry.Destroyed(r.opt.ID)
 }
 
+// connected marca o assento como conectado (nova conexão ou outra aba) e reenvia o que o cliente precisa.
 func (r *Room) connected(userID string) {
 	seat, ok := r.seatOf(userID)
 	if !ok {
@@ -219,6 +221,13 @@ func (r *Room) connected(userID string) {
 	st := r.seats[seat]
 	st.connected, st.disconnectedAt, st.timeouts = true, time.Time{}, 0
 	r.publish()
+	if r.status != protocol.RoomPlaying {
+		return
+	}
+	r.opt.Out.Send(userID, r.stateFor(seat))
+	if r.offered != nil && engine.TeamOf(seat) != *r.offered {
+		r.opt.Out.Send(userID, protocol.ForfeitAvailable(r.offered))
+	}
 }
 
 func (r *Room) disconnected(userID string) {
