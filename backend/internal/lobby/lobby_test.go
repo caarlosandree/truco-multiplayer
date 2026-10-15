@@ -338,3 +338,59 @@ func TestDestroyedSendsSnapshotToReservedUsers(t *testing.T) {
 		return bia.count(protocol.MsgLobbySnapshot) > before && len(m.Payload.(protocol.LobbySnapshotPayload).Rooms) == 0
 	})
 }
+
+type syncBuffer struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
+}
+
+func TestRestoreKeepsFirstRoomWhenUserAppearsTwice(t *testing.T) {
+	logs := &syncBuffer{}
+	l := lobby.New(context.Background(), lobby.Options{Timing: timing, MaxRooms: 5, Store: &nopStore{},
+		Clock: clock.NewManual(time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)), Rand: rand.NewChaCha8([32]byte{2}),
+		Log: slog.New(slog.NewTextHandler(logs, nil))})
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = l.Shutdown(ctx)
+	})
+	rec, _ := enginetest.RandomRecord(4)
+	rec.Actions = rec.Actions[:12]
+	state, err := replay.Rebuild(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second := rec
+	second.ID = "outra-partida"
+	err = l.Restore([]match.Recovered{{Record: rec, State: state, NextPly: 12}, {Record: second, State: state, NextPly: 12}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ana := connect(l, "u0", "Ana")
+	// A conexão só é avisada à sala do índice: só a primeira sala o vê conectado.
+	ana.waitFor(t, protocol.MsgRoomState, func(m protocol.ServerMessage) bool {
+		st := m.Payload.(protocol.RoomStatePayload)
+		return st.MatchID == rec.ID && st.Seats[st.YourSeat].Connected
+	})
+	for _, m := range ana.messages() {
+		if st, ok := m.Payload.(protocol.RoomStatePayload); ok && st.MatchID == second.ID && st.Seats[st.YourSeat].Connected {
+			t.Fatal("a segunda sala não pode ver o usuário conectado")
+		}
+	}
+	out := logs.String()
+	if !strings.Contains(out, "level=WARN") || !strings.Contains(out, "user_id=u0") || !strings.Contains(out, rec.ID) || !strings.Contains(out, "outra-partida") {
+		t.Fatalf("faltou o aviso de usuário duplicado:\n%s", out)
+	}
+}

@@ -300,6 +300,11 @@ func (l *Lobby) Restore(recovered []match.Recovered) error {
 			Public: true, Code: code, MatchID: rc.Record.ID}}
 		l.codes[code] = id
 		for _, p := range rc.Record.Players {
+			if prev, in := l.index[p.UserID]; in {
+				l.opt.Log.Warn("usuário em duas partidas recuperadas; mantida a primeira sala", "user_id", p.UserID,
+					"match_id", l.rooms[prev].summary.MatchID, "other_match_id", rc.Record.ID)
+				continue
+			}
 			l.index[p.UserID] = id
 		}
 		l.opt.Log.Info("sala restaurada", "room_id", id, "match_id", rc.Record.ID)
