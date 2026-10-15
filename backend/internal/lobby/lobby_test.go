@@ -286,6 +286,16 @@ func TestRestoreIndexesPlayersAndAbortEndsMatch(t *testing.T) {
 	if ana.count(protocol.MsgLobbySnapshot) != 0 {
 		t.Fatal("jogador de partida restaurada vai direto para a sala")
 	}
+	late := connect(l, "outsider", "Zeca")
+	snap := late.waitFor(t, protocol.MsgLobbySnapshot, nil).Payload.(protocol.LobbySnapshotPayload)
+	if len(snap.Rooms) != 1 || snap.Rooms[0].Score == nil {
+		t.Fatalf("snapshot = %+v", snap.Rooms)
+	}
+	for i, s := range snap.Rooms[0].Seats {
+		if s == nil || s.DisplayName == "" {
+			t.Fatalf("assento %d vazio na sala restaurada", i)
+		}
+	}
 	if err := l.Abort(context.Background(), rec.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -314,4 +324,17 @@ func TestShutdownClosesClientsAndRejectsConnect(t *testing.T) {
 	if l.Connect(&fakeClient{id: "u9"}, protocol.UserInfo{ID: "u9"}) {
 		t.Fatal("Connect deve recusar durante o desligamento")
 	}
+}
+
+func TestDestroyedSendsSnapshotToReservedUsers(t *testing.T) {
+	l := newLobby(t, 3)
+	ana, bia := connect(l, "u0", "Ana"), connect(l, "u1", "Bia")
+	dispatch(l, ana, protocol.TypeCreateRoom, protocol.CreateRoomPayload{Visibility: protocol.VisibilityPublic})
+	id := roomState(t, ana).ID
+	before := bia.count(protocol.MsgLobbySnapshot)
+	dispatch(l, bia, protocol.TypeJoinRoom, protocol.JoinRoomPayload{RoomID: &id})
+	l.Destroyed(id) // a sala some com a reserva de Bia ainda no índice
+	bia.waitFor(t, protocol.MsgLobbySnapshot, func(m protocol.ServerMessage) bool {
+		return bia.count(protocol.MsgLobbySnapshot) > before && len(m.Payload.(protocol.LobbySnapshotPayload).Rooms) == 0
+	})
 }

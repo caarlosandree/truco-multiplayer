@@ -256,12 +256,23 @@ func (l *Lobby) Destroyed(roomID string) {
 	}
 	delete(l.rooms, roomID)
 	delete(l.codes, e.summary.Code)
+	var freed []string
 	for user, id := range l.index {
 		if id == roomID {
 			delete(l.index, user)
+			freed = append(freed, user)
 		}
 	}
 	l.opt.Log.Info("sala destruída", "room_id", roomID)
+	if !l.closing {
+		// quem estava reservado/na sala volta ao lobby; o Released tardio da sala não acharia mais o índice
+		snap := l.snapshotLocked()
+		for _, user := range freed {
+			if m := l.clients[user]; m != nil {
+				m.client.Send(snap)
+			}
+		}
+	}
 	if e.summary.Public {
 		l.broadcastLobbyLocked(protocol.RoomRemoved(roomID))
 	}
@@ -277,10 +288,15 @@ func (l *Lobby) Restore(recovered []match.Recovered) error {
 			return err
 		}
 		name := "Sala de " + rc.Record.Players[0].DisplayName
+		var seats [4]*protocol.SeatSummary
+		for i, p := range rc.Record.Players {
+			seats[i] = &protocol.SeatSummary{DisplayName: p.DisplayName}
+		}
+		score := rc.State.Score
 		actor := room.Start(l.ctx, l.roomOptions(id, code, name, true),
 			&room.Restored{MatchID: rc.Record.ID, Players: rc.Record.Players, State: rc.State, NextPly: rc.NextPly})
 		l.rooms[id] = &entry{actor: actor, summary: room.Summary{
-			Room:   protocol.RoomSummary{ID: id, Name: name, Status: protocol.RoomPlaying},
+			Room:   protocol.RoomSummary{ID: id, Name: name, Status: protocol.RoomPlaying, Seats: seats, Score: &score},
 			Public: true, Code: code, MatchID: rc.Record.ID}}
 		l.codes[code] = id
 		for _, p := range rc.Record.Players {
