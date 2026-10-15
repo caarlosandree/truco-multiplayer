@@ -17,6 +17,10 @@ import (
 // O adaptador do lobby traduz match.ErrMatchClosed para este erro.
 var ErrMatchClosed = errors.New("room: partida encerrada fora da sala")
 
+// ErrLogDiverged indica que o log gravado diverge do que a sala acredita (ply já gravado com outra ação
+// ou fora de sequência). É fatal para a partida. O adaptador do lobby traduz match.ErrPlyConflict e match.ErrPlyGap.
+var ErrLogDiverged = errors.New("room: log da partida divergiu do estado da sala")
+
 // MatchStore é o subconjunto de match.Store usado pela sala, que é o único escritor das ações da sua partida.
 type MatchStore interface {
 	Create(ctx context.Context, seed uint64, firstDealer engine.Seat, players [4]replay.PlayerSeat) (string, error)

@@ -77,7 +77,7 @@ func (r *Room) Handle(ctx context.Context, m Msg) {
 	case Disconnected:
 		r.disconnected(m.UserID)
 	case Abort:
-		r.abort(m.Reason)
+		r.abort(m)
 	case Stop:
 		r.stop()
 		return

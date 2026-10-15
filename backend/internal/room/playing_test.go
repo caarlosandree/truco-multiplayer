@@ -2,6 +2,7 @@ package room_test
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -241,5 +242,40 @@ func TestRestoredRoomWithoutActionsRetriesStartOnPersistFailure(t *testing.T) {
 	h.advance(time.Second)
 	if len(rec.Actions) != 1 || h.room.Game().Phase == engine.PhaseWaiting {
 		t.Fatalf("a nova tentativa deveria iniciar a mão (ações %d)", len(rec.Actions))
+	}
+}
+
+// O log divergiu do que a sala acredita (commit ambíguo seguido de ply conflitante): fatal para a partida.
+func TestLogDivergedAbandonsAndAbortsMatch(t *testing.T) {
+	h := newHarness(t)
+	h.startMatch()
+	id := h.store.last().ID
+	h.store.failAppend = fmt.Errorf("ply 1: %w", room.ErrLogDiverged)
+	a, _ := nextMove(h.room.Game())
+	h.act(a)
+	for _, u := range users {
+		if e := last[protocol.MatchEndedPayload](t, h.out, u, protocol.MsgMatchEnded); e.Reason != protocol.EndAborted || e.Winner != nil {
+			t.Fatalf("%s: match_ended = %+v", u, e)
+		}
+	}
+	if h.store.abandoned[id] != "diverged" {
+		t.Fatalf("abandono = %q", h.store.abandoned[id])
+	}
+	if h.room.Status() != protocol.RoomWaiting {
+		t.Fatalf("status = %s", h.room.Status())
+	}
+}
+
+func TestAbortWithOtherMatchIDIsIgnored(t *testing.T) {
+	h := newHarness(t)
+	h.startMatch()
+	id := h.store.last().ID
+	h.send(room.Abort{Reason: "admin", MatchID: "outra-partida"})
+	if h.room.Status() != protocol.RoomPlaying {
+		t.Fatal("Abort de outra partida não pode encerrar a atual")
+	}
+	h.send(room.Abort{Reason: "admin", MatchID: id})
+	if h.room.Status() != protocol.RoomWaiting {
+		t.Fatal("Abort da partida atual deve encerrar")
 	}
 }

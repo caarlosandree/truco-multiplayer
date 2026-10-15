@@ -313,7 +313,7 @@ func (l *Lobby) Abort(_ context.Context, matchID string) error {
 	defer l.mu.Unlock()
 	for _, e := range l.rooms {
 		if e.summary.MatchID == matchID {
-			e.actor.Push(room.Abort{Reason: "admin"})
+			e.actor.Push(room.Abort{Reason: "admin", MatchID: matchID})
 		}
 	}
 	return nil

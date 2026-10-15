@@ -27,7 +27,8 @@ type Connected struct{ UserID string }
 type Disconnected struct{ UserID string }
 
 // Abort encerra a partida viva por decisão do administrador.
-type Abort struct{ Reason string }
+// MatchID, se informado, restringe o abort àquela partida (a sala pode já ter iniciado outra).
+type Abort struct{ Reason, MatchID string }
 
 // Stop encerra a sala no desligamento do servidor, sem tocar na partida (o Recover a retoma).
 type Stop struct{}

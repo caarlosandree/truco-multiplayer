@@ -119,6 +119,11 @@ func (r *Room) apply(a engine.Action, src replay.Source) error {
 		r.endMatch(protocol.EndAborted, nil)
 		return errMatchGone
 	}
+	if errors.Is(err, ErrLogDiverged) {
+		r.opt.Log.Error("log da partida divergiu do estado da sala; abandonando", "match_id", r.matchID, "ply", r.nextPly, "err", err)
+		r.abandonDiverged()
+		return errMatchGone
+	}
 	if err != nil {
 		r.opt.Log.Error("falha ao gravar ação", "match_id", r.matchID, "ply", r.nextPly, "err", err)
 		return errPersist
@@ -134,6 +139,17 @@ func (r *Room) apply(a engine.Action, src replay.Source) error {
 		r.finish(a)
 	}
 	return nil
+}
+
+// abandonDiverged encerra como abortada uma partida cujo log não bate com a sala: continuar só repetiria o conflito.
+func (r *Room) abandonDiverged() {
+	ctx, cancel := r.storeCtx()
+	err := r.opt.Store.Abandon(ctx, r.matchID, "diverged")
+	cancel()
+	if err != nil && !errors.Is(err, ErrMatchClosed) {
+		r.opt.Log.Error("falha ao abandonar partida divergente", "match_id", r.matchID, "err", err)
+	}
+	r.endMatch(protocol.EndAborted, nil)
 }
 
 func (r *Room) stateFor(seat engine.Seat) protocol.ServerMessage {
@@ -198,8 +214,9 @@ func (r *Room) resetToWaiting() {
 	r.publish()
 }
 
-func (r *Room) abort(reason string) {
-	if r.status != protocol.RoomPlaying {
+func (r *Room) abort(m Abort) {
+	reason := m.Reason
+	if r.status != protocol.RoomPlaying || (m.MatchID != "" && m.MatchID != r.matchID) {
 		return
 	}
 	r.opt.Log.Info("partida abortada", "match_id", r.matchID, "reason", reason)
