@@ -114,6 +114,8 @@ func (r *Room) command(m Command) {
 		r.kick(seat, m.Message)
 	case protocol.TypeClaimForfeit:
 		r.claimForfeit(seat, m.Message.Seq)
+	case protocol.TypeSignal:
+		r.signal(seat, m.Message)
 	default:
 		r.playerAction(seat, m.Message)
 	}

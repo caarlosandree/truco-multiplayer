@@ -32,7 +32,9 @@ func TestTimeoutAppliesDefaultActionWithTimeoutSource(t *testing.T) {
 func TestSimultaneousVoteWindowDoesNotRearm(t *testing.T) {
 	h := newHarness(t)
 	h.startMatch()
-	h.playUntil(func(g engine.GameState) bool { return g.Phase == engine.PhasePlaying && g.Hand.Kind == engine.HandNormal })
+	h.playUntil(func(g engine.GameState) bool {
+		return g.Phase == engine.PhasePlaying && g.Hand.Kind == engine.HandNormal
+	})
 	turn := h.room.Game().Hand.Turn
 	h.act(engine.Action{Kind: engine.ActRequestRaise, Seat: turn})
 	first, second := engine.Next(turn), engine.Partner(engine.Next(turn))
