@@ -4,6 +4,7 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/engine"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/enginetest"
@@ -188,5 +189,57 @@ func TestRestoredRoomResumesWithSeatsOffline(t *testing.T) {
 	h.act(a)
 	if got := h.store.lastAction(); got.Ply != plies {
 		t.Fatalf("próxima ação gravada no ply %d, quer %d", got.Ply, plies)
+	}
+}
+
+// Partida restaurada com 0 ações (processo morreu antes do sys_start_hand): o engine está em waiting
+// e a sala precisa iniciar a primeira mão sozinha.
+func TestRestoredRoomWithoutActionsStartsFirstHand(t *testing.T) {
+	full, _ := enginetest.RandomRecord(9)
+	rec := full
+	rec.Actions = nil
+	state, err := replay.Rebuild(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Phase != engine.PhaseWaiting {
+		t.Fatalf("fase = %s", state.Phase)
+	}
+	h := newHarness(t)
+	h.store.records[rec.ID] = &rec
+	h.store.order = append(h.store.order, rec.ID)
+	h.room = room.NewRestored(h.opts, room.Restored{MatchID: rec.ID, Players: rec.Players, State: state, NextPly: 0})
+	h.send(room.Wake{})
+	if len(rec.Actions) != 1 {
+		t.Fatalf("ações gravadas = %d", len(rec.Actions))
+	}
+	got := h.store.lastAction()
+	if got.Ply != 0 || got.Action.Kind != engine.ActSysStartHand || got.Source != replay.SourceSystem {
+		t.Fatalf("primeira ação = %+v", got)
+	}
+	if h.room.Game().Phase == engine.PhaseWaiting {
+		t.Fatal("o jogo deveria ter saído de waiting")
+	}
+}
+
+// Falha de gravação ao iniciar a primeira mão restaurada: tenta de novo após retryDelay.
+func TestRestoredRoomWithoutActionsRetriesStartOnPersistFailure(t *testing.T) {
+	full, _ := enginetest.RandomRecord(9)
+	rec := full
+	rec.Actions = nil
+	state, _ := replay.Rebuild(rec)
+	h := newHarness(t)
+	h.store.records[rec.ID] = &rec
+	h.store.order = append(h.store.order, rec.ID)
+	h.store.failAppend = errors.New("banco fora")
+	h.room = room.NewRestored(h.opts, room.Restored{MatchID: rec.ID, Players: rec.Players, State: state})
+	h.send(room.Wake{})
+	if len(rec.Actions) != 0 {
+		t.Fatal("não deveria gravar com o banco fora")
+	}
+	h.store.failAppend = nil
+	h.advance(time.Second)
+	if len(rec.Actions) != 1 || h.room.Game().Phase == engine.PhaseWaiting {
+		t.Fatalf("a nova tentativa deveria iniciar a mão (ações %d)", len(rec.Actions))
 	}
 }

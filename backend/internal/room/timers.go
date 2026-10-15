@@ -38,13 +38,19 @@ func (r *Room) settle() {
 // runDue aplica a próxima ação automática vencida: início da mão após a pausa ou
 // DefaultAction de um assento cujo prazo acabou. Devolve true se aplicou algo.
 func (r *Room) runDue(now time.Time) bool {
-	if r.game.Phase == engine.PhaseHandEnd {
+	// Partida restaurada sem nenhuma ação (o processo morreu antes do sys_start_hand) fica em waiting:
+	// a primeira mão começa já, como uma pausa vencida. pauseUntil só serve de espera entre tentativas.
+	if r.game.Phase == engine.PhaseHandEnd || (r.status == protocol.RoomPlaying && r.game.Phase == engine.PhaseWaiting) {
 		if now.Before(r.pauseUntil) {
 			return false
 		}
 		err := r.apply(engine.Action{Kind: engine.ActSysStartHand}, replay.SourceSystem)
-		if errors.Is(err, errPersist) {
+		switch {
+		case err == nil, errors.Is(err, errMatchGone):
+		case errors.Is(err, errPersist):
 			r.pauseUntil = now.Add(retryDelay)
+		default:
+			r.opt.Log.Error("início de mão rejeitado pelo engine", "match_id", r.matchID, "err", err)
 		}
 		return err == nil
 	}
@@ -112,7 +118,7 @@ func (r *Room) wakeups(consider func(time.Time)) {
 			}
 		}
 	case protocol.RoomPlaying:
-		if r.game.Phase == engine.PhaseHandEnd {
+		if r.game.Phase == engine.PhaseHandEnd || r.game.Phase == engine.PhaseWaiting {
 			consider(r.pauseUntil)
 		}
 		for _, d := range r.deadlines {
