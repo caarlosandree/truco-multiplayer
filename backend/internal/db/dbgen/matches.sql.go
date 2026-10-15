@@ -126,6 +126,27 @@ func (q *Queries) GetMatch(ctx context.Context, id string) (Match, error) {
 	return i, err
 }
 
+const getMatchAction = `-- name: GetMatchAction :one
+SELECT action, source FROM match_actions WHERE match_id = $1 AND ply = $2
+`
+
+type GetMatchActionParams struct {
+	MatchID string
+	Ply     int32
+}
+
+type GetMatchActionRow struct {
+	Action []byte
+	Source string
+}
+
+func (q *Queries) GetMatchAction(ctx context.Context, arg GetMatchActionParams) (GetMatchActionRow, error) {
+	row := q.db.QueryRow(ctx, getMatchAction, arg.MatchID, arg.Ply)
+	var i GetMatchActionRow
+	err := row.Scan(&i.Action, &i.Source)
+	return i, err
+}
+
 const getMatchForUpdate = `-- name: GetMatchForUpdate :one
 SELECT id, seed, first_dealer, engine_version, status, winner_team, score_a, score_b, created_at, finished_at, abandon_reason FROM matches WHERE id = $1 FOR UPDATE
 `

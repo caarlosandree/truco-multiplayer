@@ -18,6 +18,9 @@ SELECT coalesce(max(ply) + 1, 0)::integer FROM match_actions WHERE match_id = @m
 INSERT INTO match_actions (match_id, ply, action, source, created_at)
 VALUES (@match_id::uuid, @ply::integer, @action::jsonb, @source::text, @now::timestamptz);
 
+-- name: GetMatchAction :one
+SELECT action, source FROM match_actions WHERE match_id = @match_id AND ply = @ply;
+
 -- name: GetMatch :one
 SELECT * FROM matches WHERE id = @id;
 

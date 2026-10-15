@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -91,7 +92,7 @@ func (s *Store) AppendAction(ctx context.Context, id string, ply int, a engine.A
 	if err != nil {
 		return err
 	}
-	return db.WithTx(ctx, s.pool, func(tx pgx.Tx) error {
+	err = db.WithTx(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
 		status, err := q.LockMatchStatus(ctx, id)
 		if err != nil {
@@ -106,12 +107,35 @@ func (s *Store) AppendAction(ctx context.Context, id string, ply int, a engine.A
 		}
 		switch {
 		case ply < int(next):
-			return ErrPlyConflict
+			return sameStoredAction(ctx, q, id, ply, raw, src)
 		case ply > int(next):
 			return ErrPlyGap
 		}
 		return q.InsertMatchAction(ctx, dbgen.InsertMatchActionParams{MatchID: id, Ply: int32(ply), Action: raw, Source: string(src), Now: s.now()})
 	})
+	if db.IsUniqueViolation(err, "") {
+		// Concorrente gravou o mesmo ply entre a leitura do próximo e o insert: vale a mesma regra.
+		return sameStoredAction(ctx, s.q, id, ply, raw, src)
+	}
+	return err
+}
+
+// sameStoredAction trata a repetição de um ply já gravado. Se a sala repete exatamente a ação gravada
+// (commit ambíguo: o Postgres confirmou, mas a sala não soube), é idempotente; caso contrário é conflito.
+// A ação é comparada semanticamente porque o jsonb não preserva a ordem das chaves.
+func sameStoredAction(ctx context.Context, q *dbgen.Queries, id string, ply int, raw []byte, src replay.Source) error {
+	row, err := q.GetMatchAction(ctx, dbgen.GetMatchActionParams{MatchID: id, Ply: int32(ply)})
+	if err != nil {
+		return err
+	}
+	var stored, incoming engine.Action
+	if json.Unmarshal(row.Action, &stored) != nil || json.Unmarshal(raw, &incoming) != nil {
+		return ErrPlyConflict
+	}
+	if row.Source == string(src) && reflect.DeepEqual(stored, incoming) {
+		return nil
+	}
+	return ErrPlyConflict
 }
 
 func (s *Store) Load(ctx context.Context, id string) (replay.Record, error) {

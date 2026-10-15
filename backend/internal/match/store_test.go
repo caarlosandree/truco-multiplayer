@@ -104,8 +104,12 @@ func TestAppendActionErrors(t *testing.T) {
 	ctx := context.Background()
 	id, rec := e.persist(t, 1, 3)
 	first := rec.Actions[0]
-	if err := e.store.AppendAction(ctx, id, 0, first.Action, first.Source); !errors.Is(err, match.ErrPlyConflict) {
-		t.Fatalf("ply repetido: %v", err)
+	other := rec.Actions[1]
+	if err := e.store.AppendAction(ctx, id, 0, other.Action, other.Source); !errors.Is(err, match.ErrPlyConflict) {
+		t.Fatalf("ply repetido com ação diferente: %v", err)
+	}
+	if err := e.store.AppendAction(ctx, id, 0, first.Action, replay.SourceTimeout); !errors.Is(err, match.ErrPlyConflict) {
+		t.Fatalf("ply repetido com origem diferente: %v", err)
 	}
 	for _, missing := range []string{"00000000-0000-7000-8000-000000000000", "nao-e-uuid"} {
 		if err := e.store.AppendAction(ctx, missing, 0, first.Action, first.Source); !errors.Is(err, match.ErrNotFound) {
@@ -133,14 +137,13 @@ func TestConcurrentAppendOfSamePlyHasSingleWinner(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	start := engine.Action{Kind: engine.ActSysStartHand}
 	var wg sync.WaitGroup
 	errs := make([]error, 8)
 	for i := range errs {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			errs[i] = e.store.AppendAction(ctx, id, 0, start, replay.SourceSystem)
+			errs[i] = e.store.AppendAction(ctx, id, 0, engine.Action{Kind: engine.ActSysStartHand, Keep: i}, replay.SourceSystem)
 		}()
 	}
 	wg.Wait()
@@ -393,8 +396,8 @@ func TestAppendActionRejectsGapsAndRepeats(t *testing.T) {
 	if err := e.store.AppendAction(ctx, id, 5, full.Actions[5].Action, full.Actions[5].Source); !errors.Is(err, match.ErrPlyGap) {
 		t.Fatalf("ply 5 com próximo 3: %v", err)
 	}
-	if err := e.store.AppendAction(ctx, id, 2, full.Actions[2].Action, full.Actions[2].Source); !errors.Is(err, match.ErrPlyConflict) {
-		t.Fatalf("ply 2 repetido: %v", err)
+	if err := e.store.AppendAction(ctx, id, 2, full.Actions[4].Action, full.Actions[4].Source); !errors.Is(err, match.ErrPlyConflict) {
+		t.Fatalf("ply 2 com ação diferente: %v", err)
 	}
 	if err := e.store.AppendAction(ctx, id, 3, full.Actions[3].Action, full.Actions[3].Source); err != nil {
 		t.Fatalf("ply 3: %v", err)
@@ -532,5 +535,30 @@ func TestRecoverSkipsTransientFailuresAndAcceptsNilLogger(t *testing.T) {
 	}
 	if status != "in_progress" {
 		t.Fatalf("partida com falha transitória deve ficar in_progress, está %s", status)
+	}
+}
+
+// Commit ambíguo: a sala não soube que a gravação deu certo e repete o mesmo ply com a mesma ação.
+func TestAppendActionIsIdempotentForIdenticalRetry(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	id, rec := e.persist(t, 2, 3)
+	last := rec.Actions[2]
+	if err := e.store.AppendAction(ctx, id, 2, last.Action, last.Source); err != nil {
+		t.Fatalf("repetição idêntica do último ply: %v", err)
+	}
+	if err := e.store.AppendAction(ctx, id, 0, rec.Actions[0].Action, rec.Actions[0].Source); err != nil {
+		t.Fatalf("repetição idêntica de ply antigo: %v", err)
+	}
+	loaded, err := e.store.Load(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded.Actions) != 3 {
+		t.Fatalf("a repetição não pode duplicar o log: %d ações", len(loaded.Actions))
+	}
+	full, _ := enginetest.RandomRecord(2)
+	if err := e.store.AppendAction(ctx, id, 2, full.Actions[4].Action, full.Actions[4].Source); !errors.Is(err, match.ErrPlyConflict) {
+		t.Fatalf("ação diferente no ply existente: %v", err)
 	}
 }
