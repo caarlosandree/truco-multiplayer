@@ -52,34 +52,6 @@ func (q *Queries) AddMatchPlayer(ctx context.Context, arg AddMatchPlayerParams) 
 	return err
 }
 
-const appendMatchAction = `-- name: AppendMatchAction :execrows
-INSERT INTO match_actions (match_id, ply, action, source, created_at)
-SELECT $1::uuid, $2::integer, $3::jsonb, $4::text, $5::timestamptz
-WHERE EXISTS (SELECT 1 FROM matches WHERE id = $1::uuid AND status = 'in_progress')
-`
-
-type AppendMatchActionParams struct {
-	MatchID string
-	Ply     int32
-	Action  []byte
-	Source  string
-	Now     time.Time
-}
-
-func (q *Queries) AppendMatchAction(ctx context.Context, arg AppendMatchActionParams) (int64, error) {
-	result, err := q.db.Exec(ctx, appendMatchAction,
-		arg.MatchID,
-		arg.Ply,
-		arg.Action,
-		arg.Source,
-		arg.Now,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const createMatch = `-- name: CreateMatch :one
 INSERT INTO matches (seed, first_dealer, engine_version, created_at)
 VALUES ($1, $2, $3, $4)
@@ -175,6 +147,30 @@ func (q *Queries) GetMatchForUpdate(ctx context.Context, id string) (Match, erro
 		&i.AbandonReason,
 	)
 	return i, err
+}
+
+const insertMatchAction = `-- name: InsertMatchAction :exec
+INSERT INTO match_actions (match_id, ply, action, source, created_at)
+VALUES ($1::uuid, $2::integer, $3::jsonb, $4::text, $5::timestamptz)
+`
+
+type InsertMatchActionParams struct {
+	MatchID string
+	Ply     int32
+	Action  []byte
+	Source  string
+	Now     time.Time
+}
+
+func (q *Queries) InsertMatchAction(ctx context.Context, arg InsertMatchActionParams) error {
+	_, err := q.db.Exec(ctx, insertMatchAction,
+		arg.MatchID,
+		arg.Ply,
+		arg.Action,
+		arg.Source,
+		arg.Now,
+	)
+	return err
 }
 
 const listFinishedMatchIDs = `-- name: ListFinishedMatchIDs :many
@@ -293,4 +289,27 @@ func (q *Queries) ListMatchPlayers(ctx context.Context, matchID string) ([]ListM
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockMatchStatus = `-- name: LockMatchStatus :one
+SELECT status FROM matches WHERE id = $1 FOR SHARE
+`
+
+// FOR SHARE serializa com Abandon (UPDATE) e Finish (FOR UPDATE).
+func (q *Queries) LockMatchStatus(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRow(ctx, lockMatchStatus, id)
+	var status string
+	err := row.Scan(&status)
+	return status, err
+}
+
+const nextPly = `-- name: NextPly :one
+SELECT coalesce(max(ply) + 1, 0)::integer FROM match_actions WHERE match_id = $1
+`
+
+func (q *Queries) NextPly(ctx context.Context, matchID string) (int32, error) {
+	row := q.db.QueryRow(ctx, nextPly, matchID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
 }

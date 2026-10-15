@@ -22,6 +22,7 @@ var (
 	ErrNotFound        = errors.New("match: partida não encontrada")
 	ErrMatchClosed     = errors.New("match: partida não está em andamento")
 	ErrPlyConflict     = errors.New("match: ply já gravado")
+	ErrPlyGap          = errors.New("match: ply fora de sequência")
 	ErrNotGameOver     = errors.New("match: partida ainda não terminou")
 	ErrDuplicatePlayer = errors.New("match: jogador repetido na partida")
 )
@@ -75,6 +76,8 @@ func (s *Store) Create(ctx context.Context, seed uint64, firstDealer engine.Seat
 }
 
 // AppendAction grava uma ação aplicada com sucesso. A sala chama antes de enviar o estado aos jogadores.
+// Contrato: a sala é o único escritor das ações da sua partida. Mesmo assim a gravação trava a partida
+// em modo compartilhado e exige o ply seguinte, para que nada entre depois de um encerramento confirmado.
 func (s *Store) AppendAction(ctx context.Context, id string, ply int, a engine.Action, src replay.Source) error {
 	if !src.Valid() {
 		return fmt.Errorf("match: origem inválida %q", src)
@@ -86,24 +89,27 @@ func (s *Store) AppendAction(ctx context.Context, id string, ply int, a engine.A
 	if err != nil {
 		return err
 	}
-	n, err := s.q.AppendMatchAction(ctx, dbgen.AppendMatchActionParams{MatchID: id, Ply: int32(ply), Action: raw, Source: string(src), Now: s.now()})
-	if db.IsUniqueViolation(err, "match_actions_pkey") {
-		return ErrPlyConflict
-	}
-	if err != nil {
-		return notFound(err)
-	}
-	if n == 0 {
-		return s.closedOrMissing(ctx, s.q, id)
-	}
-	return nil
-}
-
-func (s *Store) closedOrMissing(ctx context.Context, q *dbgen.Queries, id string) error {
-	if _, err := q.GetMatch(ctx, id); err != nil {
-		return notFound(err)
-	}
-	return ErrMatchClosed
+	return db.WithTx(ctx, s.pool, func(tx pgx.Tx) error {
+		q := s.q.WithTx(tx)
+		status, err := q.LockMatchStatus(ctx, id)
+		if err != nil {
+			return notFound(err)
+		}
+		if status != string(replay.StatusInProgress) {
+			return ErrMatchClosed
+		}
+		next, err := q.NextPly(ctx, id)
+		if err != nil {
+			return err
+		}
+		switch {
+		case ply < int(next):
+			return ErrPlyConflict
+		case ply > int(next):
+			return ErrPlyGap
+		}
+		return q.InsertMatchAction(ctx, dbgen.InsertMatchActionParams{MatchID: id, Ply: int32(ply), Action: raw, Source: string(src), Now: s.now()})
+	})
 }
 
 func (s *Store) Load(ctx context.Context, id string) (replay.Record, error) {

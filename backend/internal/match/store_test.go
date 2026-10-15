@@ -384,3 +384,50 @@ func TestRecomputeStatsSkipsCorruptFinishedMatch(t *testing.T) {
 		t.Fatalf("good=%d bad=%d wins999=%d", rows, bad, wins999)
 	}
 }
+
+func TestAppendActionRejectsGapsAndRepeats(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	id, _ := e.persist(t, 3, 3)
+	full, _ := enginetest.RandomRecord(3)
+	if err := e.store.AppendAction(ctx, id, 5, full.Actions[5].Action, full.Actions[5].Source); !errors.Is(err, match.ErrPlyGap) {
+		t.Fatalf("ply 5 com próximo 3: %v", err)
+	}
+	if err := e.store.AppendAction(ctx, id, 2, full.Actions[2].Action, full.Actions[2].Source); !errors.Is(err, match.ErrPlyConflict) {
+		t.Fatalf("ply 2 repetido: %v", err)
+	}
+	if err := e.store.AppendAction(ctx, id, 3, full.Actions[3].Action, full.Actions[3].Source); err != nil {
+		t.Fatalf("ply 3: %v", err)
+	}
+}
+
+func TestAppendActionWaitsForConcurrentAbandon(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	id, _ := e.persist(t, 3, 1)
+	full, _ := enginetest.RandomRecord(3)
+	tx, err := e.pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, "SELECT 1 FROM matches WHERE id = $1 FOR UPDATE", id); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- e.store.AppendAction(ctx, id, 1, full.Actions[1].Action, full.Actions[1].Source) }()
+	select {
+	case err := <-done:
+		t.Fatalf("AppendAction não esperou o encerramento concorrente: %v", err)
+	case <-time.After(200 * time.Millisecond):
+	}
+	if _, err := tx.Exec(ctx, "UPDATE matches SET status = 'abandoned', finished_at = now(), abandon_reason = 'teste' WHERE id = $1", id); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; !errors.Is(err, match.ErrMatchClosed) {
+		t.Fatalf("ação depois de abandono confirmado: %v", err)
+	}
+}

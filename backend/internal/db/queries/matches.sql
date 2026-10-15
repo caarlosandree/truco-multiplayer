@@ -7,10 +7,16 @@ RETURNING id;
 INSERT INTO match_players (match_id, seat, user_id, display_name)
 VALUES (@match_id, @seat, @user_id, @display_name);
 
--- name: AppendMatchAction :execrows
+-- name: LockMatchStatus :one
+-- FOR SHARE serializa com Abandon (UPDATE) e Finish (FOR UPDATE).
+SELECT status FROM matches WHERE id = @id FOR SHARE;
+
+-- name: NextPly :one
+SELECT coalesce(max(ply) + 1, 0)::integer FROM match_actions WHERE match_id = @match_id;
+
+-- name: InsertMatchAction :exec
 INSERT INTO match_actions (match_id, ply, action, source, created_at)
-SELECT @match_id::uuid, @ply::integer, @action::jsonb, @source::text, @now::timestamptz
-WHERE EXISTS (SELECT 1 FROM matches WHERE id = @match_id::uuid AND status = 'in_progress');
+VALUES (@match_id::uuid, @ply::integer, @action::jsonb, @source::text, @now::timestamptz);
 
 -- name: GetMatch :one
 SELECT * FROM matches WHERE id = @id;
