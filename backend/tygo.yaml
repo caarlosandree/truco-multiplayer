@@ -1,10 +1,22 @@
 packages:
   - path: "github.com/caarlosandree/truco-multiplayer/backend/internal/engine"
     output_path: "../frontend/src/protocol/engine.ts"
+    # Estado completo e privado do servidor: nunca vai ao cliente.
+    exclude_files:
+      - "gamestate.go"
   - path: "github.com/caarlosandree/truco-multiplayer/backend/internal/protocol"
     output_path: "../frontend/src/protocol/messages.ts"
+    # Envelope (Payload any), registro e gerador: o contrato tipado é union.ts.
+    exclude_files:
+      - "envelope.go"
+      - "registry.go"
+      - "union.go"
     frontmatter: |
       import * as engine from "./engine";
     type_mappings:
       json.RawMessage: "unknown"
       engine.VoteChoice: "engine.VoteChoice"
+      engine.Seat: "engine.Seat"
+      engine.Team: "engine.Team"
+      engine.PlayerView: "engine.PlayerView"
+      engine.Event: "engine.Event"

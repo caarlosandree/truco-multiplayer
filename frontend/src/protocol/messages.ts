@@ -2,15 +2,72 @@
 import * as engine from "./engine";
 
 //////////
-// source: protocol.go
-/*
-Package protocol define as mensagens WebSocket trocadas com o frontend.
-*/
+// source: client.go
 
-export interface ClientMessage {
-  type: string;
-  seq: number /* int64 */;
-  payload?: unknown;
+/**
+ * Tipos de mensagem de sala/social enviados pelo cliente. As de jogo usam engine.ActionKind.
+ */
+export const TypeCreateRoom = "create_room";
+/**
+ * Tipos de mensagem de sala/social enviados pelo cliente. As de jogo usam engine.ActionKind.
+ */
+export const TypeJoinRoom = "join_room";
+/**
+ * Tipos de mensagem de sala/social enviados pelo cliente. As de jogo usam engine.ActionKind.
+ */
+export const TypeLeaveRoom = "leave_room";
+/**
+ * Tipos de mensagem de sala/social enviados pelo cliente. As de jogo usam engine.ActionKind.
+ */
+export const TypeTakeSeat = "take_seat";
+/**
+ * Tipos de mensagem de sala/social enviados pelo cliente. As de jogo usam engine.ActionKind.
+ */
+export const TypeSetReady = "set_ready";
+/**
+ * Tipos de mensagem de sala/social enviados pelo cliente. As de jogo usam engine.ActionKind.
+ */
+export const TypeKick = "kick";
+/**
+ * Tipos de mensagem de sala/social enviados pelo cliente. As de jogo usam engine.ActionKind.
+ */
+export const TypeClaimForfeit = "claim_forfeit";
+/**
+ * Tipos de mensagem de sala/social enviados pelo cliente. As de jogo usam engine.ActionKind.
+ */
+export const TypeSignal = "signal";
+export type Visibility = string;
+export const VisibilityPublic: Visibility = "public";
+export const VisibilityPrivate: Visibility = "private";
+export interface CreateRoomPayload {
+  visibility: Visibility;
+}
+/**
+ * JoinRoomPayload exige exatamente um de RoomID (sala pública da lista) ou Code (qualquer sala).
+ */
+export interface JoinRoomPayload {
+  roomId?: string;
+  code?: string;
+  seat?: engine.Seat;
+}
+export interface TakeSeatPayload {
+  seat: engine.Seat;
+}
+export interface SetReadyPayload {
+  ready: boolean;
+}
+export interface KickPayload {
+  seat: engine.Seat;
+}
+export type SignalID = string;
+export const SignalTruco: SignalID = "truco";
+export const SignalBoa: SignalID = "boa";
+export const SignalVamos: SignalID = "vamos";
+export const SignalCalma: SignalID = "calma";
+export const SignalDesculpa: SignalID = "desculpa";
+export const SignalValeu: SignalID = "valeu";
+export interface SignalPayload {
+  id: SignalID;
 }
 export interface ChooseCardPayload {
   keep: number /* int */;
@@ -25,16 +82,154 @@ export interface PlayCardPayload {
 export interface VotePayload {
   choice: engine.VoteChoice;
 }
-export type ServerMessageType = string;
-export const MsgState: ServerMessageType = "state";
-export const MsgEvents: ServerMessageType = "events";
-export const MsgError: ServerMessageType = "error";
-export interface ServerMessage {
-  type: ServerMessageType;
-  payload: any;
+
+//////////
+// source: errors.go
+
+/**
+ * Códigos de erro de sala/lobby. Erros de regra usam engine.ErrorCode.
+ */
+export const CodeBadRequest = "bad_request";
+/**
+ * Códigos de erro de sala/lobby. Erros de regra usam engine.ErrorCode.
+ */
+export const CodeInternal = "internal";
+/**
+ * Códigos de erro de sala/lobby. Erros de regra usam engine.ErrorCode.
+ */
+export const CodeAlreadyInRoom = "already_in_room";
+/**
+ * Códigos de erro de sala/lobby. Erros de regra usam engine.ErrorCode.
+ */
+export const CodeRoomFull = "room_full";
+/**
+ * Códigos de erro de sala/lobby. Erros de regra usam engine.ErrorCode.
+ */
+export const CodeRoomNotFound = "room_not_found";
+/**
+ * Códigos de erro de sala/lobby. Erros de regra usam engine.ErrorCode.
+ */
+export const CodeSeatTaken = "seat_taken";
+/**
+ * Códigos de erro de sala/lobby. Erros de regra usam engine.ErrorCode.
+ */
+export const CodeNotHost = "not_host";
+/**
+ * Códigos de erro de sala/lobby. Erros de regra usam engine.ErrorCode.
+ */
+export const CodeNotInRoom = "not_in_room";
+/**
+ * Códigos de erro de sala/lobby. Erros de regra usam engine.ErrorCode.
+ */
+export const CodeMatchInProgress = "match_in_progress";
+/**
+ * Códigos de erro de sala/lobby. Erros de regra usam engine.ErrorCode.
+ */
+export const CodeForfeitUnavailable = "forfeit_unavailable";
+/**
+ * Códigos de erro de sala/lobby. Erros de regra usam engine.ErrorCode.
+ */
+export const CodeTooManyRooms = "too_many_rooms";
+/**
+ * Códigos de erro de sala/lobby. Erros de regra usam engine.ErrorCode.
+ */
+export const CodeRateLimited = "rate_limited";
+
+//////////
+// source: server.go
+
+export interface UserInfo {
+  id: string;
+  username: string;
+  displayName: string;
+}
+export interface HelloPayload {
+  user: UserInfo;
+  protocolVersion: number /* int */;
+}
+export type RoomStatus = string;
+export const RoomWaiting: RoomStatus = "waiting";
+export const RoomPlaying: RoomStatus = "playing";
+export interface SeatSummary {
+  displayName: string;
+}
+/**
+ * RoomSummary é a linha da sala na lista do lobby (só salas públicas aparecem).
+ */
+export interface RoomSummary {
+  id: string;
+  name: string;
+  status: RoomStatus;
+  seats: (SeatSummary | undefined)[];
+  score?: number /* int */[];
+}
+export interface LobbySnapshotPayload {
+  rooms: RoomSummary[];
+}
+export interface RoomUpsertedPayload {
+  room: RoomSummary;
+}
+export interface RoomRemovedPayload {
+  roomId: string;
+}
+export interface SeatInfo {
+  userId: string;
+  displayName: string;
+  ready: boolean;
+  connected: boolean;
+  absent: boolean;
+}
+/**
+ * RoomStatePayload é a visão da sala para um membro; o código só vai para membros.
+ */
+export interface RoomStatePayload {
+  id: string;
+  code: string;
+  name: string;
+  visibility: Visibility;
+  host: engine.Seat;
+  status: RoomStatus;
+  seats: (SeatInfo | undefined)[];
+  matchId?: string;
+  yourSeat: engine.Seat;
+}
+export type LeftReason = string;
+export const LeftLeft: LeftReason = "left";
+export const LeftKicked: LeftReason = "kicked";
+export const LeftDestroyed: LeftReason = "destroyed";
+export interface LeftRoomPayload {
+  reason: LeftReason;
+}
+/**
+ * StatePayload leva a projeção do assento e os prazos (epoch ms UTC) dos assentos pendentes.
+ */
+export interface StatePayload {
+  view: engine.PlayerView;
+  deadlines: { [key: engine.Seat]: number /* int64 */};
+  pendingSeats: number /* int */[];
+}
+/**
+ * ForfeitAvailablePayload: Team é a dupla ausente contra a qual o W.O. pode ser pedido; null retira a oferta.
+ */
+export interface ForfeitAvailablePayload {
+  team?: engine.Team;
+}
+export type EndReason = string;
+export const EndGameOver: EndReason = "game_over";
+export const EndForfeit: EndReason = "forfeit";
+export const EndAborted: EndReason = "aborted";
+export const EndAbandoned: EndReason = "abandoned";
+export interface MatchEndedPayload {
+  reason: EndReason;
+  winner?: engine.Team;
+  score: number /* int */[];
+}
+export interface SignalBroadcastPayload {
+  seat: engine.Seat;
+  id: SignalID;
 }
 export interface ErrorPayload {
   code: string;
   message: string;
-  seq: number /* int64 */;
+  seq?: number /* int64 */;
 }

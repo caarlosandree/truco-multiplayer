@@ -13,6 +13,10 @@ export const ActVote: ActionKind = "vote";
 export const ActSysStartHand: ActionKind = "sys_start_hand";
 export const ActSysTimeout: ActionKind = "sys_timeout";
 /**
+ * ActSysForfeit encerra a partida por W.O.; Team é a dupla que perde. Só a sala envia.
+ */
+export const ActSysForfeit: ActionKind = "sys_forfeit";
+/**
  * Action é plana para ser serializável no log de partidas.
  * Seat é preenchido pela sala a partir da sessão, nunca pelo cliente.
  */
@@ -24,6 +28,7 @@ export interface Action {
   slot?: number /* int */;
   covered?: boolean;
   choice?: VoteChoice;
+  team?: Team;
 }
 
 //////////
@@ -107,6 +112,7 @@ export const EvRaiseResolved: EventKind = "raise_resolved";
 export const EvRaisePunished: EventKind = "raise_punished";
 export const EvHandEnded: EventKind = "hand_ended";
 export const EvGameOver: EventKind = "game_over";
+export const EvForfeited: EventKind = "forfeited";
 /**
  * Event serve para animações; nunca carrega cartas privadas.
  */
@@ -132,11 +138,6 @@ export type Seat = number /* uint8 */;
  * Team é a dupla: 0 = assentos 0 e 2; 1 = assentos 1 e 3.
  */
 export type Team = number /* uint8 */;
-export interface PlayedCard {
-  seat: Seat;
-  card: Card;
-  covered: boolean;
-}
 export type Phase = string;
 export const PhaseWaiting: Phase = "waiting";
 export const PhaseCutChoice: Phase = "cut_choice";
@@ -160,46 +161,6 @@ export const WinningScore = 12;
 export interface Player {
   id: string;
   name: string;
-}
-/**
- * GameState é o estado completo e privado do servidor. Nunca é enviado ao cliente.
- */
-export interface GameState {
-  Seed: number /* uint64 */;
-  HandNumber: number /* int */; // RNG da mão = PCG(Seed, HandNumber)
-  Players: Player[];
-  Score: number /* int */[];
-  Dealer: Seat;
-  Phase: Phase;
-  Hand?: HandState;
-  Winner?: Team;
-}
-export interface HandState {
-  Kind: HandKind;
-  Deck: Card[]; // topo = último elemento
-  Hands: Card[][];
-  Played: boolean[][]; // slot já jogado; os slots são estáveis
-  Discarded: Card[];
-  CutOffer: Card[];
-  Vira?: Card;
-  Manilha: Rank;
-  Stake: number /* int */;
-  LastRaiser?: Team;
-  Pending?: PendingRaise;
-  VotingTeam?: Team;
-  Votes: (VoteChoice | undefined)[];
-  BurnDecided: boolean[];
-  BurnSlots: number /* int */[][];
-  Turn: Seat;
-  RoundStarter: Seat;
-  Table: PlayedCard[];
-  Rounds: RoundResult[];
-}
-export interface RoundResult {
-  Winner?: Team;
-  WinnerSeat?: Seat;
-  Starter: Seat;
-  Cards: PlayedCard[];
 }
 export interface PendingRaise {
   requester: Seat;
