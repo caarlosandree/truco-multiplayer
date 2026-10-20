@@ -53,3 +53,46 @@ it('não toca antes do desbloqueio nem com mudo; toca com o volume das preferên
   sfx.play('card')
   expect(started).toHaveLength(1)
 })
+
+it('chamadas concorrentes de unlock compartilham uma promessa (sem baixar em dobro)', async () => {
+  const { ctx } = fakeContext()
+  const createContext = vi.fn(() => ctx as never)
+  const fetchBuffer = vi.fn(async () => new ArrayBuffer(8))
+  const sfx = new Sfx({ createContext, fetchBuffer, urls, volume: () => 1, muted: () => false })
+  await Promise.all([sfx.unlock(), sfx.unlock()])
+  expect(createContext).toHaveBeenCalledOnce()
+  expect(fetchBuffer).toHaveBeenCalledTimes(SOUND_IDS.length)
+  expect(sfx.running).toBe(true)
+})
+
+it('falha no resume libera nova tentativa no próximo gesto', async () => {
+  const { ctx } = fakeContext()
+  ctx.resume.mockRejectedValueOnce(new Error('bloqueado'))
+  const sfx = new Sfx({
+    createContext: () => ctx as never,
+    fetchBuffer: async () => new ArrayBuffer(8),
+    urls,
+    volume: () => 1,
+    muted: () => false,
+  })
+  await expect(sfx.unlock()).rejects.toThrow('bloqueado')
+  expect(sfx.running).toBe(false)
+  await sfx.unlock()
+  expect(ctx.resume).toHaveBeenCalledTimes(2)
+  expect(sfx.running).toBe(true)
+})
+
+it('não baixa sons com URL vazia', async () => {
+  const { ctx } = fakeContext()
+  const fetchBuffer = vi.fn(async () => new ArrayBuffer(8))
+  const sfx = new Sfx({
+    createContext: () => ctx as never,
+    fetchBuffer,
+    urls: { ...urls, burn: '' },
+    volume: () => 1,
+    muted: () => false,
+  })
+  await sfx.unlock()
+  expect(fetchBuffer).toHaveBeenCalledTimes(SOUND_IDS.length - 1)
+  expect(fetchBuffer).not.toHaveBeenCalledWith('')
+})

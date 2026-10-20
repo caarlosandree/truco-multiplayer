@@ -57,25 +57,44 @@ export interface SfxOptions {
 export class Sfx {
   private ctx: AudioContextLike | null = null
   private buffers = new Map<SoundId, AudioBuffer>()
+  private inflight: Promise<void> | null = null
 
   constructor(private readonly o: SfxOptions) {}
 
-  /** Chamado no primeiro gesto do usuário (política de autoplay dos navegadores). */
-  async unlock(): Promise<void> {
+  /** O contexto de áudio está liberado para tocar? */
+  get running(): boolean {
+    return this.ctx?.state === 'running'
+  }
+
+  /**
+   * Chamado nos gestos do usuário (política de autoplay). Chamadas concorrentes
+   * compartilham a mesma promessa; uma falha libera nova tentativa no próximo gesto.
+   */
+  unlock(): Promise<void> {
+    if (!this.inflight) {
+      this.inflight = this.doUnlock().finally(() => {
+        this.inflight = null
+      })
+    }
+    return this.inflight
+  }
+
+  private async doUnlock(): Promise<void> {
     const ctx = this.ctx ?? this.o.createContext()
     this.ctx = ctx
     if (ctx.state !== 'running') await ctx.resume()
-    await Promise.all(
-      SOUND_IDS.map(async (id) => {
-        if (this.buffers.has(id)) return
-        try {
-          const data = await this.o.fetchBuffer(this.o.urls[id])
-          this.buffers.set(id, await ctx.decodeAudioData(data))
-        } catch {
-          // som ausente não quebra o jogo
-        }
-      }),
-    )
+    await Promise.all(SOUND_IDS.map((id) => this.load(ctx, id)))
+  }
+
+  private async load(ctx: AudioContextLike, id: SoundId): Promise<void> {
+    const url = this.o.urls[id]
+    if (this.buffers.has(id) || url === '') return
+    try {
+      const data = await this.o.fetchBuffer(url)
+      this.buffers.set(id, await ctx.decodeAudioData(data))
+    } catch {
+      // som ausente não quebra o jogo
+    }
   }
 
   play(id: SoundId): void {

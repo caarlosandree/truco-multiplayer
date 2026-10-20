@@ -85,3 +85,12 @@ it('toca vitória ou derrota no match_ended conforme a dupla vencedora', () => {
   r.onMatchEnded({ reason: 'aborted', winner: null, score: [0, 0] })
   expect(play.mock.calls.map((c) => c[0])).toEqual(['victory', 'defeat'])
 })
+
+it('W.O. com vencedor toca o som da dupla vencedora', () => {
+  const play = vi.fn()
+  setMatchSoundPlayer(play)
+  const r = useRoomStore()
+  r.onRoomState(state({ status: 'playing', matchId: 'm1' }))
+  r.onMatchEnded({ reason: 'forfeit', winner: 1, score: [4, 12] })
+  expect(play.mock.calls.map((c) => c[0])).toEqual(['defeat'])
+})

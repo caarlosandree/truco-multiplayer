@@ -24,22 +24,38 @@ export function sfx(): Sfx | null {
   return instance
 }
 
+// Touch não conta como ativação de usuário em todos os navegadores móveis: 'click' e 'touchend' cobrem.
+const GESTURES = ['pointerdown', 'keydown', 'click', 'touchend'] as const
+
 export function installSfx(): void {
   const prefs = usePrefsStore()
-  instance = new Sfx({
+  const current = new Sfx({
     createContext: () => new AudioContext() as never,
-    fetchBuffer: async (url) => (await fetch(url)).arrayBuffer(),
+    fetchBuffer: async (url) => {
+      const res = await fetch(url)
+      if (!res.ok) throw new Error(`som indisponível: ${res.status}`)
+      return res.arrayBuffer()
+    },
     urls: urlsFor(),
     volume: () => prefs.volume,
     muted: () => prefs.muted,
   })
-  const unlock = () => {
-    void instance?.unlock()
-    window.removeEventListener('pointerdown', unlock)
-    window.removeEventListener('keydown', unlock)
+  instance = current
+  const removeGestures = () => {
+    for (const ev of GESTURES) window.removeEventListener(ev, unlock)
   }
-  window.addEventListener('pointerdown', unlock)
-  window.addEventListener('keydown', unlock)
+  const unlock = () => {
+    current.unlock().then(
+      () => {
+        // só desiste dos gestos quando o contexto de fato roda; senão tenta no próximo
+        if (current.running) removeGestures()
+      },
+      () => {
+        // falha de desbloqueio: tentativa de novo no próximo gesto
+      },
+    )
+  }
+  for (const ev of GESTURES) window.addEventListener(ev, unlock)
   setGameSoundPlayer((ev) => {
     const id = soundForEvent(ev, useGameStore().myTeam)
     if (id) instance?.play(id)
