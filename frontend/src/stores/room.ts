@@ -1,12 +1,73 @@
 import { defineStore } from 'pinia'
-import type { ForfeitAvailablePayload, LeftRoomPayload, MatchEndedPayload, RoomStatePayload } from '@/protocol/messages'
+import type { Seat, Team } from '@/protocol/engine'
+import type {
+  ForfeitAvailablePayload,
+  LeftReason,
+  LeftRoomPayload,
+  MatchEndedPayload,
+  RoomStatePayload,
+} from '@/protocol/messages'
+import { send } from '@/app/transport'
+import { teamOf } from '@/game/seats'
+import { useGameStore } from './game'
 
 export const useRoomStore = defineStore('room', {
-  state: () => ({}),
+  state: () => ({
+    room: null as RoomStatePayload | null,
+    forfeitTeam: null as Team | null,
+    ended: null as MatchEndedPayload | null,
+    lastLeft: null as LeftReason | null,
+  }),
+  getters: {
+    inRoom: (s) => s.room !== null,
+    mySeat: (s): Seat | null => s.room?.yourSeat ?? null,
+    myTeam(): Team | null {
+      return this.mySeat === null ? null : teamOf(this.mySeat)
+    },
+    isHost: (s) => s.room !== null && s.room.host === s.room.yourSeat,
+    isPlaying: (s) => s.room?.status === 'playing',
+    amReady: (s) => (s.room ? (s.room.seats[s.room.yourSeat]?.ready ?? false) : false),
+  },
   actions: {
-    onRoomState(_p: RoomStatePayload) {},
-    onLeft(_p: LeftRoomPayload) {},
-    onForfeit(_p: ForfeitAvailablePayload) {},
-    onMatchEnded(_p: MatchEndedPayload) {},
+    onRoomState(p: RoomStatePayload) {
+      const wasPlaying = this.room?.status === 'playing'
+      this.room = p
+      this.lastLeft = null
+      if (wasPlaying && p.status === 'waiting') {
+        this.forfeitTeam = null
+        useGameStore().reset()
+      }
+    },
+    onLeft(p: LeftRoomPayload) {
+      this.room = null
+      this.forfeitTeam = null
+      this.lastLeft = p.reason
+      useGameStore().reset()
+    },
+    onForfeit(p: ForfeitAvailablePayload) {
+      this.forfeitTeam = p.team
+    },
+    onMatchEnded(p: MatchEndedPayload) {
+      this.ended = p
+      this.forfeitTeam = null
+    },
+    dismissEnded() {
+      this.ended = null
+    },
+    takeSeat(seat: Seat) {
+      return send({ type: 'take_seat', payload: { seat } })
+    },
+    setReady(ready: boolean) {
+      return send({ type: 'set_ready', payload: { ready } })
+    },
+    kick(seat: Seat) {
+      return send({ type: 'kick', payload: { seat } })
+    },
+    leave() {
+      return send({ type: 'leave_room' })
+    },
+    claimForfeit() {
+      return send({ type: 'claim_forfeit' })
+    },
   },
 })
