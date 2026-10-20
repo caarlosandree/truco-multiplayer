@@ -1,4 +1,4 @@
-.PHONY: test test-short gen-types gen-sql dev-db run migrate
+.PHONY: test test-short gen-types gen-sql dev-db run migrate web-install web-dev web-build web-test e2e
 
 test:
 	cd backend && go test ./...
@@ -22,3 +22,18 @@ run:
 
 migrate:
 	cd backend && set -a && . ../.env && set +a && go run ./cmd/server migrate
+
+web-install:
+	cd frontend && pnpm install --frozen-lockfile
+
+web-dev:
+	cd frontend && pnpm dev
+
+web-build:
+	cd frontend && pnpm build
+
+web-test:
+	cd frontend && pnpm typecheck && pnpm lint && pnpm test
+
+e2e:
+	./scripts/e2e.sh
