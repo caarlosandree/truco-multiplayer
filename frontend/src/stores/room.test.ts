@@ -1,10 +1,13 @@
 import { createPinia, setActivePinia } from 'pinia'
-import { useRoomStore } from './room'
+import { useRoomStore, setMatchSoundPlayer } from './room'
 import { useGameStore } from './game'
 import { setSender } from '@/app/transport'
 import type { RoomStatePayload } from '@/protocol/messages'
 
-afterEach(() => setSender(null))
+afterEach(() => {
+  setSender(null)
+  setMatchSoundPlayer(() => {})
+})
 
 const state = (over: Partial<RoomStatePayload> = {}): RoomStatePayload => ({
   id: 'r1',
@@ -70,4 +73,15 @@ it('envia as ações de sala', async () => {
     { type: 'claim_forfeit' },
     { type: 'leave_room' },
   ])
+})
+
+it('toca vitória ou derrota no match_ended conforme a dupla vencedora', () => {
+  const play = vi.fn()
+  setMatchSoundPlayer(play)
+  const r = useRoomStore()
+  r.onRoomState(state({ status: 'playing', matchId: 'm1' }))
+  r.onMatchEnded({ reason: 'game_over', winner: 0, score: [12, 6] })
+  r.onMatchEnded({ reason: 'game_over', winner: 1, score: [6, 12] })
+  r.onMatchEnded({ reason: 'aborted', winner: null, score: [0, 0] })
+  expect(play.mock.calls.map((c) => c[0])).toEqual(['victory', 'defeat'])
 })

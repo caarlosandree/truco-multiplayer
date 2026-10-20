@@ -11,6 +11,14 @@ import { send } from '@/app/transport'
 import { teamOf } from '@/game/seats'
 import { useGameStore } from './game'
 
+export type MatchSound = 'victory' | 'defeat'
+
+let matchSoundPlayer: (id: MatchSound) => void = () => {}
+/** Injetado no main.ts (via audio/install) para a store não importar Web Audio. */
+export function setMatchSoundPlayer(fn: (id: MatchSound) => void): void {
+  matchSoundPlayer = fn
+}
+
 export const useRoomStore = defineStore('room', {
   state: () => ({
     room: null as RoomStatePayload | null,
@@ -50,6 +58,8 @@ export const useRoomStore = defineStore('room', {
     onMatchEnded(p: MatchEndedPayload) {
       this.ended = p
       this.forfeitTeam = null
+      const me = this.myTeam
+      if (p.winner !== null && me !== null) matchSoundPlayer(p.winner === me ? 'victory' : 'defeat')
     },
     dismissEnded() {
       this.ended = null

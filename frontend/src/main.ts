@@ -2,5 +2,8 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import './styles.css'
+import { installSfx } from './audio/install'
 
-createApp(App).use(createPinia()).mount('#app')
+const app = createApp(App).use(createPinia())
+installSfx()
+app.mount('#app')
