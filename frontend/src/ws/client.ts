@@ -5,7 +5,9 @@ export const EXPECTED_PROTOCOL_VERSION = 1
 
 const CLOSE_REPLACED = 4001
 const CLOSE_SESSION_INVALID = 4003
+const CLOSE_POLICY = 4008
 const ACK_TIMEOUT_MS = 5000
+const CONNECTING = 0
 const OPEN = 1
 
 export type WsStatus = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'replaced' | 'unauthorized'
@@ -79,12 +81,12 @@ export class WsClient {
 
   connect(): void {
     this.wanted = true
+    this.attempt = 0
     this.open()
   }
 
   /** Retoma depois de 'replaced' (o usuário escolheu usar esta aba). */
   resume(): void {
-    this.attempt = 0
     this.connect()
   }
 
@@ -118,6 +120,9 @@ export class WsClient {
   }
 
   private open(): void {
+    // Uma conexão por aba: se já há socket vivo (ou conectando), não abre outro.
+    if (this.socket && (this.socket.readyState === CONNECTING || this.socket.readyState === OPEN)) return
+    this.detachSocket()
     this.cancelReconnect()
     this.gotHello = false
     this.setStatus(this.attempt === 0 ? 'connecting' : 'reconnecting')
@@ -162,6 +167,18 @@ export class WsClient {
     this.opts.onMessage(msg)
   }
 
+  /** Solta os handlers de um socket anterior e o fecha, para não sobrar conexão viva. */
+  private detachSocket(): void {
+    const old = this.socket
+    this.socket = null
+    if (!old) return
+    old.onopen = null
+    old.onmessage = null
+    old.onclose = null
+    old.onerror = null
+    old.close(1000, 'substituído')
+  }
+
   private async handleClose(s: SocketLike, code: number): Promise<void> {
     if (s !== this.socket) return
     this.socket = null
@@ -174,7 +191,12 @@ export class WsClient {
       this.setStatus('replaced')
       return
     }
-    if (code === CLOSE_SESSION_INVALID || (!hadHello && !(await this.opts.checkSession()))) {
+    if (code === CLOSE_POLICY) {
+      console.warn(`[ws] fechado pelo servidor por política (código ${CLOSE_POLICY}); reconectando`)
+    }
+    // Sem hello, a queda pode ser sessão expirada: checa. Falha aberta: erro na checagem = seguimos reconectando.
+    const sessionOk = hadHello || code === CLOSE_SESSION_INVALID ? true : await this.opts.checkSession().catch(() => true)
+    if (code === CLOSE_SESSION_INVALID || !sessionOk) {
       this.wanted = false
       this.setStatus('unauthorized')
       return

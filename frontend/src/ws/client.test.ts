@@ -97,6 +97,65 @@ it('reconecta com backoff e zera as tentativas no hello', async () => {
   expect(FakeSocket.instances).toHaveLength(1)
   await vi.advanceTimersByTimeAsync(backoffDelay(0, () => 0.5))
   expect(FakeSocket.instances).toHaveLength(2)
+  // segunda queda depois de um hello: o atraso tem de voltar ao da tentativa 0
+  FakeSocket.last().open()
+  FakeSocket.last().receive(hello)
+  FakeSocket.last().serverClose(1006)
+  await vi.advanceTimersByTimeAsync(0)
+  await vi.advanceTimersByTimeAsync(backoffDelay(0, () => 0.5))
+  expect(FakeSocket.instances).toHaveLength(3)
+})
+
+it('connect() repetido não abre um segundo socket', () => {
+  const { client, statuses } = setup()
+  client.connect()
+  FakeSocket.last().open()
+  FakeSocket.last().receive(hello)
+  client.connect()
+  expect(FakeSocket.instances).toHaveLength(1)
+  expect(statuses).toEqual(['connecting', 'open'])
+})
+
+it('connect() depois de disconnect() começa do atraso base', async () => {
+  const { client, statuses } = setup()
+  client.connect()
+  FakeSocket.last().open()
+  FakeSocket.last().receive(hello)
+  FakeSocket.last().serverClose(1006)
+  await vi.advanceTimersByTimeAsync(backoffDelay(0, () => 0.5))
+  client.disconnect()
+  client.connect()
+  expect(statuses.at(-1)).toBe('connecting')
+  FakeSocket.last().serverClose(1006) // cai antes do hello
+  await vi.advanceTimersByTimeAsync(0)
+  await vi.advanceTimersByTimeAsync(backoffDelay(0, () => 0.5))
+  expect(FakeSocket.instances).toHaveLength(4)
+})
+
+it('checkSession que rejeita não quebra a reconexão (falha aberta)', async () => {
+  const checkSession = vi.fn().mockRejectedValue(new Error('rede caiu'))
+  const { client, statuses } = setup({ checkSession })
+  client.connect()
+  FakeSocket.last().serverClose(1006) // cai antes do hello
+  await vi.advanceTimersByTimeAsync(0)
+  expect(checkSession).toHaveBeenCalledOnce()
+  expect(statuses.at(-1)).toBe('reconnecting')
+  await vi.advanceTimersByTimeAsync(backoffDelay(0, () => 0.5))
+  expect(FakeSocket.instances).toHaveLength(2)
+})
+
+it('código 4008 gera aviso em pt-BR e reconecta', async () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  const { client } = setup()
+  client.connect()
+  FakeSocket.last().open()
+  FakeSocket.last().receive(hello)
+  FakeSocket.last().serverClose(4008)
+  await vi.advanceTimersByTimeAsync(0)
+  expect(warn).toHaveBeenCalledWith(expect.stringContaining('4008'))
+  await vi.advanceTimersByTimeAsync(backoffDelay(0, () => 0.5))
+  expect(FakeSocket.instances).toHaveLength(2)
+  warn.mockRestore()
 })
 
 it('não reconecta quando substituída por outra aba (4001) e retoma com resume()', async () => {
