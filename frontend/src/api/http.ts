@@ -47,6 +47,18 @@ function parseRetryAfter(res: Response): number | undefined {
   return Number(raw)
 }
 
+const INVALID = Symbol('invalid-body')
+
+// Corpo vazio vira undefined; corpo que não é JSON vira INVALID (nunca lança).
+function parseBody(text: string): unknown {
+  if (!text) return undefined
+  try {
+    return JSON.parse(text)
+  } catch {
+    return INVALID
+  }
+}
+
 export async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
   let res: Response
   try {
@@ -61,10 +73,16 @@ export async function request<T>(method: Method, path: string, body?: unknown): 
   }
   sampleClock(res)
   if (res.status === 202 || res.status === 204) return undefined as T
-  const text = await res.text()
-  const data: unknown = text ? JSON.parse(text) : undefined
+  let text: string
+  try {
+    text = await res.text()
+  } catch {
+    throw new ApiError(0, 'network', 'Sem conexão com o servidor.')
+  }
+  const data = parseBody(text)
   if (!res.ok) {
-    const err = (data as { error?: { code?: string; message?: string; fields?: Record<string, string> } } | undefined)?.error
+    const errBody = data === INVALID ? undefined : (data as { error?: { code?: string; message?: string; fields?: Record<string, string> } } | undefined)
+    const err = errBody?.error
     throw new ApiError(
       res.status,
       err?.code ?? 'internal',
@@ -73,5 +91,6 @@ export async function request<T>(method: Method, path: string, body?: unknown): 
       parseRetryAfter(res),
     )
   }
+  if (data === INVALID) throw new ApiError(res.status, 'internal', 'Erro no servidor, tente de novo.')
   return data as T
 }

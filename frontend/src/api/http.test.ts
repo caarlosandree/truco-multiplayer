@@ -1,7 +1,7 @@
 import { ApiError, getClockOffsetMs, request, resetClockSamples } from './http'
 
 function respond(status: number, body?: unknown, headers: Record<string, string> = {}) {
-  return vi.fn().mockResolvedValue(
+  return vi.fn().mockImplementation(async () =>
     new Response(body === undefined ? null : JSON.stringify(body), {
       status,
       headers: { 'Content-Type': 'application/json', ...headers },
@@ -9,7 +9,12 @@ function respond(status: number, body?: unknown, headers: Record<string, string>
   )
 }
 
+function respondRaw(status: number, rawBody: string, contentType: string) {
+  return vi.fn().mockImplementation(async () => new Response(rawBody, { status, headers: { 'Content-Type': contentType } }))
+}
+
 beforeEach(() => resetClockSamples())
+afterEach(() => vi.useRealTimers())
 
 it('envia JSON com credenciais e devolve o corpo', async () => {
   const fetchMock = respond(200, { user: { id: '1' } })
@@ -39,6 +44,30 @@ it('marca falha de rede com code network', async () => {
   await expect(request('GET', '/api/me')).rejects.toMatchObject({ code: 'network', status: 0 })
 })
 
+it('erro HTML (502) vira ApiError internal, não SyntaxError', async () => {
+  vi.stubGlobal('fetch', respondRaw(502, '<html><body>Bad Gateway</body></html>', 'text/html'))
+  const err = await request('GET', '/api/me').catch((e: unknown) => e)
+  expect(err).toBeInstanceOf(ApiError)
+  expect(err).toMatchObject({ status: 502, code: 'internal' })
+})
+
+it('sucesso com JSON inválido vira ApiError internal', async () => {
+  vi.stubGlobal('fetch', respondRaw(200, '{não é json', 'application/json'))
+  const err = await request('GET', '/api/me').catch((e: unknown) => e)
+  expect(err).toBeInstanceOf(ApiError)
+  expect(err).toMatchObject({ status: 200, code: 'internal' })
+})
+
+it('falha ao ler o corpo vira ApiError network', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    headers: new Headers(),
+    text: vi.fn().mockRejectedValue(new TypeError('connection reset')),
+  }))
+  await expect(request('GET', '/api/me')).rejects.toMatchObject({ code: 'network', status: 0 })
+})
+
 it('lê Retry-After em segundos inteiros para 429', async () => {
   vi.stubGlobal(
     'fetch',
@@ -65,5 +94,4 @@ it('estima o offset do relógio pelo cabeçalho Date', async () => {
   vi.stubGlobal('fetch', respond(200, {}, { Date: 'Thu, 15 Oct 2026 12:00:10 GMT' }))
   await request('GET', '/api/me')
   expect(getClockOffsetMs()).toBeCloseTo(10_000, -2)
-  vi.useRealTimers()
 })
