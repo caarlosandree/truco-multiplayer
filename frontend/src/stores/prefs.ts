@@ -1,0 +1,52 @@
+import { defineStore } from 'pinia'
+import type { DeckStyle } from '@/game/cards'
+
+const KEY = 'truco.prefs'
+
+interface Prefs {
+  deck: DeckStyle
+  volume: number
+  muted: boolean
+}
+
+const DEFAULTS: Prefs = { deck: 'frances', volume: 0.7, muted: false }
+
+function read(): Prefs {
+  try {
+    const raw = localStorage.getItem(KEY)
+    if (!raw) return { ...DEFAULTS }
+    const data = JSON.parse(raw) as Partial<Record<keyof Prefs, unknown>>
+    return {
+      deck: data.deck === 'espanhol' || data.deck === 'frances' ? data.deck : DEFAULTS.deck,
+      volume: typeof data.volume === 'number' && data.volume >= 0 && data.volume <= 1 ? data.volume : DEFAULTS.volume,
+      muted: typeof data.muted === 'boolean' ? data.muted : DEFAULTS.muted,
+    }
+  } catch {
+    return { ...DEFAULTS }
+  }
+}
+
+export const usePrefsStore = defineStore('prefs', {
+  state: (): Prefs => read(),
+  actions: {
+    setDeck(deck: DeckStyle) {
+      this.deck = deck
+      this.save()
+    },
+    setVolume(volume: number) {
+      this.volume = Math.min(1, Math.max(0, volume))
+      this.save()
+    },
+    setMuted(muted: boolean) {
+      this.muted = muted
+      this.save()
+    },
+    save() {
+      try {
+        localStorage.setItem(KEY, JSON.stringify({ deck: this.deck, volume: this.volume, muted: this.muted }))
+      } catch {
+        // storage indisponível: a preferência vale só nesta aba
+      }
+    },
+  },
+})
