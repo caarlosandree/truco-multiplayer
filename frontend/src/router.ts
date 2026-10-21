@@ -29,6 +29,7 @@ export function createAppRouter(history: RouterHistory = createWebHistory()): Ro
           if (code !== to.params.codigo) return { name: 'convite', params: { codigo: code }, replace: true }
         },
       },
+      { path: '/entrar-convite/:token', name: 'entrar-convite', component: () => import('./views/EntrarConviteView.vue') },
       { path: '/perfil', name: 'perfil', component: () => import('./views/PerfilView.vue') },
       { path: '/:pathMatch(.*)*', redirect: '/' },
     ],

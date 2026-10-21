@@ -52,3 +52,11 @@ it('logado em /entrar?volta=externo ignora o destino externo', async () => {
   await router.push('/entrar?volta=//evil.com')
   expect(router.currentRoute.value.name).toBe('lobby')
 })
+
+it('convite por e-mail deslogado vai para /entrar preservando a volta', async () => {
+  vi.spyOn(authApi, 'me').mockRejectedValue(new ApiError(401, 'unauthenticated', 'x'))
+  const router = createAppRouter(createMemoryHistory())
+  await router.push('/entrar-convite/abc')
+  expect(router.currentRoute.value.name).toBe('entrar')
+  expect(router.currentRoute.value.query.volta).toBe('/entrar-convite/abc')
+})
