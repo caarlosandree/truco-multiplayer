@@ -66,6 +66,7 @@ func TestClassify(t *testing.T) {
 		{match.ErrNotFound, 404, "not_found"},
 		{admin.ErrNotFound, 404, "not_found"},
 		{pagination.ErrInvalidCursor, 400, "validation_failed"},
+		{stats.ErrInvalidQuery, 400, "validation_failed"},
 		{admin.ErrInvalidDomain, 400, "validation_failed"},
 		{admin.ErrSelfAction, 409, "conflict"},
 		{admin.ErrLastAdmin, 409, "conflict"},

@@ -15,6 +15,7 @@ import (
 
 func (s *Server) registerReadRoutes() {
 	s.mux.Handle("GET /api/ranking", s.requireAuth(s.handleRanking))
+	s.mux.Handle("GET /api/users", s.requireAuth(s.handleDirectory))
 	s.mux.Handle("GET /api/users/{username}", s.requireAuth(s.handleProfile))
 	s.mux.Handle("GET /api/matches", s.requireAuth(s.handleHistory))
 	s.mux.Handle("GET /api/matches/{id}", s.requireAuth(s.handleMatch))
@@ -31,8 +32,17 @@ func (s *Server) handleRanking(w http.ResponseWriter, r *http.Request, _ auth.Pr
 	writeJSON(w, http.StatusOK, map[string]any{"items": entries})
 }
 
-func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
-	profile, err := s.deps.Stats.Profile(r.Context(), r.PathValue("username"))
+func (s *Server) handleDirectory(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	page, err := s.deps.Stats.Directory(r.Context(), r.URL.Query().Get("q"), r.URL.Query().Get("cursor"))
+	if err != nil {
+		s.writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, page)
+}
+
+func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	profile, err := s.deps.Stats.Profile(r.Context(), r.PathValue("username"), p.IsAdmin)
 	if err != nil {
 		s.writeError(w, r, err)
 		return
@@ -45,7 +55,7 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request, p auth.Pr
 	if username == "" {
 		username = p.Username
 	}
-	page, err := s.deps.Stats.History(r.Context(), username, r.URL.Query().Get("cursor"), 0)
+	page, err := s.deps.Stats.History(r.Context(), username, r.URL.Query().Get("cursor"), 0, p.IsAdmin)
 	if err != nil {
 		s.writeError(w, r, err)
 		return

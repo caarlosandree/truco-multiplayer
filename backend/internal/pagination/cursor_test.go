@@ -37,3 +37,24 @@ func TestDecodeNormalizesUUIDForm(t *testing.T) {
 		t.Fatalf("id = %v err = %v", got, err)
 	}
 }
+
+func TestKeyCursorRoundTrip(t *testing.T) {
+	got, err := DecodeKey(EncodeKey("ana.b"))
+	if err != nil || got != "ana.b" {
+		t.Fatalf("got %q err %v", got, err)
+	}
+	if got, err := DecodeKey(""); err != nil || got != "" {
+		t.Fatalf("vazio: %q %v", got, err)
+	}
+	for _, bad := range []string{
+		base64.RawURLEncoding.EncodeToString([]byte("a\x00b")),
+		base64.RawURLEncoding.EncodeToString([]byte{0xff, 0xfe}),
+	} {
+		if _, err := DecodeKey(bad); !errors.Is(err, ErrInvalidCursor) {
+			t.Fatalf("cursor %q aceito: %v", bad, err)
+		}
+	}
+	if _, err := DecodeKey("lixo!"); !errors.Is(err, ErrInvalidCursor) {
+		t.Fatalf("err = %v", err)
+	}
+}

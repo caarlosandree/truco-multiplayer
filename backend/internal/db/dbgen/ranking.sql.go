@@ -41,8 +41,99 @@ func (q *Queries) GetPlayerStats(ctx context.Context, userID string) (PlayerStat
 	return i, err
 }
 
+const listPartners = `-- name: ListPartners :many
+SELECT u.username, u.display_name, count(*)::integer AS matches,
+       count(*) FILTER (WHERE s.won)::integer AS wins
+FROM match_players me
+JOIN match_players p ON p.match_id = me.match_id AND p.seat = (me.seat + 2) % 4
+JOIN matches m ON m.id = me.match_id AND m.status = 'finished'
+JOIN match_player_stats s ON s.match_id = me.match_id AND s.user_id = me.user_id
+JOIN users u ON u.id = p.user_id AND u.disabled_at IS NULL
+WHERE me.user_id = $1
+GROUP BY u.username, u.display_name
+ORDER BY matches DESC, wins DESC, u.username
+LIMIT $2::integer
+`
+
+type ListPartnersParams struct {
+	UserID string
+	Lim    int32
+}
+
+type ListPartnersRow struct {
+	Username    string
+	DisplayName string
+	Matches     int32
+	Wins        int32
+}
+
+func (q *Queries) ListPartners(ctx context.Context, arg ListPartnersParams) ([]ListPartnersRow, error) {
+	rows, err := q.db.Query(ctx, listPartners, arg.UserID, arg.Lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPartnersRow
+	for rows.Next() {
+		var i ListPartnersRow
+		if err := rows.Scan(
+			&i.Username,
+			&i.DisplayName,
+			&i.Matches,
+			&i.Wins,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlayersForMatches = `-- name: ListPlayersForMatches :many
+SELECT mp.match_id, mp.seat, u.username, mp.display_name
+FROM match_players mp
+JOIN users u ON u.id = mp.user_id
+WHERE mp.match_id = ANY($1::uuid[])
+ORDER BY mp.match_id, mp.seat
+`
+
+type ListPlayersForMatchesRow struct {
+	MatchID     string
+	Seat        int16
+	Username    string
+	DisplayName string
+}
+
+func (q *Queries) ListPlayersForMatches(ctx context.Context, ids []string) ([]ListPlayersForMatchesRow, error) {
+	rows, err := q.db.Query(ctx, listPlayersForMatches, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlayersForMatchesRow
+	for rows.Next() {
+		var i ListPlayersForMatchesRow
+		if err := rows.Scan(
+			&i.MatchID,
+			&i.Seat,
+			&i.Username,
+			&i.DisplayName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserMatches = `-- name: ListUserMatches :many
-SELECT m.id, m.status, m.winner_team, m.score_a, m.score_b, m.created_at, m.finished_at, mp.seat
+SELECT m.id, m.status, m.winner_team, m.score_a, m.score_b, m.created_at, m.finished_at, m.end_reason, mp.seat
 FROM match_players mp
 JOIN matches m ON m.id = mp.match_id
 WHERE mp.user_id = $1
@@ -68,6 +159,7 @@ type ListUserMatchesRow struct {
 	ScoreB     *int16
 	CreatedAt  time.Time
 	FinishedAt *time.Time
+	EndReason  *string
 	Seat       int16
 }
 
@@ -93,6 +185,7 @@ func (q *Queries) ListUserMatches(ctx context.Context, arg ListUserMatchesParams
 			&i.ScoreB,
 			&i.CreatedAt,
 			&i.FinishedAt,
+			&i.EndReason,
 			&i.Seat,
 		); err != nil {
 			return nil, err

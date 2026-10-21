@@ -153,6 +153,47 @@ func (q *Queries) MarkEmailVerified(ctx context.Context, arg MarkEmailVerifiedPa
 	return err
 }
 
+const searchDirectory = `-- name: SearchDirectory :many
+SELECT username, display_name FROM users
+WHERE disabled_at IS NULL AND email_verified_at IS NOT NULL
+  AND ($1::text = '' OR username LIKE '%' || $1::text || '%' ESCAPE '\'
+                         OR lower(display_name) LIKE '%' || $1::text || '%' ESCAPE '\')
+  AND username > $2::text
+ORDER BY username
+LIMIT $3::integer
+`
+
+type SearchDirectoryParams struct {
+	Query string
+	After string
+	Lim   int32
+}
+
+type SearchDirectoryRow struct {
+	Username    string
+	DisplayName string
+}
+
+func (q *Queries) SearchDirectory(ctx context.Context, arg SearchDirectoryParams) ([]SearchDirectoryRow, error) {
+	rows, err := q.db.Query(ctx, searchDirectory, arg.Query, arg.After, arg.Lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchDirectoryRow
+	for rows.Next() {
+		var i SearchDirectoryRow
+		if err := rows.Scan(&i.Username, &i.DisplayName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setPasswordHash = `-- name: SetPasswordHash :exec
 UPDATE users SET password_hash = $1, updated_at = $2 WHERE id = $3
 `

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/engine"
@@ -224,10 +225,35 @@ func TestDisabledUserHiddenFromRankingButKeepsProfile(t *testing.T) {
 	if len(ranking.Items) != 3 {
 		t.Fatalf("ranking deveria omitir o desativado: %+v", ranking.Items)
 	}
+	expect(t, tb.clients[0].get("/api/users/duda"), http.StatusNotFound, "not_found")
+	expect(t, tb.clients[0].get("/api/matches?user=duda"), http.StatusNotFound, "not_found")
+	h.makeAdmin("ana")
 	if r := tb.clients[0].get("/api/users/duda"); r.status != http.StatusOK {
-		t.Fatalf("perfil de desativado = %d", r.status)
+		t.Fatalf("perfil de desativado para admin = %d", r.status)
 	}
 	if r := tb.clients[0].get("/api/matches?user=duda"); r.status != http.StatusOK {
-		t.Fatalf("histórico de desativado = %d", r.status)
+		t.Fatalf("histórico de desativado para admin = %d", r.status)
 	}
+}
+
+func TestDirectoryRoute(t *testing.T) {
+	h := newHarness(t)
+	expect(t, h.client().get("/api/users"), http.StatusUnauthorized, "unauthenticated")
+	tb := h.table()
+	var page struct {
+		Items []map[string]any `json:"items"`
+	}
+	r := tb.clients[0].get("/api/users?q=bi")
+	if r.status != http.StatusOK {
+		t.Fatalf("status = %d", r.status)
+	}
+	r.decode(t, &page)
+	if len(page.Items) != 1 || page.Items[0]["username"] != "bia" || len(page.Items[0]) != 2 {
+		t.Fatalf("items = %+v", page.Items)
+	}
+	expect(t, tb.clients[0].get("/api/users?q=a%00b"), http.StatusBadRequest, "validation_failed")
+	expect(t, tb.clients[0].get("/api/users?q=%ff"), http.StatusBadRequest, "validation_failed")
+	expect(t, tb.clients[0].get("/api/users?q="+strings.Repeat("a", 65)), http.StatusBadRequest, "validation_failed")
+	expect(t, tb.clients[0].get("/api/users?cursor=AA"), http.StatusBadRequest, "validation_failed")
+	expect(t, tb.clients[0].get("/api/users?cursor=lixo!"), http.StatusBadRequest, "validation_failed")
 }

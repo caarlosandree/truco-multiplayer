@@ -79,6 +79,8 @@ func classify(err error) *httpError {
 		return errNotFoundRoute
 	case errors.Is(err, pagination.ErrInvalidCursor):
 		return invalidField("cursor", "cursor inválido")
+	case errors.Is(err, stats.ErrInvalidQuery):
+		return invalidField("q", "busca inválida")
 	case errors.Is(err, admin.ErrInvalidDomain):
 		return invalidField("domain", "domínio inválido")
 	case errors.Is(err, admin.ErrSelfAction):
