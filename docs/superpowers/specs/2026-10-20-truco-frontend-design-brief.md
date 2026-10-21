@@ -321,22 +321,29 @@ Mesmo feltro e mesmas placas da mesa (continuidade visual), com `nos`/`eles` rel
 
 ### 8.5 Contas (entrar, cadastro, senha, perfil)
 
+Telas públicas (entrar, cadastro, verificar e-mail, esqueci/redefinir senha) usam `CartaoConta`: **lousa à esquerda, formulário à direita**.
+
 ```
-┌───────────────────────────┐
-│ Truco                     │
-│                           │
-│ Entrar                    │  título 24/700
-│ Usuário ou e-mail         │
-│ [_____________________]   │  campo 44 px
-│ Senha                     │
-│ [_____________________]   │
-│ Usuário ou senha incorr.  │  erro junto ao campo
-│ [        Entrar        ]  │  primária
-│ Esqueci a senha · Criar   │  links
-└───────────────────────────┘
+desktop ≥ 1024 px                                 celular / tablet
+┌────────────────────┬───────────────────────┐    ┌───────────────────────────┐
+│ ┼┼┼┼ Truco          │                       │    │ ┼┼┼┼ Truco   Puxa a cadeira.│  tira de lousa (~64 px)
+│                    │ Entrar                │    ├───────────────────────────┤
+│  Puxa a            │ Usuário ou e-mail     │    │ Entrar                    │
+│  cadeira.          │ [___________________] │    │ Usuário ou e-mail         │
+│  (Kalam, −2°)      │ Senha                 │    │ [_____________________]   │
+│                    │ [___________________] │    │ Senha                     │
+│ ┼┼┼┼ |||           │ [       Entrar      ] │    │ [        Entrar        ]  │
+│  ▯ ▯ ▯ (leque)     │ Esqueci · Criar conta │    │ Esqueci · Criar           │
+└────────────────────┴───────────────────────┘    └───────────────────────────┘
 ```
 
-Coluna única de 400 px, centrada, sobre `surface`; sem ilustração nem cartão. Perfil: seções empilhadas (nome, senha, preferências com prévia do baralho em cartas de 68 px, sessões); "Sair de todos os dispositivos" é perigo e pede confirmação.
+- **Por quê:** o formulário sozinho sobre `surface` lia como página genérica. A lousa é a assinatura do jogo (§1) e leva a identidade para a primeira tela, sem mexer no formulário.
+- **A lousa não muda com o tema** (`data-tema="escuro"`, `textura-lousa`), como a mesa; só a coluna do formulário troca claro/escuro. No tema escuro, `border-r-2 border-line/40` separa as duas colunas.
+- **Conteúdo da lousa (decorativo, `aria-hidden`, sem foco):** logo-tento + "Truco" (Atkinson 700); uma frase curta em Kalam 700, tom de anúncio da mesa (padrão "Puxa a cadeira."; cadastro "Mais um pra mesa."); só no desktop, tentos em giz amarelo (grupo de 5) e rosa (grupo de 3) que se riscam uma vez (`--dur-truco`, `ease-giz`, `stroke-dashoffset`) e um leque estático de três cartas de 84 px. Com `prefers-reduced-motion` os tentos já aparecem prontos. Nenhuma carta se move.
+- **Formulário:** coluna única de 400 px, sóbrio, título 24/700, campo 44 px, erro junto ao campo, uma primária; links de troca abaixo. Sem cartão nem sombra. Kalam fica fora do formulário.
+- **Celular/tablet:** a lousa vira uma tira compacta no topo (logo à esquerda, frase à direita), depois o formulário.
+
+**Perfil** (dentro do cabeçalho do app, sem lousa): coluna de 400 px, seções empilhadas separadas por traço (nome, senha, preferências com prévia do baralho em cartas de 68 px, sessões, créditos); "Sair de todos os dispositivos" é perigo e pede confirmação.
 
 ## 9. Fontes
 

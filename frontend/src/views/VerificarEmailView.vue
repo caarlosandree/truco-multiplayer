@@ -2,7 +2,7 @@
 import { nextTick, onMounted, ref, useTemplateRef } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { useSessionStore } from '@/stores/session'
-import { useToastsStore } from '@/stores/toasts'
+import { useReenvio } from '@/app/useReenvio'
 import { formError } from '@/app/formError'
 import CartaoConta from '@/components/conta/CartaoConta.vue'
 import AvisoForm from '@/components/conta/AvisoForm.vue'
@@ -11,13 +11,12 @@ import Botao from '@/components/ui/Botao.vue'
 import BotaoLink from '@/components/ui/BotaoLink.vue'
 
 const session = useSessionStore()
-const toasts = useToastsStore()
 const route = useRoute()
 const cartao = useTemplateRef<InstanceType<typeof CartaoConta>>('cartao')
 const state = ref<'loading' | 'ok' | 'error' | 'sent'>('loading')
 const message = ref('')
 const email = ref('')
-const reenviando = ref(false)
+const { enviando, limite, bloqueado, enviar, fimEspera } = useReenvio()
 
 async function resolver(next: 'ok' | 'error') {
   state.value = next
@@ -42,15 +41,7 @@ onMounted(async () => {
 })
 
 async function reenviar() {
-  reenviando.value = true
-  try {
-    await session.resendVerification(email.value.trim())
-    state.value = 'sent'
-  } catch (err) {
-    toasts.fromError(err)
-  } finally {
-    reenviando.value = false
-  }
+  if (await enviar(email.value.trim())) state.value = 'sent'
 }
 </script>
 
@@ -103,9 +94,17 @@ async function reenviar() {
         autocomplete="email"
         required
       />
+      <AvisoForm
+        v-if="limite"
+        :retry-after-sec="limite.retryAfterSec"
+        @fim="fimEspera"
+      >
+        {{ limite.message }}
+      </AvisoForm>
       <Botao
         type="submit"
-        :loading="reenviando"
+        :loading="enviando"
+        :disabled="bloqueado"
       >
         Reenviar
       </Botao>

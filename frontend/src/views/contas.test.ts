@@ -220,3 +220,41 @@ it('erro de rede no reenvio vira toast', async () => {
   await flushPromises()
   expect(useToastsStore().items.at(-1)?.text).toBe('Sem conexão com o servidor.')
 })
+
+it('reenvio com limite mostra a espera e desabilita o botão até acabar', async () => {
+  vi.spyOn(authApi, 'login').mockRejectedValue(new ApiError(403, 'email_not_verified', 'x'))
+  vi.spyOn(authApi, 'resendVerification').mockRejectedValue(new ApiError(429, 'too_many_attempts', 'x', {}, 20))
+  const { w } = await mountAt(EntrarView, '/entrar')
+  await preencheLogin(w, 'ana@e.com', 'x')
+  const botao = () => w.findAll('button').find((b) => b.text().includes('Reenviar'))!
+  await botao().trigger('click')
+  await flushPromises()
+  expect(w.text()).toContain('Tente de novo em 20 s')
+  expect(botao().attributes('disabled')).toBeDefined()
+})
+
+it('Enter no e-mail de reenvio não dispara o login', async () => {
+  const login = vi.spyOn(authApi, 'login').mockRejectedValue(new ApiError(403, 'email_not_verified', 'x'))
+  const resend = vi.spyOn(authApi, 'resendVerification').mockResolvedValue(undefined)
+  const { w } = await mountAt(EntrarView, '/entrar')
+  await preencheLogin(w, 'ana', 'x')
+  expect(login).toHaveBeenCalledTimes(1)
+  const campo = w.find('input[type="email"]')
+  expect(campo.element.closest('form')).not.toBe(w.find('input[type="password"]').element.closest('form'))
+  await campo.setValue('ana@e.com')
+  await campo.element.closest('form')!.dispatchEvent(new Event('submit', { cancelable: true }))
+  await flushPromises()
+  expect(login).toHaveBeenCalledTimes(1)
+  expect(resend).toHaveBeenCalledWith('ana@e.com')
+})
+
+it('cadastro: domínio não permitido aparece junto ao campo de e-mail', async () => {
+  vi.spyOn(authApi, 'register').mockRejectedValue(new ApiError(400, 'email_domain_not_allowed', 'x'))
+  const { w } = await mountAt(CadastroView, '/cadastro')
+  await w.find('form').trigger('submit')
+  await flushPromises()
+  const campo = w.find('input[type="email"]')
+  expect(campo.attributes('aria-invalid')).toBe('true')
+  expect(w.text()).toContain('O cadastro só é permitido com o e-mail da empresa.')
+  expect(w.find('[role="alert"]').exists()).toBe(false)
+})

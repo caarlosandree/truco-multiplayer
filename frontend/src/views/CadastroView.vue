@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { nextTick, reactive, ref, useTemplateRef } from 'vue'
+import { computed, nextTick, reactive, ref, useTemplateRef } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useSessionStore } from '@/stores/session'
 import { useToastsStore } from '@/stores/toasts'
+import { useReenvio } from '@/app/useReenvio'
 import { focusFirstInvalid, formError, type FormError } from '@/app/formError'
 import CartaoConta from '@/components/conta/CartaoConta.vue'
 import AvisoForm from '@/components/conta/AvisoForm.vue'
@@ -18,7 +19,13 @@ const form = reactive({ username: '', email: '', displayName: '', password: '', 
 const falha = ref<FormError | null>(null)
 const confirmError = ref('')
 const loading = ref(false)
-const reenviando = ref(false)
+// o servidor devolve estes dois como código de topo, não como campo: mostra junto ao campo certo
+const erroDeCampo = computed(() => ({
+  username: falha.value?.fields.username ?? (falha.value?.code === 'username_taken' ? falha.value.message : undefined),
+  email: falha.value?.fields.email ?? (falha.value?.code === 'email_domain_not_allowed' ? falha.value.message : undefined),
+}))
+const avisoGeral = computed(() => falha.value !== null && !['username_taken', 'email_domain_not_allowed'].includes(falha.value.code))
+const { enviando, limite, bloqueado, enviar, fimEspera } = useReenvio()
 const done = ref(false)
 
 async function submit() {
@@ -51,15 +58,7 @@ async function submit() {
 }
 
 async function reenviar() {
-  reenviando.value = true
-  try {
-    await session.resendVerification(form.email.trim())
-    toasts.push('Se o e-mail estiver cadastrado, enviamos um novo link.')
-  } catch (err) {
-    toasts.fromError(err)
-  } finally {
-    reenviando.value = false
-  }
+  if (await enviar(form.email.trim())) toasts.push('Se o e-mail estiver cadastrado, enviamos um novo link.')
 }
 </script>
 
@@ -67,18 +66,27 @@ async function reenviar() {
   <CartaoConta
     ref="cartao"
     :title="done ? 'Confira seu e-mail' : 'Criar conta'"
+    frase="Mais um pra mesa."
   >
     <div
       v-if="done"
       class="flex flex-col gap-4"
     >
-      <p>Enviamos um link de confirmação para <strong class="break-all">{{ form.email }}</strong>. Abra o e-mail para ativar a conta.</p>
+      <p>Enviamos um link de confirmação para <strong class="wrap-anywhere">{{ form.email }}</strong>. Abra o e-mail para ativar a conta.</p>
       <p class="text-sm text-ink-muted">
         Não chegou? Veja a caixa de spam ou peça outro link.
       </p>
+      <AvisoForm
+        v-if="limite"
+        :retry-after-sec="limite.retryAfterSec"
+        @fim="fimEspera"
+      >
+        {{ limite.message }}
+      </AvisoForm>
       <Botao
         variant="secondary"
-        :loading="reenviando"
+        :loading="enviando"
+        :disabled="bloqueado"
         @click="reenviar"
       >
         Reenviar e-mail
@@ -99,7 +107,7 @@ async function reenviar() {
           label="Usuário"
           hint="3 a 20 caracteres: letras minúsculas, números, _ e ."
           autocomplete="username"
-          :error="falha?.fields.username"
+          :error="erroDeCampo.username"
           required
         />
         <Campo
@@ -107,7 +115,7 @@ async function reenviar() {
           label="E-mail da empresa"
           type="email"
           autocomplete="email"
-          :error="falha?.fields.email"
+          :error="erroDeCampo.email"
           required
         />
         <Campo
@@ -136,7 +144,7 @@ async function reenviar() {
           required
         />
         <AvisoForm
-          v-if="falha"
+          v-if="falha && avisoGeral"
           :retry-after-sec="falha.retryAfterSec"
         >
           {{ falha.message }}

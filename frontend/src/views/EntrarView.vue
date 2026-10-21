@@ -3,6 +3,7 @@ import { computed, nextTick, ref, useTemplateRef } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useSessionStore } from '@/stores/session'
 import { useToastsStore } from '@/stores/toasts'
+import { useReenvio } from '@/app/useReenvio'
 import { sanitizeReturnTo } from '@/router'
 import { focusFirstInvalid, formError, type FormError } from '@/app/formError'
 import CartaoConta from '@/components/conta/CartaoConta.vue'
@@ -19,7 +20,7 @@ const login = ref('')
 const password = ref('')
 const reenvio = ref('')
 const loading = ref(false)
-const reenviando = ref(false)
+const { enviando, limite, bloqueado, enviar, fimEspera } = useReenvio()
 const falha = ref<FormError | null>(null)
 
 const naoVerificado = computed(() => falha.value?.code === 'email_not_verified')
@@ -42,15 +43,7 @@ async function submit() {
 
 async function reenviar() {
   const email = (precisaEmail.value ? reenvio.value : login.value).trim()
-  reenviando.value = true
-  try {
-    await session.resendVerification(email)
-    toasts.push('Se o e-mail estiver cadastrado, enviamos um novo link.')
-  } catch (err) {
-    toasts.fromError(err)
-  } finally {
-    reenviando.value = false
-  }
+  if (await enviar(email)) toasts.push('Se o e-mail estiver cadastrado, enviamos um novo link.')
 }
 </script>
 
@@ -83,27 +76,43 @@ async function reenviar() {
       >
         {{ falha.message }}
       </AvisoForm>
-      <template v-if="naoVerificado">
-        <Campo
-          v-if="precisaEmail"
-          v-model="reenvio"
-          label="E-mail para reenviar a confirmação"
-          type="email"
-          autocomplete="email"
-        />
-        <Botao
-          variant="secondary"
-          :loading="reenviando"
-          @click="reenviar"
-        >
-          Reenviar e-mail de confirmação
-        </Botao>
-      </template>
       <Botao
         type="submit"
         :loading="loading"
       >
         Entrar
+      </Botao>
+    </form>
+    <form
+      v-if="naoVerificado"
+      class="mt-6 flex flex-col gap-4 border-t-2 border-line/40 pt-6"
+      novalidate
+      @submit.prevent="reenviar"
+    >
+      <p class="text-sm text-ink-muted">
+        Não recebeu o e-mail de confirmação?
+      </p>
+      <Campo
+        v-if="precisaEmail"
+        v-model="reenvio"
+        label="E-mail para reenviar a confirmação"
+        type="email"
+        autocomplete="email"
+      />
+      <AvisoForm
+        v-if="limite"
+        :retry-after-sec="limite.retryAfterSec"
+        @fim="fimEspera"
+      >
+        {{ limite.message }}
+      </AvisoForm>
+      <Botao
+        type="submit"
+        variant="secondary"
+        :loading="enviando"
+        :disabled="bloqueado"
+      >
+        Reenviar e-mail de confirmação
       </Botao>
     </form>
     <nav

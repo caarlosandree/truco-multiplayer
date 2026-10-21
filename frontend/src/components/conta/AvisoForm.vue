@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
 const props = withDefaults(defineProps<{ kind?: 'erro' | 'ok'; retryAfterSec?: number }>(), { kind: 'erro', retryAfterSec: undefined })
 
+const emit = defineEmits<{ fim: [] }>()
 const restante = ref(0)
 let timer: ReturnType<typeof setInterval> | undefined
 
@@ -19,7 +20,10 @@ watch(
     if (restante.value <= 0) return
     timer = setInterval(() => {
       restante.value -= 1
-      if (restante.value <= 0) parar()
+      if (restante.value <= 0) {
+        parar()
+        emit('fim')
+      }
     }, 1000)
   },
   { immediate: true },
