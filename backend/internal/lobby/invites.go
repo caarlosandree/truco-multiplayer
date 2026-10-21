@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/engine"
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/pagination"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/protocol"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/room"
 )
@@ -255,6 +256,11 @@ func (l *Lobby) dispatchInvite(c Client, msg protocol.ClientMessage) {
 	if err := protocol.Decode(msg.Payload, &p, "username"); err != nil || p.Username == "" || len(p.Username) > maxUsernameLen {
 		l.mu.Unlock()
 		c.Send(protocol.ErrorMsg(protocol.CodeBadRequest, msg.Seq))
+		return
+	}
+	if !pagination.ValidText(p.Username) { // nunca vai ao banco: é só alguém que não existe, sem log de erro
+		l.mu.Unlock()
+		c.Send(protocol.ErrorMsg(protocol.CodeUserNotFound, msg.Seq))
 		return
 	}
 	if _, in := l.index[id]; !in { // evita a consulta de quem nem está em sala

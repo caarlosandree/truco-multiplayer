@@ -18,6 +18,11 @@ func TestActiveUserByUsername(t *testing.T) {
 	if _, err := f.svc.ActiveUserByUsername(ctx, "ninguem"); !errors.Is(err, ErrUserNotFound) {
 		t.Fatalf("inexistente = %v", err)
 	}
+	for _, ruim := range []string{"bi\x00a", "bi\xffa"} {
+		if _, err := f.svc.ActiveUserByUsername(ctx, ruim); !errors.Is(err, ErrUserNotFound) {
+			t.Fatalf("username %q = %v", ruim, err)
+		}
+	}
 	if _, err := f.pool.Exec(ctx, `UPDATE users SET disabled_at = now() WHERE id = $1`, id); err != nil {
 		t.Fatal(err)
 	}

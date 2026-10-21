@@ -8,11 +8,15 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/mail"
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/pagination"
 )
 
 // ActiveUserByUsername devolve o usuário que pode receber convite: existente, verificado e não desativado.
 // Qualquer outro caso é ErrUserNotFound, sem distinguir o motivo.
 func (s *Service) ActiveUserByUsername(ctx context.Context, username string) (User, error) {
+	if !pagination.ValidText(username) { // NUL ou UTF-8 inválido o Postgres recusa: nunca chega lá
+		return User{}, ErrUserNotFound
+	}
 	row, err := s.q.GetUserByUsername(ctx, NormalizeUsername(username))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return User{}, ErrUserNotFound

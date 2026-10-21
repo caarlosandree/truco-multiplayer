@@ -169,3 +169,10 @@ it('ListaConvites some quando não há convites', () => {
   wrappers.push(w)
   expect(w.text()).toBe('')
 })
+
+it('o foco inicial do seletor vai para o campo de busca, não para o primeiro "Convidar"', async () => {
+  const w = mountEspera()
+  await w.find('[data-acao="convidar"]').trigger('click')
+  await flushPromises()
+  expect(document.activeElement?.id).toBe('sel-busca')
+})

@@ -128,3 +128,33 @@ it('ao sair da página zera o resultado', async () => {
   wrapper.unmount()
   expect(useInvitesStore().tokenOutcome).toBeNull()
 })
+
+it('sair antes de o WS abrir cancela o aceite', async () => {
+  const { wrapper } = await montar('connecting')
+  wrapper.unmount()
+  useSessionStore().connection = 'open'
+  await flushPromises()
+  expect(sender).not.toHaveBeenCalled()
+})
+
+it('resultado de aceite em voo de uma visita anterior não vaza para a próxima', async () => {
+  let falhar: (e: unknown) => void = () => {}
+  sender.mockImplementationOnce(() => new Promise((_, rej) => { falhar = rej }))
+  const { wrapper } = await montar()
+  wrapper.unmount() // resetToken
+  await montar() // nova visita: sender volta a responder ok, o aceite fica pendente
+  falhar(Object.assign(new Error('x'), { code: 'invite_expired' }))
+  await flushPromises()
+  expect(useInvitesStore().tokenOutcome).toBe('pending')
+})
+
+it('sem resultado em 10 s mostra falha com "Ir para o lobby", sem toast', async () => {
+  vi.useFakeTimers()
+  const { wrapper } = await montar()
+  expect(wrapper.find('h1').text()).toBe('Entrando na sala…')
+  await vi.advanceTimersByTimeAsync(10_000)
+  await flushPromises()
+  expect(wrapper.find('h1').text()).toBe('Não deu para entrar')
+  expect(wrapper.text()).toContain('Ir para o lobby')
+  expect(useToastsStore().items).toHaveLength(0)
+})

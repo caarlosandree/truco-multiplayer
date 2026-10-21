@@ -168,6 +168,10 @@ func TestInviteValidation(t *testing.T) {
 	s.ana.waitFor(t, protocol.MsgError, errorCode(protocol.CodeSeatTaken))
 	s.invite(s.ana, "ninguem", nil)
 	s.ana.waitFor(t, protocol.MsgError, errorCode(protocol.CodeUserNotFound))
+	for _, ruim := range []string{"bi\x00a", "bi\xffa"} { // NUL e UTF-8 inválido: o mesmo que inexistente
+		s.invite(s.ana, ruim, nil)
+		s.ana.waitFor(t, protocol.MsgError, errorCode(protocol.CodeUserNotFound))
+	}
 	s.invite(s.ana, "ana", nil)
 	s.ana.waitFor(t, protocol.MsgError, errorCode(protocol.CodeCannotInviteSelf))
 

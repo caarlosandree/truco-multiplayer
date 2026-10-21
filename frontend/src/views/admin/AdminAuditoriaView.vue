@@ -13,6 +13,7 @@ const ACOES: Record<string, string> = {
   'user.force_password_reset': 'Forçou a troca de senha',
   'user.promote_admin': 'Concedeu acesso de administrador',
   'user.demote_admin': 'Retirou acesso de administrador',
+  'user.set_admin': 'Admin alterado (rota antiga)',
   'domain.add': 'Adicionou o domínio',
   'domain.remove': 'Removeu o domínio',
   'match.abort': 'Abortou a partida',

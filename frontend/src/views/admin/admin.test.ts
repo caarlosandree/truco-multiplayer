@@ -260,6 +260,17 @@ describe('auditoria', () => {
   })
 })
 
+describe('auditoria: ação antiga', () => {
+  it('user.set_admin ganha rótulo legível', async () => {
+    api.audit.mockResolvedValue({
+      items: [{ id: '1', actorId: 'a', actorUsername: 'root', action: 'user.set_admin', targetType: 'user', targetId: 'u1', details: null, createdAt: '2026-10-21T12:00:00Z' } as AuditEntry],
+    })
+    const w = await abrir(AdminAuditoriaView)
+    expect(w.text()).toContain('Admin alterado (rota antiga)')
+    expect(w.text()).not.toContain('user.set_admin')
+  })
+})
+
 describe('cabeçalho', () => {
   it('o link "Admin" aparece só para quem é admin', async () => {
     const AppShell = (await import('@/components/AppShell.vue')).default

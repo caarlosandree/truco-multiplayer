@@ -39,6 +39,7 @@ export const useInvitesStore = defineStore('invites', {
     accepting: null as InviteReceivedPayload | null,
     /** Sala em que o usuário estava ao enviar o aceite por token (null = fora de sala). */
     tokenFromRoom: null as string | null,
+    tokenVisit: 0,
   }),
   getters: {
     /** Até 3 avisos, o mais novo em cima. */
@@ -65,6 +66,7 @@ export const useInvitesStore = defineStore('invites', {
       if (this.tokenOutcome === 'pending' && roomId !== this.tokenFromRoom) this.tokenOutcome = 'accepted'
     },
     resetToken() {
+      this.tokenVisit++ // aceite em voo de uma visita anterior passa a ser ignorado
       this.tokenOutcome = null
     },
     /** Convida por username. `already_in_room` aqui quer dizer "essa pessoa já está nesta sala", não "você". */
@@ -93,9 +95,11 @@ export const useInvitesStore = defineStore('invites', {
     async acceptToken(token: string): Promise<void> {
       this.tokenOutcome = 'pending'
       this.tokenFromRoom = useRoomStore().room?.id ?? null
+      const visit = this.tokenVisit
       try {
         await send({ type: 'invite_accept_token', payload: { token } })
       } catch (err) {
+        if (visit !== this.tokenVisit) return // a visita acabou (resetToken): o resultado não é mais desta página
         const outcome = TOKEN_ERRORS[errorCode(err) ?? '']
         if (outcome) {
           this.tokenOutcome = outcome

@@ -118,6 +118,11 @@ func TestRankingProfileAndHistory(t *testing.T) {
 		t.Fatalf("perfil = %d %s", r.status, r.body)
 	}
 	expect(t, ana.get("/api/users/ninguem"), http.StatusNotFound, "not_found")
+	// NUL e UTF-8 inválido não chegam ao Postgres: 404, não 500
+	expect(t, ana.get("/api/users/bi%00a"), http.StatusNotFound, "not_found")
+	expect(t, ana.get("/api/users/bi%ffa"), http.StatusNotFound, "not_found")
+	expect(t, ana.get("/api/matches?user=bi%00a"), http.StatusNotFound, "not_found")
+	expect(t, ana.get("/api/matches?user=bi%ffa"), http.StatusNotFound, "not_found")
 
 	var page struct {
 		Items      []struct{ ID string } `json:"items"`

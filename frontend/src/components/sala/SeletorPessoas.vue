@@ -180,6 +180,7 @@ const LINHA = 'flex items-center gap-3 border-t-2 border-line/40 px-4 py-2 first
         id="sel-busca"
         v-model="query"
         type="search"
+        data-autofocus
         autocomplete="off"
         placeholder="Buscar por nome ou usuário"
         class="mb-2 h-(--campo-altura) w-full rounded-campo border-2 border-(--campo-borda) bg-(--campo-bg) px-3 text-base text-(--campo-fg) placeholder:text-(--campo-placeholder) [&::-webkit-search-cancel-button]:appearance-none"

@@ -258,6 +258,9 @@ func (r *Reader) positions(ctx context.Context, userID string) (Positions, error
 
 // user resolve o username; conta desativada só existe para quem é admin.
 func (r *Reader) user(ctx context.Context, username string, viewerIsAdmin bool) (dbgen.User, error) {
+	if !pagination.ValidText(username) { // NUL ou UTF-8 inválido o Postgres recusa: é só "não encontrado"
+		return dbgen.User{}, ErrUserNotFound
+	}
 	u, err := r.q.GetUserByUsername(ctx, strings.ToLower(strings.TrimSpace(username)))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return dbgen.User{}, ErrUserNotFound

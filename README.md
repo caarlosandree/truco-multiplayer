@@ -373,7 +373,7 @@ Conexão em `GET /ws`, autenticada pelo mesmo cookie de sessão da API e com `Or
 | `invite_expired` | servidor → cliente | O convite deixou de valer: sala cheia, partida iniciada, sala fechada ou conta desativada |
 | `room_invites` | servidor → cliente | Convites da sua sala e o estado de cada um (aguardando, aceitou, agora não, e-mail enviado) |
 
-Erros novos: `invite_not_found`, `invite_expired`, `invite_not_yours` (link aberto por outra conta), `invitee_playing` e `cannot_invite_self`.
+Erros novos: `invite_not_found`, `invite_expired`, `invite_not_yours` (link aberto por outra conta), `invitee_playing`, `cannot_invite_self` e `user_not_found` (username inexistente, inativo ou inválido).
 
 **Regras da partida em tempo real**
 
@@ -620,7 +620,7 @@ Copie `.env.example` para `.env` (não versionado) e ajuste os valores.
 | `RESEND_API_KEY` | — | Obrigatória com `resend` |
 | `MAIL_FROM` | — | Obrigatória com `resend`; ex.: `Truco <truco@empresa.com.br>` |
 | `RANKING_MIN_MATCHES` | `5` | Partidas mínimas para aparecer no ranking |
-| `MIGRATE_ON_START` | `true` | Aplica as migrations ao subir o servidor |
+| `MIGRATE_ON_START` | `true` | Aplica as migrations ao subir o servidor. A migração 0004 acrescenta `end_reason` às partidas e faz o backfill das já encerradas (a partir de `match_actions` e `audit_log`); o rollback é o Down da 0004 |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn` ou `error` |
 | `LOG_FORMAT` | `json` | `json` ou `text` |
 | `STATIC_DIR` | — | Diretório do frontend compilado, servido em modo SPA |

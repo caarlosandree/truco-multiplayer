@@ -43,6 +43,9 @@ func Decode(cursor string) (*time.Time, *string, error) {
 	return &at, &canonical, nil
 }
 
+// ValidText diz se um texto vindo do cliente pode ir ao Postgres: UTF-8 válido e sem byte NUL.
+func ValidText(s string) bool { return utf8.ValidString(s) && !strings.ContainsRune(s, 0) }
+
 // EncodeKey codifica uma chave textual (ex.: username) como cursor opaco.
 func EncodeKey(key string) string {
 	return base64.RawURLEncoding.EncodeToString([]byte(key))
