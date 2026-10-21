@@ -63,7 +63,7 @@ function novo(index: number): boolean {
     :viewBox="`0 0 ${width} ${H}`"
     :width="width"
     :height="H"
-    class="h-6 shrink-0 overflow-visible max-md:h-5"
+    class="h-6 shrink-0 overflow-visible max-md:h-5 curto:max-md:h-4"
     :class="props.tone === 'nos' ? 'stroke-(--tento-nos)' : 'stroke-(--tento-eles)'"
     fill="none"
     stroke-linecap="round"

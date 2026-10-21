@@ -89,7 +89,7 @@ it('mão de ferro: placar indica o tipo e as minhas cartas mostram o verso', () 
     makeState({ seat: 1, turn: 1, handKind: 'iron', myHand: [0, 1, 2].map((slot) => ({ slot, hidden: true })) }, [1]),
   )
   const w = mount(Mesa, { global: { plugins: [pinia] } })
-  expect(w.find('[data-tipo]').text()).toBe('Mão de Ferro')
+  expect(w.find('[data-tipo]').text()).toContain('Mão de Ferro')
   expect(w.findAll('[data-mao] button').map((b) => b.attributes('aria-label'))).toEqual(['Carta 1', 'Carta 2', 'Carta 3'])
 })
 
@@ -291,4 +291,15 @@ it('mão de 11: a mão do parceiro aparece só no painel; no assento seguem os v
   const w = mount(Mesa, { global: { plugins: [pinia] } })
   expect(w.findAll('[data-parceiro]')).toHaveLength(1)
   expect(w.find('[data-posicao="top"] [aria-label="Cartas do parceiro"]').exists()).toBe(false)
+})
+
+it('placar: tipo da mão completo para leitores de tela e chip curto visível no celular', () => {
+  useGameStore().onState(makeState({ seat: 1, turn: 1, handKind: 'eleven', score: [11, 4] }, [1]))
+  const w = mount(Placar, { global: { plugins: [pinia] } })
+  const tipo = w.find('[data-tipo]')
+  expect(tipo.find('span:not([aria-hidden])').text()).toBe('Mão de 11')
+  expect(tipo.find('span:not([aria-hidden])').classes()).toContain('max-md:sr-only')
+  const curto = tipo.find('[data-tipo-curto]')
+  expect(curto.text()).toBe('Mão 11')
+  expect(curto.attributes('aria-hidden')).toBe('true')
 })
