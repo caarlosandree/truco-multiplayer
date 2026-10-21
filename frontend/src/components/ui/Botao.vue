@@ -27,17 +27,44 @@ const styles = {
     :type="props.type"
     :disabled="props.disabled || props.loading"
     :aria-busy="props.loading || undefined"
-    class="relative inline-flex h-(--botao-altura) min-w-11 items-center justify-center gap-2 px-4 transition-colors duration-(--dur-rapido) ease-padrao active:translate-y-(--botao-pressao-y) disabled:cursor-not-allowed disabled:opacity-(--botao-desabilitado-opacidade)"
-    :class="styles[props.variant]"
+    class="relative inline-flex h-(--botao-altura) min-w-11 items-center justify-center gap-2 px-4 transition-colors duration-(--dur-rapido) ease-padrao active:translate-y-(--botao-pressao-y) disabled:cursor-not-allowed"
+    :class="[styles[props.variant], props.loading ? '' : 'disabled:opacity-(--botao-desabilitado-opacidade)']"
   >
     <span
       class="inline-flex items-center justify-center gap-2"
-      :class="props.loading ? 'invisible' : ''"
+      :class="props.loading ? 'opacity-0' : ''"
     ><slot /></span>
     <span
       v-if="props.loading"
-      class="absolute inset-0 grid place-items-center"
+      class="absolute inset-0 flex items-center justify-center gap-1"
       aria-hidden="true"
-    >…</span>
+      data-testid="botao-carregando"
+    >
+      <span
+        v-for="n in 3"
+        :key="n"
+        class="botao-ponto size-1.5 rounded-full bg-current"
+        :style="{ animationDelay: `${(n - 1) * 150}ms` }"
+      />
+    </span>
   </button>
 </template>
+
+<style scoped>
+/* três pontos de giz que sobem e descem em sequência; só transform/opacity */
+.botao-ponto {
+  animation: botao-ponto 900ms var(--ease-giz) infinite;
+}
+@keyframes botao-ponto {
+  0%,
+  70%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  35% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+</style>

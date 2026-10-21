@@ -1,18 +1,36 @@
 import { watch } from 'vue'
 import type { Router } from 'vue-router'
 import { useRoomStore } from '@/stores/room'
+import { useSessionStore } from '@/stores/session'
 import { useToastsStore } from '@/stores/toasts'
 
-/** Sala manda na rota: room_state fora de /sala leva a /sala; sair (ou ser removido) volta ao lobby. */
+/**
+ * Sala manda na rota, mas só nos momentos certos: entrar numa sala (null→sala), trocar de sala, ou o
+ * primeiro room_state depois de cada (re)conexão (hello) levam a /sala. Atualizações de assento/pronto
+ * da mesma sala não tiram o usuário de /perfil ou /. Sair (ou ser removido) volta ao lobby.
+ */
 export function installRoomNavigation(router: Router): void {
   const room = useRoomStore()
-  // `room.room` é um objeto novo a cada room_state, então o watch dispara também em reconexão/outra aba.
+  const session = useSessionStore()
+  let afterHello = false
+
+  // status 'open' = hello recebido (o WsClient só abre depois dele); o próximo room_state é de (re)conexão
+  watch(
+    () => session.connection,
+    (status) => {
+      if (status === 'open') afterHello = true
+    },
+    { immediate: true },
+  )
+
   watch(
     () => room.room,
-    (state) => {
+    (state, prev) => {
       const name = router.currentRoute.value.name
       if (state) {
-        if (name !== 'sala') void router.push({ name: 'sala' })
+        const entering = prev === null || prev === undefined || prev.id !== state.id || afterHello
+        afterHello = false
+        if (entering && name !== 'sala') void router.push({ name: 'sala' })
       } else if (name === 'sala' || name === 'convite') {
         void router.push({ name: 'lobby' })
       }

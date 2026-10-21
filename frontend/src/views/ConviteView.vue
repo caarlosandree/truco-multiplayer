@@ -14,7 +14,10 @@ const session = useSessionStore()
 const toasts = useToastsStore()
 
 async function join() {
-  if (room.inRoom) return // já em sala: a navegação leva a /sala
+  if (room.inRoom) {
+    void router.replace({ name: 'sala' }) // já em sala: vai direto
+    return
+  }
   try {
     await lobby.joinByCode(String(route.params.codigo))
   } catch (err) {

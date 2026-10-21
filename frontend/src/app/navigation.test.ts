@@ -4,6 +4,7 @@ import { nextTick } from 'vue'
 import { createAppRouter } from '@/router'
 import { installRoomNavigation } from './navigation'
 import { useRoomStore } from '@/stores/room'
+import { useSessionStore } from '@/stores/session'
 import { useToastsStore } from '@/stores/toasts'
 import { authApi } from '@/api/auth'
 import type { RoomStatePayload } from '@/protocol/messages'
@@ -32,14 +33,42 @@ it('entrar numa sala leva a /sala; ser removido volta ao lobby com aviso', async
   expect(useToastsStore().items.map((t) => t.text)).toContain('Você foi removido da sala.')
 })
 
-it('room_state novo fora de /sala (reconexão) volta para /sala', async () => {
+it('room_state da mesma sala (assento/pronto) em /perfil não puxa para /sala', async () => {
   const router = createAppRouter(createMemoryHistory())
   installRoomNavigation(router)
   await router.push('/sala')
   const room = useRoomStore()
   room.onRoomState(roomState)
   await router.push('/perfil')
+  room.onRoomState({ ...roomState, seats: [{ ...roomState.seats[0]!, ready: true }, null, null, null] })
+  await new Promise((r) => setTimeout(r, 10))
+  expect(router.currentRoute.value.name).toBe('perfil')
+})
+
+it('primeiro room_state depois do hello (reconexão) leva a /sala', async () => {
+  const router = createAppRouter(createMemoryHistory())
+  installRoomNavigation(router)
+  await router.push('/sala')
+  const room = useRoomStore()
+  room.onRoomState(roomState)
+  await router.push('/perfil')
+  useSessionStore().setConnection('open') // hello
   room.onRoomState({ ...roomState })
+  await vi.waitFor(() => expect(router.currentRoute.value.name).toBe('sala'))
+  await router.push('/perfil')
+  room.onRoomState({ ...roomState }) // a flag foi consumida
+  await new Promise((r) => setTimeout(r, 10))
+  expect(router.currentRoute.value.name).toBe('perfil')
+})
+
+it('trocar de sala leva a /sala', async () => {
+  const router = createAppRouter(createMemoryHistory())
+  installRoomNavigation(router)
+  await router.push('/sala')
+  const room = useRoomStore()
+  room.onRoomState(roomState)
+  await router.push('/perfil')
+  room.onRoomState({ ...roomState, id: 'r2' })
   await vi.waitFor(() => expect(router.currentRoute.value.name).toBe('sala'))
 })
 

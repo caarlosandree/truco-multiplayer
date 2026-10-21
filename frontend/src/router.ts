@@ -40,7 +40,7 @@ export function createAppRouter(history: RouterHistory = createWebHistory()): Ro
       try {
         await session.load()
       } catch {
-        // rede fora: deixa seguir; a tela mostra o erro e o WS tenta reconectar
+        // falha que não é 401 (ex.: rede fora): segue sem sessão; rotas privadas caem em /entrar
       }
     }
     if (!to.meta.public && !session.isLoggedIn) {

@@ -41,3 +41,19 @@ it('prende o foco com Tab', async () => {
   expect(document.activeElement).toBe(buttons[0])
   w.unmount()
 })
+
+it('Shift+Tab com o foco no próprio diálogo continua dentro dele', async () => {
+  const w = mount(Modal, {
+    props: { open: true, title: 'Confirmar' },
+    slots: { default: '<button>a</button><button>b</button>' },
+    attachTo: document.body,
+  })
+  await w.vm.$nextTick()
+  await w.vm.$nextTick()
+  dialog().focus()
+  const ev = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true })
+  dialog().dispatchEvent(ev)
+  expect(ev.defaultPrevented).toBe(true)
+  expect(document.activeElement).toBe(dialog().querySelectorAll('button')[1])
+  w.unmount()
+})

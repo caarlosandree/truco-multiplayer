@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, ref, useId, watch } from 'vue'
+import { nextTick, onBeforeUnmount, ref, useId, watch } from 'vue'
 
 const props = defineProps<{ open: boolean; title: string }>()
 const emit = defineEmits<{ close: [] }>()
@@ -20,9 +20,11 @@ watch(
   async (open) => {
     if (open) {
       previous = document.activeElement as HTMLElement | null
+      document.addEventListener('keydown', onKeydown)
       await nextTick()
       ;(focusables()[0] ?? dialog.value)?.focus()
     } else {
+      document.removeEventListener('keydown', onKeydown)
       previous?.focus()
       previous = null
     }
@@ -42,16 +44,25 @@ function onKeydown(e: KeyboardEvent) {
   const last = items.at(-1)
   if (!first || !last) {
     e.preventDefault()
+    dialog.value?.focus()
     return
   }
-  if (e.shiftKey && document.activeElement === first) {
+  const active = document.activeElement
+  // foco no próprio diálogo, no scrim ou fora dele: volta para dentro respeitando a direção
+  const dentro = active instanceof HTMLElement && items.includes(active)
+  if (!dentro) {
+    e.preventDefault()
+    ;(e.shiftKey ? last : first).focus()
+  } else if (e.shiftKey && active === first) {
     e.preventDefault()
     last.focus()
-  } else if (!e.shiftKey && document.activeElement === last) {
+  } else if (!e.shiftKey && active === last) {
     e.preventDefault()
     first.focus()
   }
 }
+
+onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
@@ -69,7 +80,6 @@ function onKeydown(e: KeyboardEvent) {
           :aria-labelledby="titleId"
           tabindex="-1"
           class="modal-caixa w-full max-w-(--modal-largura) rounded-modal bg-(--modal-bg) p-6 text-(--modal-fg) shadow-modal"
-          @keydown="onKeydown"
         >
           <h2
             :id="titleId"
