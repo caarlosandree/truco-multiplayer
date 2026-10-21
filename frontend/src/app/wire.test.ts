@@ -3,11 +3,13 @@ import { createMemoryHistory } from 'vue-router'
 import { createAppRouter } from '@/router'
 import { useSessionStore } from '@/stores/session'
 import { authApi } from '@/api/auth'
-import { dispatch, installConnection } from './wire'
+import { dispatch, handleUnackedError, installConnection } from './wire'
 import { useLobbyStore } from '@/stores/lobby'
 import { useRoomStore } from '@/stores/room'
 import { useGameStore } from '@/stores/game'
 import { usePresenceStore } from '@/stores/presence'
+import { useInvitesStore } from '@/stores/invites'
+import { useToastsStore } from '@/stores/toasts'
 import type { PlayerView } from '@/protocol/engine'
 
 beforeEach(() => setActivePinia(createPinia()))
@@ -145,5 +147,70 @@ describe('presença', () => {
     installConnection(createAppRouter(createMemoryHistory())) // sem usuário, o watch imediato roda stop()
     expect(presence.count).toBe(0)
     expect(presence.loaded).toBe(false)
+  })
+})
+
+describe('convites', () => {
+  const aviso = {
+    inviteId: 'i1',
+    room: { id: 'r', name: 'Mesa do RH', visibility: 'private' as const },
+    from: { displayName: 'Ana' },
+    freeSeats: 2,
+  }
+  const linha = { inviteId: 'i1', username: 'bia', displayName: 'Bia', state: 'pending' as const, emailed: false }
+
+  it('os três tipos novos chegam à store', () => {
+    const invites = useInvitesStore()
+    dispatch({ type: 'invite_received', payload: aviso })
+    expect(invites.received).toHaveLength(1)
+    dispatch({ type: 'room_invites', payload: { invites: [linha] } })
+    expect(invites.roomInvites).toEqual([linha])
+    dispatch({ type: 'invite_expired', payload: { inviteId: 'i1' } })
+    expect(invites.received).toHaveLength(0)
+  })
+
+  it('left_room e lobby_snapshot limpam a lista de convites da sala', () => {
+    const invites = useInvitesStore()
+    dispatch({ type: 'room_invites', payload: { invites: [linha] } })
+    dispatch({ type: 'left_room', payload: { reason: 'left' } })
+    expect(invites.roomInvites).toEqual([])
+    dispatch({ type: 'room_invites', payload: { invites: [linha] } })
+    dispatch({ type: 'lobby_snapshot', payload: { rooms: [] } })
+    expect(invites.roomInvites).toEqual([])
+  })
+
+  it('room_state resolve o aceite por token pendente', async () => {
+    const invites = useInvitesStore()
+    const { setSender } = await import('./transport')
+    setSender(vi.fn().mockResolvedValue(undefined))
+    await invites.acceptToken('tok')
+    dispatch({
+      type: 'room_state',
+      payload: { id: 'r', code: 'ABC', name: 'n', visibility: 'private', host: 0, status: 'waiting', seats: [null, null, null, null], yourSeat: 1 },
+    })
+    expect(invites.tokenOutcome).toBe('accepted')
+    setSender(null)
+  })
+
+  it('stop() zera os avisos', () => {
+    const invites = useInvitesStore()
+    dispatch({ type: 'invite_received', payload: aviso })
+    useSessionStore().user = null
+    installConnection(createAppRouter(createMemoryHistory()))
+    expect(invites.received).toEqual([])
+  })
+
+  it('erro sem envio pendente: aceite por token vai para a store, o resto vira toast', async () => {
+    const invites = useInvitesStore()
+    const toasts = useToastsStore()
+    const { setSender } = await import('./transport')
+    setSender(vi.fn().mockResolvedValue(undefined))
+    await invites.acceptToken('tok')
+    handleUnackedError('invite_not_yours', 'x')
+    expect(invites.tokenOutcome).toBe('not_yours')
+    expect(toasts.items).toHaveLength(0)
+    handleUnackedError('room_full', 'x')
+    expect(toasts.items).toHaveLength(1)
+    setSender(null)
   })
 })

@@ -40,6 +40,7 @@ type Options struct {
 	Clock    clock.Clock
 	Rand     io.Reader
 	Log      *slog.Logger
+	People   People // cadastro de contas para convidar; nil = ninguém pode ser convidado
 }
 
 type member struct {
@@ -66,16 +67,21 @@ type Lobby struct {
 	index   map[string]string  // usuário → sala (uma sala por usuário)
 
 	lastPresence map[string]protocol.PresenceEntry // última presença transmitida, para não repetir
+
+	inviteBook // convites, tokens, aceites em andamento (invites.go)
 }
 
 func New(ctx context.Context, o Options) *Lobby {
 	if o.Log == nil {
 		o.Log = slog.Default()
 	}
+	if o.People == nil {
+		o.People = nullPeople{}
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	return &Lobby{opt: o, ctx: ctx, cancel: cancel, rand: &lockedReader{r: o.Rand},
 		clients: map[string]*member{}, rooms: map[string]*entry{}, codes: map[string]string{}, index: map[string]string{},
-		lastPresence: map[string]protocol.PresenceEntry{}}
+		lastPresence: map[string]protocol.PresenceEntry{}, inviteBook: newInviteBook()}
 }
 
 // lockedReader serializa o gerador compartilhado pelas salas.
@@ -102,15 +108,20 @@ func (l *Lobby) Connect(c Client, info protocol.UserInfo) bool {
 		old.client.Close(CloseReplaced)
 	}
 	l.clients[info.ID] = &member{client: c, info: info}
+	delete(l.revoked, info.ID) // conta reativada pode voltar a ser convidada
 	c.Send(protocol.Hello(info))
 	e := l.roomOfLocked(info.ID)
 	if e == nil {
 		c.Send(l.snapshotLocked())
 	}
 	entry, _ := l.entryLocked(info.ID)
+	prev, had := l.lastPresence[info.ID]
 	l.lastPresence[info.ID] = entry
 	c.Send(l.presenceSnapshotLocked())
-	l.broadcastAllLocked(protocol.PresenceUpdated(entry), info.ID)
+	if !had || prev != entry { // reconexão com a mesma presença não retransmite
+		l.broadcastAllLocked(protocol.PresenceUpdated(entry), info.ID)
+	}
+	l.resendInvitesLocked(c, info.ID, e)
 	if e != nil {
 		e.actor.Push(room.Connected{UserID: info.ID})
 	}
@@ -134,6 +145,10 @@ func (l *Lobby) Disconnect(c Client) {
 
 // Dispatch trata create_room/join_room e repassa o resto para a sala do usuário.
 func (l *Lobby) Dispatch(c Client, msg protocol.ClientMessage) {
+	if msg.Type == protocol.TypeInvite {
+		l.dispatchInvite(c, msg) // consulta o cadastro fora do mutex
+		return
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	id := c.UserID()
@@ -146,6 +161,10 @@ func (l *Lobby) Dispatch(c Client, msg protocol.ClientMessage) {
 		l.createRoomLocked(m, msg)
 	case protocol.TypeJoinRoom:
 		l.joinRoomLocked(m, msg)
+	case protocol.TypeInviteRespond:
+		l.inviteRespondLocked(m, msg)
+	case protocol.TypeInviteAcceptToken:
+		l.inviteTokenLocked(m, msg)
 	default:
 		if !protocol.KnownClientType(msg.Type) {
 			c.Send(protocol.ErrorMsg(protocol.CodeBadRequest, msg.Seq))
@@ -185,12 +204,12 @@ func (l *Lobby) createRoomLocked(m *member, msg protocol.ClientMessage) {
 	name := "Sala de " + m.info.DisplayName
 	public := p.Visibility == protocol.VisibilityPublic
 	actor := room.Start(l.ctx, l.roomOptions(id, code, name, public), nil)
-	l.rooms[id] = &entry{actor: actor, summary: room.Summary{
-		Room: protocol.RoomSummary{ID: id, Name: name, Status: protocol.RoomWaiting}, Public: public, Code: code}}
+	summary := protocol.RoomSummary{ID: id, Name: name, Status: protocol.RoomWaiting}
+	summary.Seats[0] = &protocol.SeatSummary{DisplayName: m.info.DisplayName} // quem cria senta no primeiro lugar
+	l.rooms[id] = &entry{actor: actor, summary: room.Summary{Room: summary, Public: public, Code: code}}
 	l.codes[code] = id
 	l.index[m.info.ID] = id
 	l.opt.Log.Info("sala criada", "room_id", id, "public", public, "user_id", m.info.ID)
-	l.touchPresenceLocked(m.info.ID)
 	actor.Push(room.Join{UserID: m.info.ID, DisplayName: m.info.DisplayName, Seq: msg.Seq})
 }
 
@@ -221,10 +240,7 @@ func (l *Lobby) joinRoomLocked(m *member, msg protocol.ClientMessage) {
 		m.client.Send(protocol.ErrorMsg(protocol.CodeRoomNotFound, msg.Seq))
 		return
 	}
-	// sala em jogo recusa; só reserva em sala em espera muda a presença (a T7 move isto para o assento)
-	if e.summary.Room.Status == protocol.RoomWaiting {
-		l.touchPresenceLocked(m.info.ID)
-	}
+	// a presença só muda quando a sala confirma o assento (Seated): tentar sala cheia ou em jogo não pisca "esperando"
 }
 
 // Send implementa room.Outbox.
@@ -249,6 +265,9 @@ func (l *Lobby) Update(s room.Summary) {
 	if changed {
 		l.touchPresenceLocked(l.membersLocked(s.Room.ID)...)
 	}
+	if s.Room.Status == protocol.RoomPlaying || freeSeats(s) == 0 {
+		l.expireRoomPendingLocked(s.Room.ID) // encheu ou a partida começou: convites pendentes deixam de valer
+	}
 	if s.Public {
 		l.broadcastLobbyLocked(protocol.RoomUpserted(s.Room))
 	}
@@ -262,14 +281,54 @@ func (l *Lobby) Released(roomID, userID string) {
 		return
 	}
 	delete(l.index, userID)
+	delete(l.seated, userID)
+	if a, ok := l.accepting[userID]; ok { // a entrada por convite falhou (sala encheu, começou ou fechou)
+		delete(l.accepting, userID)
+		if inv := l.invites[a.inviteID]; inv != nil && inv.roomID == roomID && inv.state == protocol.InvitePending {
+			l.expireLocked(inv)
+			l.broadcastRoomInvitesLocked(roomID)
+		}
+		if !a.ownJoin { // o Join era outro (código): a sala não respondeu ao aceite
+			l.sendLocked(userID, protocol.ErrorMsg(protocol.CodeInviteExpired, a.seq))
+		}
+	}
+	if mv, ok := l.moves[userID]; ok && mv.fromRoom == roomID { // saiu da sala atual para aceitar um convite
+		l.touchPresenceLocked(userID)
+		l.resolveMoveLocked(userID)
+		return
+	}
 	if m := l.clients[userID]; m != nil && !l.closing {
 		m.client.Send(l.snapshotLocked())
 	}
 	l.touchPresenceLocked(userID)
 }
 
-// Seated implementa room.Registry: o usuário já ocupou o assento. Vazio nesta tarefa; a T7 confirma a reserva aqui.
-func (l *Lobby) Seated(roomID, userID string) {}
+// Seated implementa room.Registry: o usuário ocupou o assento. Confirma a presença, aceita os convites
+// pendentes dele para esta sala (inclusive quem entrou pelo código) e manda a lista de convites ao novo membro.
+func (l *Lobby) Seated(roomID, userID string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.seated[userID] = roomID
+	if a, ok := l.accepting[userID]; ok {
+		if inv := l.invites[a.inviteID]; inv == nil || inv.roomID == roomID {
+			delete(l.accepting, userID)
+		}
+	}
+	l.touchPresenceLocked(userID)
+	changed := false
+	for _, inv := range l.pendingOfLocked(userID) {
+		if inv.roomID == roomID {
+			l.setStateLocked(inv, protocol.InviteAccepted)
+			l.sendLocked(userID, protocol.InviteExpired(inv.id)) // o aviso some (ex.: entrou pelo código)
+			changed = true
+		}
+	}
+	if changed {
+		l.broadcastRoomInvitesLocked(roomID)
+	} else {
+		l.sendLocked(userID, l.roomInvitesMsgLocked(roomID))
+	}
+}
 
 // Destroyed implementa room.Registry: remove a sala, o código e a linha da lista.
 func (l *Lobby) Destroyed(roomID string) {
@@ -289,15 +348,33 @@ func (l *Lobby) Destroyed(roomID string) {
 		}
 	}
 	l.opt.Log.Info("sala destruída", "room_id", roomID)
+	l.dropRoomInvitesLocked(roomID)
+	for _, user := range freed {
+		if a, ok := l.accepting[user]; ok { // entrada por convite que não chegou a sentar: o aceite precisa de resposta
+			if !l.closing {
+				l.sendLocked(user, protocol.ErrorMsg(protocol.CodeInviteExpired, a.seq))
+			}
+			delete(l.accepting, user)
+		}
+		delete(l.seated, user)
+	}
 	if !l.closing {
 		// quem estava reservado/na sala volta ao lobby; o Released tardio da sala não acharia mais o índice
 		snap := l.snapshotLocked()
+		var moving []string
 		for _, user := range freed {
+			if mv, ok := l.moves[user]; ok && mv.fromRoom == roomID {
+				moving = append(moving, user) // segue para o convite em vez de voltar ao lobby
+				continue
+			}
 			if m := l.clients[user]; m != nil {
 				m.client.Send(snap)
 			}
 		}
 		l.touchPresenceLocked(freed...)
+		for _, user := range moving {
+			l.resolveMoveLocked(user)
+		}
 	}
 	if e.summary.Public {
 		l.broadcastLobbyLocked(protocol.RoomRemoved(roomID))

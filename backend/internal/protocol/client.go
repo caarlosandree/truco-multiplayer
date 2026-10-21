@@ -12,6 +12,10 @@ const (
 	TypeKick         = "kick"
 	TypeClaimForfeit = "claim_forfeit"
 	TypeSignal       = "signal"
+
+	TypeInvite            = "invite"
+	TypeInviteRespond     = "invite_respond"
+	TypeInviteAcceptToken = "invite_accept_token"
 )
 
 type Visibility string
@@ -84,4 +88,20 @@ type PlayCardPayload struct {
 
 type VotePayload struct {
 	Choice engine.VoteChoice `json:"choice"`
+}
+
+// InvitePayload convida por username (o diretório não expõe ids); Seat, se dado, é o lugar vazio escolhido.
+type InvitePayload struct {
+	Username string       `json:"username"`
+	Seat     *engine.Seat `json:"seat,omitempty"`
+}
+
+type InviteRespondPayload struct {
+	InviteID string `json:"inviteId"`
+	Accept   bool   `json:"accept"`
+}
+
+// InviteAcceptTokenPayload aceita pelo token do link do e-mail (só vale para o convidado).
+type InviteAcceptTokenPayload struct {
+	Token string `json:"token"`
 }

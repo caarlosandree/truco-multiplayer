@@ -1,4 +1,4 @@
-import { endReasonText, errorText, nextStake, signalText, stakeName, SIGNALS } from './labels'
+import { endReasonText, errorText, inviteStateText, nextStake, signalText, stakeName, SIGNALS } from './labels'
 
 it('traduz códigos conhecidos de HTTP, sala e regra', () => {
   expect(errorText('invalid_credentials')).toBe('Usuário ou senha incorretos.')
@@ -20,4 +20,14 @@ it('cobre os 6 sinais e os motivos de fim', () => {
   expect(SIGNALS.map((s) => s.id)).toEqual(['truco', 'boa', 'vamos', 'calma', 'desculpa', 'valeu'])
   expect(signalText('valeu')).toBe('Valeu!')
   expect(endReasonText('forfeit')).toBe('Encerrada por W.O.')
+})
+
+describe('inviteStateText', () => {
+  const base = { inviteId: 'i', username: 'bia', displayName: 'Bia', emailed: false }
+  it('um texto por estado', () => {
+    expect(inviteStateText({ ...base, state: 'accepted' })).toBe('aceitou')
+    expect(inviteStateText({ ...base, state: 'pending' })).toBe('aguardando…')
+    expect(inviteStateText({ ...base, state: 'pending', emailed: true })).toBe('e-mail enviado')
+    expect(inviteStateText({ ...base, state: 'declined' })).toBe('agora não')
+  })
 })

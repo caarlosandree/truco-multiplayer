@@ -129,6 +129,12 @@ func newMailer(cfg config.Config, logger *slog.Logger) mail.Mailer {
 	return mail.NewResend(cfg.ResendAPIKey, cfg.MailFrom)
 }
 
+// lobbyOptions monta as opções do lobby de produção; sem People ninguém poderia ser convidado (teste em main_test.go).
+func lobbyOptions(cfg config.Config, store room.MatchStore, authSvc *auth.Service, logger *slog.Logger) lobby.Options {
+	return lobby.Options{Timing: room.Timing(cfg.Game), MaxRooms: cfg.MaxRooms, Store: store, Clock: clock.Real{},
+		Rand: rand.Reader, Log: logger, People: lobby.NewPeople(authSvc)}
+}
+
 func serve(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger) error {
 	authSvc := auth.NewService(auth.Options{
 		Pool: pool, Mailer: newMailer(cfg, logger), Hasher: auth.NewHasher(auth.DefaultParams, 4),
@@ -142,8 +148,7 @@ func serve(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, logger *s
 	if err != nil {
 		return fmt.Errorf("recuperar partidas: %w", err)
 	}
-	lob := lobby.New(context.Background(), lobby.Options{Timing: room.Timing(cfg.Game), MaxRooms: cfg.MaxRooms,
-		Store: lobby.NewMatchStore(store), Clock: clock.Real{}, Rand: rand.Reader, Log: logger})
+	lob := lobby.New(context.Background(), lobbyOptions(cfg, lobby.NewMatchStore(store), authSvc, logger))
 	if err := lob.Restore(recovered); err != nil {
 		return fmt.Errorf("restaurar salas: %w", err)
 	}

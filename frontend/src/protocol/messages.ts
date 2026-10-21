@@ -36,6 +36,18 @@ export const TypeClaimForfeit = "claim_forfeit";
  * Tipos de mensagem de sala/social enviados pelo cliente. As de jogo usam engine.ActionKind.
  */
 export const TypeSignal = "signal";
+/**
+ * Tipos de mensagem de sala/social enviados pelo cliente. As de jogo usam engine.ActionKind.
+ */
+export const TypeInvite = "invite";
+/**
+ * Tipos de mensagem de sala/social enviados pelo cliente. As de jogo usam engine.ActionKind.
+ */
+export const TypeInviteRespond = "invite_respond";
+/**
+ * Tipos de mensagem de sala/social enviados pelo cliente. As de jogo usam engine.ActionKind.
+ */
+export const TypeInviteAcceptToken = "invite_accept_token";
 export type Visibility = string;
 export const VisibilityPublic: Visibility = "public";
 export const VisibilityPrivate: Visibility = "private";
@@ -81,6 +93,23 @@ export interface PlayCardPayload {
 }
 export interface VotePayload {
   choice: engine.VoteChoice;
+}
+/**
+ * InvitePayload convida por username (o diretório não expõe ids); Seat, se dado, é o lugar vazio escolhido.
+ */
+export interface InvitePayload {
+  username: string;
+  seat?: engine.Seat;
+}
+export interface InviteRespondPayload {
+  inviteId: string;
+  accept: boolean;
+}
+/**
+ * InviteAcceptTokenPayload aceita pelo token do link do e-mail (só vale para o convidado).
+ */
+export interface InviteAcceptTokenPayload {
+  token: string;
 }
 
 //////////
@@ -283,4 +312,49 @@ export interface PresenceUpdatedPayload {
 }
 export interface PresenceRemovedPayload {
   userId: string;
+}
+/**
+ * InviteRoom é a sala vista pelo convidado; o código nunca vai no convite.
+ */
+export interface InviteRoom {
+  id: string;
+  name: string;
+  visibility: Visibility;
+}
+export interface InviteFrom {
+  displayName: string;
+}
+/**
+ * InviteReceivedPayload é o aviso ao convidado online; não leva token nem e-mail de ninguém.
+ */
+export interface InviteReceivedPayload {
+  inviteId: string;
+  room: InviteRoom;
+  from: InviteFrom;
+  seat?: engine.Seat;
+  freeSeats: number /* int */;
+}
+/**
+ * InviteExpiredPayload retira o aviso do convidado (expirou, foi aceito por outro caminho ou deixou de valer).
+ */
+export interface InviteExpiredPayload {
+  inviteId: string;
+}
+export type InviteState = string;
+export const InvitePending: InviteState = "pending";
+export const InviteAccepted: InviteState = "accepted";
+export const InviteDeclined: InviteState = "declined";
+/**
+ * RoomInvite é uma linha da lista "Convites" da sala; convites expirados saem da lista.
+ */
+export interface RoomInvite {
+  inviteId: string;
+  username: string;
+  displayName: string;
+  state: InviteState;
+  emailed: boolean;
+  seat?: engine.Seat;
+}
+export interface RoomInvitesPayload {
+  invites: RoomInvite[];
 }

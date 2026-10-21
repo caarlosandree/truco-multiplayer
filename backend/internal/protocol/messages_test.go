@@ -109,3 +109,35 @@ func TestLobbySnapshotNeverNull(t *testing.T) {
 		t.Fatalf("snapshot = %s", raw)
 	}
 }
+
+func TestDecodeInvitePayloads(t *testing.T) {
+	var inv InvitePayload
+	if err := Decode(json.RawMessage(`{}`), &inv, "username"); err == nil {
+		t.Fatal("invite sem username deveria falhar")
+	}
+	if err := Decode(json.RawMessage(`{"username":"bia","seat":2}`), &inv, "username"); err != nil || inv.Username != "bia" || *inv.Seat != 2 {
+		t.Fatalf("invite = %+v, %v", inv, err)
+	}
+	var resp InviteRespondPayload
+	if err := Decode(json.RawMessage(`{"inviteId":"x"}`), &resp, "inviteId", "accept"); err == nil {
+		t.Fatal("invite_respond sem accept deveria falhar")
+	}
+	if err := Decode(json.RawMessage(`{"accept":true}`), &resp, "inviteId", "accept"); err == nil {
+		t.Fatal("invite_respond sem inviteId deveria falhar")
+	}
+	if err := Decode(json.RawMessage(`{"inviteId":"x","accept":false}`), &resp, "inviteId", "accept"); err != nil || resp.Accept {
+		t.Fatalf("invite_respond = %+v, %v", resp, err)
+	}
+	var tok InviteAcceptTokenPayload
+	if err := Decode(json.RawMessage(`{}`), &tok, "token"); err == nil {
+		t.Fatal("invite_accept_token sem token deveria falhar")
+	}
+	if err := Decode(json.RawMessage(`{"token":"abc"}`), &tok, "token"); err != nil || tok.Token != "abc" {
+		t.Fatalf("token = %+v, %v", tok, err)
+	}
+	for _, typ := range []string{TypeInvite, TypeInviteRespond, TypeInviteAcceptToken} {
+		if !KnownClientType(typ) {
+			t.Fatalf("%s deveria ser tipo conhecido", typ)
+		}
+	}
+}

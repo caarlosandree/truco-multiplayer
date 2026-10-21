@@ -28,6 +28,9 @@ var ClientMessages = []MessageSpec{
 	{string(engine.ActVote), reflect.TypeFor[VotePayload]()},
 	{TypeClaimForfeit, nil},
 	{TypeSignal, reflect.TypeFor[SignalPayload]()},
+	{TypeInvite, reflect.TypeFor[InvitePayload]()},
+	{TypeInviteRespond, reflect.TypeFor[InviteRespondPayload]()},
+	{TypeInviteAcceptToken, reflect.TypeFor[InviteAcceptTokenPayload]()},
 }
 
 var ServerMessages = []MessageSpec{
@@ -45,6 +48,9 @@ var ServerMessages = []MessageSpec{
 	{string(MsgPresenceSnapshot), reflect.TypeFor[PresenceSnapshotPayload]()},
 	{string(MsgPresenceUpdated), reflect.TypeFor[PresenceUpdatedPayload]()},
 	{string(MsgPresenceRemoved), reflect.TypeFor[PresenceRemovedPayload]()},
+	{string(MsgInviteReceived), reflect.TypeFor[InviteReceivedPayload]()},
+	{string(MsgInviteExpired), reflect.TypeFor[InviteExpiredPayload]()},
+	{string(MsgRoomInvites), reflect.TypeFor[RoomInvitesPayload]()},
 	{string(MsgError), reflect.TypeFor[ErrorPayload]()},
 }
 

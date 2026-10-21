@@ -146,3 +146,50 @@ type PresenceUpdatedPayload struct {
 type PresenceRemovedPayload struct {
 	UserID string `json:"userId"`
 }
+
+// InviteRoom é a sala vista pelo convidado; o código nunca vai no convite.
+type InviteRoom struct {
+	ID         string     `json:"id"`
+	Name       string     `json:"name"`
+	Visibility Visibility `json:"visibility"`
+}
+
+type InviteFrom struct {
+	DisplayName string `json:"displayName"`
+}
+
+// InviteReceivedPayload é o aviso ao convidado online; não leva token nem e-mail de ninguém.
+type InviteReceivedPayload struct {
+	InviteID  string       `json:"inviteId"`
+	Room      InviteRoom   `json:"room"`
+	From      InviteFrom   `json:"from"`
+	Seat      *engine.Seat `json:"seat,omitempty"`
+	FreeSeats int          `json:"freeSeats"`
+}
+
+// InviteExpiredPayload retira o aviso do convidado (expirou, foi aceito por outro caminho ou deixou de valer).
+type InviteExpiredPayload struct {
+	InviteID string `json:"inviteId"`
+}
+
+type InviteState string
+
+const (
+	InvitePending  InviteState = "pending"
+	InviteAccepted InviteState = "accepted"
+	InviteDeclined InviteState = "declined"
+)
+
+// RoomInvite é uma linha da lista "Convites" da sala; convites expirados saem da lista.
+type RoomInvite struct {
+	InviteID    string       `json:"inviteId"`
+	Username    string       `json:"username"`
+	DisplayName string       `json:"displayName"`
+	State       InviteState  `json:"state"`
+	Emailed     bool         `json:"emailed"`
+	Seat        *engine.Seat `json:"seat,omitempty"`
+}
+
+type RoomInvitesPayload struct {
+	Invites []RoomInvite `json:"invites"`
+}

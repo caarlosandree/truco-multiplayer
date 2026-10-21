@@ -8,24 +8,28 @@ import (
 
 type templateData struct {
 	Name, Link, LoginLink, ResetLink string
+	Inviter, Room                    string
 }
 
 type template struct {
-	subject string
+	subject *texttemplate.Template
 	text    *texttemplate.Template
 	html    *htmltemplate.Template
 }
 
 func newTemplate(subject, text, html string) template {
 	return template{
-		subject: subject,
+		subject: texttemplate.Must(texttemplate.New("subject").Parse(subject)),
 		text:    texttemplate.Must(texttemplate.New("text").Parse(text)),
 		html:    htmltemplate.Must(htmltemplate.New("html").Parse(html)),
 	}
 }
 
 func (t template) render(to string, data templateData) Message {
-	var text, html strings.Builder
+	var subject, text, html strings.Builder
+	if err := t.subject.Execute(&subject, data); err != nil {
+		panic(err)
+	}
 	// Os templates são fixos e testados; erro aqui é bug de programação.
 	if err := t.text.Execute(&text, data); err != nil {
 		panic(err)
@@ -33,7 +37,12 @@ func (t template) render(to string, data templateData) Message {
 	if err := t.html.Execute(&html, data); err != nil {
 		panic(err)
 	}
-	return Message{To: to, Subject: t.subject, Text: text.String(), HTML: html.String()}
+	return Message{To: to, Subject: headerSafe(subject.String()), Text: text.String(), HTML: html.String()}
+}
+
+// headerSafe tira quebras de linha do assunto: o nome vem do usuário e não pode injetar cabeçalhos.
+func headerSafe(s string) string {
+	return strings.Join(strings.Fields(s), " ")
 }
 
 var (
@@ -56,6 +65,10 @@ var (
 	passwordChangedTemplate = newTemplate("Sua senha do Truco foi alterada",
 		"Olá, {{.Name}}!\n\nA senha da sua conta no Truco acabou de ser alterada e as outras sessões foram encerradas.\nSe não foi você, use \"Esqueci minha senha\" imediatamente.\n",
 		`<p>Olá, {{.Name}}!</p><p>A senha da sua conta no Truco acabou de ser alterada e as outras sessões foram encerradas.</p><p>Se não foi você, use "Esqueci minha senha" imediatamente.</p>`)
+
+	roomInviteTemplate = newTemplate("{{.Inviter}} te chamou pra mesa no Truco",
+		"Olá!\n\n{{.Inviter}} te chamou pra mesa \"{{.Room}}\" no Truco.\nPara entrar:\n{{.Link}}\n\nO convite vale enquanto a sala tiver lugar. Este link é só seu: entre com a sua conta.\n",
+		`<p>Olá!</p><p>{{.Inviter}} te chamou pra mesa <strong>{{.Room}}</strong> no Truco.</p><p><a href="{{.Link}}">Entrar na mesa</a></p><p>O convite vale enquanto a sala tiver lugar. Este link é só seu: entre com a sua conta.</p>`)
 )
 
 func VerifyEmail(to, name, link string) Message {
@@ -76,4 +89,9 @@ func ForcedPasswordReset(to, name, link string) Message {
 
 func PasswordChanged(to, name string) Message {
 	return passwordChangedTemplate.render(to, templateData{Name: name})
+}
+
+// RoomInvite avisa quem estava offline que foi chamado para uma sala; o link leva o token do convite.
+func RoomInvite(to, inviterName, roomName, link string) Message {
+	return roomInviteTemplate.render(to, templateData{Inviter: inviterName, Room: roomName, Link: link})
 }

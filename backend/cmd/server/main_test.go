@@ -3,12 +3,16 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/auth"
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/config"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/db"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/enginetest"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/match"
@@ -172,5 +176,13 @@ func TestServeResumesInProgressMatchesAndMountsWebSocket(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "partidas retomadas") || !strings.Contains(out.String(), "count=1") {
 		t.Fatalf("log do boot não registra a partida retomada:\n%s", out.String())
+	}
+}
+
+// Sem People o lobby usa a implementação nula e ninguém consegue ser convidado: falha se a ligação com as contas sumir.
+func TestLobbyOptionsWirePeople(t *testing.T) {
+	opts := lobbyOptions(config.Config{}, nil, auth.NewService(auth.Options{}), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if got := fmt.Sprintf("%T", opts.People); got != "lobby.authPeople" {
+		t.Fatalf("People = %s, queria lobby.authPeople (cadastro de contas ligado)", got)
 	}
 }

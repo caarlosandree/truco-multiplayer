@@ -1,5 +1,5 @@
 import type { HandKind, VoteChoice } from '@/protocol/engine'
-import type { EndReason, PresenceEntry, SignalID } from '@/protocol/messages'
+import type { EndReason, PresenceEntry, RoomInvite, SignalID } from '@/protocol/messages'
 
 const ERRORS: Record<string, string> = {
   // HTTP / contas
@@ -107,4 +107,11 @@ export function presenceText(e: PresenceEntry): string {
   const where = e.privateRoom ? 'sala privada' : (e.roomName ?? '')
   const verb = e.status === 'waiting' ? 'esperando' : 'jogando'
   return where ? `${verb} · ${where}` : verb
+}
+
+/** Estado de uma linha da lista "Convites" da sala de espera. */
+export function inviteStateText(i: RoomInvite): string {
+  if (i.state === 'accepted') return 'aceitou'
+  if (i.state === 'declined') return 'agora não'
+  return i.emailed ? 'e-mail enviado' : 'aguardando…'
 }

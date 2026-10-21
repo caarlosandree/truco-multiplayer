@@ -17,7 +17,10 @@ export type ClientMessage =
   | { type: "request_raise"; seq?: number }
   | { type: "vote"; seq?: number; payload: m.VotePayload }
   | { type: "claim_forfeit"; seq?: number }
-  | { type: "signal"; seq?: number; payload: m.SignalPayload };
+  | { type: "signal"; seq?: number; payload: m.SignalPayload }
+  | { type: "invite"; seq?: number; payload: m.InvitePayload }
+  | { type: "invite_respond"; seq?: number; payload: m.InviteRespondPayload }
+  | { type: "invite_accept_token"; seq?: number; payload: m.InviteAcceptTokenPayload };
 
 export type ServerMessage =
   | { type: "hello"; payload: m.HelloPayload }
@@ -34,4 +37,7 @@ export type ServerMessage =
   | { type: "presence_snapshot"; payload: m.PresenceSnapshotPayload }
   | { type: "presence_updated"; payload: m.PresenceUpdatedPayload }
   | { type: "presence_removed"; payload: m.PresenceRemovedPayload }
+  | { type: "invite_received"; payload: m.InviteReceivedPayload }
+  | { type: "invite_expired"; payload: m.InviteExpiredPayload }
+  | { type: "room_invites"; payload: m.RoomInvitesPayload }
   | { type: "error"; payload: m.ErrorPayload };

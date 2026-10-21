@@ -88,6 +88,11 @@ func (l *Lobby) forgetLocked(userID string) {
 func (l *Lobby) DropUser(userID string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	l.dropSeq++
+	if l.lookups > 0 { // uma consulta de convite em andamento pode ter lido a conta ainda ativa
+		l.revoked[userID] = l.dropSeq
+	}
+	l.dropInvitesOfLocked(userID)
 	m := l.clients[userID]
 	if m == nil {
 		return

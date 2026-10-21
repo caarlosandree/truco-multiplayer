@@ -128,3 +128,22 @@ func TestTemplatesRenderLinksAndEscapeHTML(t *testing.T) {
 		t.Fatal("link de reset ausente em AccountExists")
 	}
 }
+
+func TestRoomInviteTemplate(t *testing.T) {
+	m := RoomInvite("bia@empresa.com", "Ana", "Mesa do RH", "https://truco.test/entrar-convite/tok")
+	if m.Subject != "Ana te chamou pra mesa no Truco" || m.To != "bia@empresa.com" {
+		t.Fatalf("assunto/destinatário = %q / %q", m.Subject, m.To)
+	}
+	for _, body := range []string{m.Text, m.HTML} {
+		if !strings.Contains(body, "Mesa do RH") || !strings.Contains(body, "https://truco.test/entrar-convite/tok") {
+			t.Fatalf("corpo sem sala ou link: %s", body)
+		}
+	}
+	esc := RoomInvite("bia@empresa.com", "Ana\r\nBcc: x@y.z", "<b>Mesa</b>", "https://truco.test/x")
+	if strings.ContainsAny(esc.Subject, "\r\n") {
+		t.Fatalf("assunto com quebra de linha: %q", esc.Subject)
+	}
+	if strings.Contains(esc.HTML, "<b>Mesa</b>") || !strings.Contains(esc.HTML, "&lt;b&gt;Mesa&lt;/b&gt;") {
+		t.Fatalf("HTML não escapou o nome da sala: %s", esc.HTML)
+	}
+}

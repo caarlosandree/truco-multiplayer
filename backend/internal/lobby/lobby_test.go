@@ -111,10 +111,12 @@ func (s *nopStore) AppendAction(context.Context, string, int, engine.Action, rep
 func (s *nopStore) Finish(context.Context, string) error          { return nil }
 func (s *nopStore) Abandon(context.Context, string, string) error { return nil }
 
-func newLobby(t *testing.T, maxRooms int) *lobby.Lobby {
+func newLobby(t *testing.T, maxRooms int) *lobby.Lobby { return newLobbyWith(t, maxRooms, nil) }
+
+func newLobbyWith(t *testing.T, maxRooms int, people lobby.People) *lobby.Lobby {
 	l := lobby.New(context.Background(), lobby.Options{Timing: timing, MaxRooms: maxRooms, Store: &nopStore{},
 		Clock: clock.NewManual(time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)), Rand: rand.NewChaCha8([32]byte{2}),
-		Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), People: people})
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()

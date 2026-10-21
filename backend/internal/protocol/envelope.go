@@ -40,6 +40,9 @@ const (
 	MsgPresenceSnapshot ServerMessageType = "presence_snapshot"
 	MsgPresenceUpdated  ServerMessageType = "presence_updated"
 	MsgPresenceRemoved  ServerMessageType = "presence_removed"
+	MsgInviteReceived   ServerMessageType = "invite_received"
+	MsgInviteExpired    ServerMessageType = "invite_expired"
+	MsgRoomInvites      ServerMessageType = "room_invites"
 	MsgError            ServerMessageType = "error"
 )
 
@@ -196,4 +199,17 @@ func MatchEnded(reason EndReason, winner *engine.Team, score [2]int) ServerMessa
 
 func SignalBroadcast(seat engine.Seat, id SignalID) ServerMessage {
 	return Message(MsgSignal, SignalBroadcastPayload{Seat: seat, ID: id})
+}
+
+func InviteReceived(p InviteReceivedPayload) ServerMessage { return Message(MsgInviteReceived, p) }
+
+func InviteExpired(inviteID string) ServerMessage {
+	return Message(MsgInviteExpired, InviteExpiredPayload{InviteID: inviteID})
+}
+
+func RoomInvites(invites []RoomInvite) ServerMessage {
+	if invites == nil {
+		invites = []RoomInvite{}
+	}
+	return Message(MsgRoomInvites, RoomInvitesPayload{Invites: invites})
 }
