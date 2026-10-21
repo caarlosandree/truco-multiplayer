@@ -4,7 +4,15 @@ import App from './App.vue'
 import './assets/fonts/fonts.css'
 import './styles.css'
 import { installSfx } from './audio/install'
+import { createAppRouter } from './router'
+import { installConnection } from './app/wire'
+import { installRoomNavigation } from './app/navigation'
 
-const app = createApp(App).use(createPinia())
+const app = createApp(App)
+app.use(createPinia())
+const router = createAppRouter()
+app.use(router)
 installSfx()
+installConnection(router)
+installRoomNavigation(router)
 app.mount('#app')

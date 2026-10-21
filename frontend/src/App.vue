@@ -1,5 +1,7 @@
+<script setup lang="ts">
+import AppShell from './components/AppShell.vue'
+</script>
+
 <template>
-  <main class="min-h-dvh">
-    Truco
-  </main>
+  <AppShell />
 </template>

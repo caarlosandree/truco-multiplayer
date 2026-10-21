@@ -100,7 +100,10 @@ export function installConnection(router: Router): void {
     (status) => {
       if (status !== 'unauthorized') return
       session.clear()
-      void router.push({ name: 'entrar', query: { volta: router.currentRoute.value.fullPath } })
+      const atual = router.currentRoute.value
+      // já em /entrar: não há para onde voltar (evita volta=/entrar em laço)
+      if (atual.name === 'entrar') return
+      void router.push({ name: 'entrar', query: { volta: atual.fullPath } })
     },
   )
 }

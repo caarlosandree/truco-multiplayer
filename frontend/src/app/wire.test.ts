@@ -1,5 +1,9 @@
 import { createPinia, setActivePinia } from 'pinia'
-import { dispatch } from './wire'
+import { createMemoryHistory } from 'vue-router'
+import { createAppRouter } from '@/router'
+import { useSessionStore } from '@/stores/session'
+import { authApi } from '@/api/auth'
+import { dispatch, installConnection } from './wire'
 import { useLobbyStore } from '@/stores/lobby'
 import { useRoomStore } from '@/stores/room'
 import { useGameStore } from '@/stores/game'
@@ -54,4 +58,21 @@ it('entrega cada tipo à store dona', () => {
   for (const spy of Object.values(spies)) {
     expect(spy).toHaveBeenCalledOnce()
   }
+})
+
+describe('sessão inválida (4003)', () => {
+  it('manda para /entrar com volta e não entra em laço estando em /entrar', async () => {
+    vi.spyOn(authApi, 'me').mockResolvedValue({ id: 'u1', username: 'a', email: '', displayName: 'A', isAdmin: false, createdAt: '' })
+    const router = createAppRouter(createMemoryHistory())
+    await router.push('/perfil')
+    useSessionStore().user = null // deslogado no wire: sem WebSocket real
+    installConnection(router)
+    useSessionStore().setConnection('unauthorized')
+    await vi.waitFor(() => expect(router.currentRoute.value.name).toBe('entrar'))
+    expect(router.currentRoute.value.query.volta).toBe('/perfil')
+    useSessionStore().setConnection('open')
+    useSessionStore().setConnection('unauthorized')
+    await new Promise((r) => setTimeout(r, 10))
+    expect(router.currentRoute.value.query.volta).toBe('/perfil')
+  })
 })
