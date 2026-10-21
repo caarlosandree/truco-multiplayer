@@ -54,23 +54,25 @@ function toggle(slot: number) {
         >✓</span>
       </button>
     </div>
-    <Botao
-      data-acao="queimar"
-      data-primaria
-      class="w-full"
-      :disabled="selected.length === 0 || bloqueado"
-      @click="game.burn([...selected])"
-    >
-      Queimar {{ selected.length > 0 ? `(${selected.length})` : '' }}
-    </Botao>
-    <Botao
-      data-acao="passar"
-      variant="secondary"
-      class="w-full"
-      :disabled="bloqueado"
-      @click="game.passBurn()"
-    >
-      Passar
-    </Botao>
+    <div class="flex flex-col gap-3 curto:flex-row curto:gap-2">
+      <Botao
+        data-acao="queimar"
+        data-primaria
+        class="w-full curto:w-auto curto:flex-1"
+        :disabled="selected.length === 0 || bloqueado"
+        @click="game.burn([...selected])"
+      >
+        Queimar {{ selected.length > 0 ? `(${selected.length})` : '' }}
+      </Botao>
+      <Botao
+        data-acao="passar"
+        variant="secondary"
+        class="w-full curto:w-auto curto:flex-1"
+        :disabled="bloqueado"
+        @click="game.passBurn()"
+      >
+        Passar
+      </Botao>
+    </div>
   </div>
 </template>

@@ -72,9 +72,10 @@ const balao = computed(() => {
   <div
     :data-posicao="props.position"
     :data-vez="active ? '' : undefined"
-    class="relative flex min-w-0 flex-col items-center gap-1.5 text-giz"
+    class="relative flex min-w-0 flex-col items-center gap-1 text-giz md:gap-1.5"
+    :class="props.position === 'bottom' ? 'max-md:flex-row max-md:flex-wrap max-md:justify-center max-md:gap-x-3' : 'max-md:flex-row max-md:flex-wrap max-md:items-center max-md:justify-center max-md:gap-x-1.5'"
   >
-    <div class="relative mb-1.5 max-w-full">
+    <div class="relative max-w-full max-md:mb-1 md:mb-1.5">
       <!-- só a placa esmaece quando a pessoa cai; o texto de estado fica em opacidade total -->
       <div
         class="rounded-placa px-3 py-1.5 text-center inset-ring-1 inset-ring-line/70"
@@ -147,7 +148,7 @@ const balao = computed(() => {
     </div>
     <div
       v-else-if="!isMe && cardCount > 0"
-      class="flex -space-x-4 max-md:-space-x-3"
+      class="flex -space-x-4 max-md:-space-x-4"
       role="img"
       :aria-label="`${cardCount} ${cardCount === 1 ? 'carta' : 'cartas'}`"
     >
@@ -161,7 +162,10 @@ const balao = computed(() => {
     </div>
 
     <!-- marca da dupla: contínuo = nós, pontilhado = eles; o rótulo diz a mesma coisa em texto -->
-    <p class="flex items-center justify-center gap-2 text-sm text-giz-muted">
+    <p
+      class="flex items-center justify-center gap-2 text-sm text-giz-muted"
+      :class="props.position === 'bottom' ? '' : 'max-md:basis-full'"
+    >
       <span
         aria-hidden="true"
         class="block h-0 w-10 border-t-3 max-md:w-6"

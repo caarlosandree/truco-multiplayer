@@ -69,6 +69,7 @@ const recolhe = computed(() => {
         :covered="c.covered"
         :label="c.label"
         size="md"
+        class="curto:max-md:w-10!"
       />
       <!-- fim de rodada: círculo de giz em volta da carta vencedora -->
       <svg

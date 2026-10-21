@@ -11,23 +11,25 @@ const bloqueado = computed(() => game.inflight || !game.online)
 <template>
   <div class="flex flex-col gap-3">
     <MaoParceiro />
-    <Botao
-      data-voto="play"
-      data-primaria
-      class="w-full"
-      :disabled="bloqueado"
-      @click="game.vote('play')"
-    >
-      Jogar
-    </Botao>
-    <Botao
-      data-voto="run"
-      variant="secondary"
-      class="w-full"
-      :disabled="bloqueado"
-      @click="game.vote('run')"
-    >
-      Correr
-    </Botao>
+    <div class="flex flex-col gap-3 curto:flex-row curto:gap-2">
+      <Botao
+        data-voto="play"
+        data-primaria
+        class="w-full curto:w-auto curto:flex-1"
+        :disabled="bloqueado"
+        @click="game.vote('play')"
+      >
+        Jogar
+      </Botao>
+      <Botao
+        data-voto="run"
+        variant="secondary"
+        class="w-full curto:w-auto curto:flex-1"
+        :disabled="bloqueado"
+        @click="game.vote('run')"
+      >
+        Correr
+      </Botao>
+    </div>
   </div>
 </template>

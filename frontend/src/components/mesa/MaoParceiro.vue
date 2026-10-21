@@ -23,6 +23,7 @@ const game = useGameStore()
         :card="h.card"
         :hidden="h.hidden"
         size="md"
+        class="curto:max-md:w-9!"
       />
     </div>
     <p class="text-sm text-(--painel-dica)">

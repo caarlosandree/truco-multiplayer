@@ -117,7 +117,7 @@ defineExpose({ raise })
     v-if="mode"
     ref="painel"
     data-painel
-    class="flex w-full flex-col gap-3 rounded-painel bg-(--painel-bg) p-4 text-(--painel-fg)"
+    class="flex w-full flex-col gap-3 rounded-painel bg-(--painel-bg) p-4 text-(--painel-fg) curto:gap-2 curto:p-3"
   >
     <p
       class="text-sm"

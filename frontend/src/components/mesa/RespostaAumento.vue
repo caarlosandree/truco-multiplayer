@@ -17,39 +17,41 @@ const back = computed(() => {
 <template>
   <div class="flex flex-col gap-3">
     <MaoParceiro />
-    <Botao
-      data-voto="accept"
-      data-primaria
-      aria-keyshortcuts="A"
-      class="w-full"
-      :disabled="bloqueado"
-      @click="game.vote('accept')"
-    >
-      Aceitar <TeclaDica tecla="A" />
-    </Botao>
-    <div class="flex gap-3">
+    <div class="flex flex-col gap-3 curto:flex-row curto:gap-2">
       <Botao
-        data-voto="run"
-        variant="secondary"
-        aria-keyshortcuts="R"
-        class="flex-1"
+        data-voto="accept"
+        data-primaria
+        aria-keyshortcuts="A"
+        class="w-full curto:w-auto curto:flex-[1.3]"
         :disabled="bloqueado"
-        @click="game.vote('run')"
+        @click="game.vote('accept')"
       >
-        Correr <TeclaDica tecla="R" />
+        Aceitar <TeclaDica tecla="A" />
       </Botao>
-      <Botao
-        v-if="back !== null"
-        data-voto="raise"
-        data-aposta
-        variant="aposta"
-        aria-keyshortcuts="U"
-        class="flex-1"
-        :disabled="bloqueado"
-        @click="game.vote('raise')"
-      >
-        {{ stakeName(back) }}! <TeclaDica tecla="U" />
-      </Botao>
+      <div class="flex gap-3 curto:contents">
+        <Botao
+          data-voto="run"
+          variant="secondary"
+          aria-keyshortcuts="R"
+          class="flex-1"
+          :disabled="bloqueado"
+          @click="game.vote('run')"
+        >
+          Correr <TeclaDica tecla="R" />
+        </Botao>
+        <Botao
+          v-if="back !== null"
+          data-voto="raise"
+          data-aposta
+          variant="aposta"
+          aria-keyshortcuts="U"
+          class="flex-1"
+          :disabled="bloqueado"
+          @click="game.vote('raise')"
+        >
+          {{ stakeName(back) }}! <TeclaDica tecla="U" />
+        </Botao>
+      </div>
     </div>
   </div>
 </template>

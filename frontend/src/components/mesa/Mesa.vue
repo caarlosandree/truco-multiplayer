@@ -194,7 +194,7 @@ onBeforeUnmount(() => {
       <!-- celular: placar e mesa rolam aqui dentro; minha mão e o painel ficam embaixo, sem se cobrir -->
       <div class="flex min-h-0 flex-1 flex-col max-lg:overflow-y-auto">
         <Placar />
-        <div class="relative mx-auto grid w-full max-w-[60rem] flex-1 grid-cols-3 grid-rows-[auto_1fr] content-start gap-x-2 gap-y-3 px-2 pt-7 md:grid-cols-[1fr_auto_1fr] md:gap-x-4 md:px-6 md:pt-6">
+        <div class="relative mx-auto grid w-full max-w-[60rem] flex-1 grid-cols-3 grid-rows-[auto_1fr] content-start gap-x-2 gap-y-1.5 px-2 pt-5 curto:pt-4 md:gap-y-3 md:grid-cols-[1fr_auto_1fr] md:gap-x-4 md:px-6 md:pt-6">
           <!-- o oval da mesa, igual ao da sala de espera: só decoração, atrás dos lugares -->
           <div
             aria-hidden="true"
@@ -208,14 +208,14 @@ onBeforeUnmount(() => {
             :class="SLOT[o.position as Exclude<RelativePosition, 'bottom'>]"
             class="max-md:justify-self-center"
           />
-          <div class="relative col-span-3 row-start-2 place-self-center py-2 md:col-span-1 md:col-start-2">
+          <div class="relative col-span-3 row-start-2 place-self-center py-1 md:py-2 md:col-span-1 md:col-start-2">
             <Centro />
           </div>
         </div>
       </div>
       <div
         ref="base"
-        class="flex shrink-0 flex-col items-center gap-3 px-2 pt-2 pb-3 md:pb-6"
+        class="flex shrink-0 flex-col items-center gap-3 px-2 pt-1 pb-2 curto:pb-1 md:pt-2 md:pb-6"
       >
         <AssentoMesa
           :seat="game.view.seat"
@@ -438,6 +438,15 @@ onBeforeUnmount(() => {
     --voo: 6rem;
     width: 9.5rem;
     height: 9.5rem;
+  }
+}
+@media (max-width: 767px) and (max-height: 740px) {
+  .mesa-vaza {
+    --dx: 2.1rem;
+    --dy: 1.55rem;
+    --voo: 5rem;
+    width: 8rem;
+    height: 6.9rem;
   }
 }
 /* a vaza assenta num círculo de giz apagado: o lugar das cartas fica evidente mesmo vazio */

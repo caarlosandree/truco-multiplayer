@@ -36,10 +36,10 @@ const alt = computed(() => {
 const SIZES = {
   xs: 'w-8 max-md:w-6',
   sm: 'w-(--carta-largura-vira)',
-  md: 'w-(--carta-largura-mesa) max-md:w-13',
-  lg: 'w-(--carta-largura-mao) max-md:w-22',
+  md: 'w-(--carta-largura-mesa) max-md:w-13 curto:max-md:w-11',
+  lg: 'w-(--carta-largura-mao) max-md:w-22 curto:max-md:w-18',
   // mão compacta (celular, painel grande aberto): a mesma largura no desktop, vaza no celular
-  lgc: 'w-(--carta-largura-mao) max-md:w-13',
+  lgc: 'w-(--carta-largura-mao) max-md:w-13 curto:max-md:w-10',
 } as const
 </script>
 

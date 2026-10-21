@@ -39,10 +39,10 @@ const marcas = computed<{ marca: Marca; texto: string }[]>(() => {
 <template>
   <div
     v-if="v"
-    class="flex flex-col items-center gap-2 md:gap-3"
+    class="flex flex-col items-center gap-2 curto:gap-1 md:gap-3"
   >
     <div class="flex items-center justify-center gap-3 md:gap-5">
-      <div class="flex w-16 flex-col items-center gap-1 md:w-28">
+      <div class="flex w-[4.5rem] flex-col items-center gap-1 md:w-28">
         <div
           v-if="vira !== undefined"
           :key="vira"
@@ -65,9 +65,9 @@ const marcas = computed<{ marca: Marca; texto: string }[]>(() => {
         </div>
         <p
           v-if="manilha !== undefined"
-          class="text-center text-sm leading-tight md:whitespace-nowrap"
+          class="text-center text-xs leading-tight md:text-sm md:whitespace-nowrap"
         >
-          <span class="text-giz-muted">vira · manilha</span>
+          <span class="text-giz-muted">vira ·<br class="md:hidden"> manilha</span>
           <strong
             class="relative ml-1 font-display text-valor"
           >{{ rankLabel(manilha, prefs.deck) }}<svg
@@ -86,7 +86,7 @@ const marcas = computed<{ marca: Marca; texto: string }[]>(() => {
         </p>
       </div>
       <Vaza />
-      <div class="flex w-16 flex-col items-center gap-1 text-xs leading-snug text-giz-muted md:w-28">
+      <div class="flex w-[4.5rem] flex-col items-center gap-1 text-xs leading-snug text-giz-muted md:w-28">
         <span
           class="relative block h-8 w-6"
           aria-hidden="true"
@@ -117,7 +117,7 @@ const marcas = computed<{ marca: Marca; texto: string }[]>(() => {
       <li
         v-for="(m, i) in marcas"
         :key="i"
-        class="grid size-7 place-items-center rounded-full"
+        class="grid size-7 place-items-center rounded-full curto:size-6"
         :class="m.marca === 'aberta' ? 'border-2 border-dashed border-giz-muted/60' : 'bg-lousa text-giz inset-ring-1 inset-ring-line'"
         :data-marca="m.marca"
       >

@@ -282,6 +282,9 @@
   background-color: var(--s-felt);
   background-image: var(--textura-feltro);
 }
+/* celular em pé e baixo (ex.: 375×667): a mesa compacta cartas e espaços para caber inteira */
+@custom-variant curto (@media (max-width: 1023px) and (max-height: 740px));
+
 @utility textura-lousa {
   background-color: var(--s-lousa);
   background-image: var(--textura-lousa);

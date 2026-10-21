@@ -14,7 +14,7 @@ const emit = defineEmits<{ play: [slot: number] }>()
     data-mao
     role="group"
     aria-label="Sua mão"
-    :class="props.compacta ? 'max-md:[--mao-altura:4.9rem]' : 'max-md:[--mao-altura:8rem]'"
+    :class="props.compacta ? 'max-md:[--mao-altura:4.9rem] curto:max-md:[--mao-altura:3.7rem]' : 'max-md:[--mao-altura:8rem] curto:max-md:[--mao-altura:6.6rem]'"
     class="relative flex min-h-(--mao-altura) justify-center gap-3 [--mao-altura:7.7rem] md:mb-6"
   >
     <div
