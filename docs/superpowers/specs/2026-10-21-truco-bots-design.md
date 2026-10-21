@@ -125,7 +125,7 @@ Todas as que um jogador toma: carta do corte/escolha do dealer (`choose_card`), 
 
 ### 5.5 Meta medida de força
 
-- **Bot simples fixado** (para a meta não depender de um adversário móvel): é exatamente a política de §5.3 — joga a carta mais fraca que ganha a rodada, senão a mais fraca; nunca cobre; pede truco só com manilha; aceita com manilha ou duas cartas ≥ 3; na mão de 11 joga com manilha; nunca queima; nunca blefa; não usa sinais. Ele não é ajustado depois de escrito.
+- **Bot simples fixado** (para a meta não depender de um adversário móvel): é exatamente a política de §5.3 — joga a carta mais fraca que ganha a rodada, senão a mais fraca; nunca cobre; pede truco só com manilha; aceita com manilha ou duas cartas de rank A, 2 ou 3; na mão de 11 joga com manilha; nunca queima; nunca blefa; não usa sinais. Ele não é ajustado depois de escrito.
 - Teste/benchmark determinístico (seeds fixas): **dupla de bots fortes contra dupla de bots simples, ≥ 75% das partidas em 400 partidas** (*decisão minha* nos números). É **meta de aceite**: se não fechar após iterar no bot forte, o builder para e reporta ao usuário com o número obtido, em vez de baixar a meta ou mexer no bot simples.
 - Roda num alvo próprio (`make bot-bench`), fora do `go test` padrão. O CI roda uma versão reduzida que **bloqueia o merge**: forte vence o simples com margem estatística (p < 0,01) em um número pequeno de partidas. Como as seeds são fixas, o resultado é determinístico (não flaka): a margem é uma régua de projeto, não um teste estatístico por execução, e qualquer mudança no bot forte pode, legitimamente, reprovar o alvo — aí se corrige o bot, não a régua.
 - Além disso, o usuário joga e julga; o design considera isso critério de aceite.
