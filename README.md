@@ -38,11 +38,16 @@
 - [API HTTP](#-api-http)
 - [Estrutura do repositório](#-estrutura-do-repositório)
 - [Como começar](#-como-começar)
+  - [Subir o backend](#subir-o-backend)
+  - [Rodando o frontend](#rodando-o-frontend)
+  - [Comandos disponíveis](#comandos-disponíveis)
   - [Variáveis de ambiente](#variáveis-de-ambiente)
 - [Usando o engine](#-usando-o-engine)
 - [Testes](#-testes)
 - [Decisões de design](#-decisões-de-design)
 - [Convenções do projeto](#-convenções-do-projeto)
+- [Acabamento visual](#-acabamento-visual)
+- [Créditos de assets](#-créditos-de-assets)
 - [Documentação de projeto](#-documentação-de-projeto)
 - [Contribuindo](#-contribuindo)
 - [Licença](#-licença)
@@ -60,7 +65,7 @@ O **Truco Multiplayer** é uma implementação completa do Truco paulista (com r
 | Camada | Tecnologia |
 |---|---|
 | Motor de regras | Go puro (somente biblioteca padrão) |
-| Servidor | Go `net/http` + [`coder/websocket`](https://github.com/coder/websocket) + `log/slog` *(planejado)* |
+| Servidor | Go `net/http` + [`coder/websocket`](https://github.com/coder/websocket) + `log/slog` |
 | Persistência | PostgreSQL 18 + pgx + sqlc + goose |
 | Frontend | Vue 3 (Composition API, `<script setup>`), TypeScript, Pinia, Vue Router, TailwindCSS v4, Vite |
 | Tipos compartilhados | [`tygo`](https://github.com/gzuidhof/tygo) (Go → TypeScript) |
@@ -83,7 +88,7 @@ O projeto foi decomposto em quatro sub-projetos, cada um com spec, plano e imple
 
 ### Decisões já tomadas para as próximas etapas
 
-- **Interface (Spec 4a):** as páginas de verificação de e-mail e de redefinição de senha fazem o `POST` dos tokens recebidos por e-mail.
+- **Interface (Spec 4b):** histórico, ranking, replay e painel admin consomem a API HTTP já existente (`/api/...`), reaproveitando o cromo, os tokens e o `AppShell` da 4a; o replay usa o pacote `replay` do servidor.
 
 ---
 
@@ -464,14 +469,24 @@ truco-multiplayer/
 │       ├── lobby/                     # registro de salas e conexões, lista ao vivo, restore
 │       └── transport/ws/              # handler /ws: autenticação, conexão, limites
 ├── frontend/
-│   └── src/protocol/                  # tipos TypeScript GERADOS (não editar à mão)
+│   ├── src/
+│   │   ├── protocol/                  # tipos TypeScript GERADOS (não editar à mão)
+│   │   ├── api/ ws/ app/              # cliente HTTP, cliente WebSocket e ligação com as stores/rotas
+│   │   ├── stores/                    # Pinia: sessão, lobby, sala, jogo, preferências, toasts
+│   │   ├── game/ audio/               # diretor de eventos, rótulos, atalhos; sons
+│   │   ├── components/ views/         # UI (conta, lobby, sala, mesa, ui) e telas
+│   │   └── assets/                    # cartas, sons e fontes (cada pasta com LICENSES.md)
+│   └── e2e/                           # Playwright: quatro navegadores jogam uma partida
 ├── docs/superpowers/
 │   ├── specs/                         # especificações de design aprovadas
 │   └── plans/                         # planos de implementação
+├── scripts/
+│   ├── e2e.sh                         # stack isolada (compose truco-e2e) + Playwright
+│   └── cards/ sfx/                    # geradores dos assets de cartas e sons
 ├── .env.example                       # variáveis documentadas (copie para .env)
 ├── .github/workflows/ci.yml           # vet, test -race com Postgres e diff dos arquivos gerados
 ├── docker-compose.yml                 # Postgres 18 para desenvolvimento
-├── Makefile                           # test, test-short, gen-types, dev-db, run, migrate, gen-sql
+├── Makefile                           # test, test-short, gen-types, dev-db, run, migrate, gen-sql, web-*, e2e
 └── LICENSE
 ```
 
@@ -507,18 +522,25 @@ cd backend && go run ./cmd/server promote-admin ana@empresa.com.br
 
 ### Rodando o frontend
 
-Desenvolvimento (precisa do Docker só para o Postgres):
+No `.env`, `APP_BASE_URL` define a origem aceita pelo `/ws` (o `.env` vale mais que variáveis exportadas no shell, porque o `make run` o carrega por último):
+
+| Modo | `APP_BASE_URL` | `STATIC_DIR` | Onde abrir |
+|---|---|---|---|
+| Desenvolvimento (Vite) | `http://localhost:5173` | vazio | `http://localhost:5173` |
+| Produção local (Go serve o build) | `http://localhost:8080` | `../frontend/dist` (relativo a `backend/`) ou caminho absoluto | `http://localhost:8080` |
+
+Desenvolvimento (o Docker é só para o Postgres):
 
 ```bash
-make dev-db                                   # Postgres 18
-APP_BASE_URL=http://localhost:5173 make run   # backend em :8080 (os links de e-mail apontam para o Vite)
-make web-install                              # pnpm install --frozen-lockfile
-make web-dev                                  # Vite em http://localhost:5173 (proxy para :8080)
+make dev-db          # Postgres 18
+make run             # backend em :8080, com APP_BASE_URL=http://localhost:5173 no .env
+make web-install     # pnpm install --frozen-lockfile
+make web-dev         # Vite em http://localhost:5173 (proxy para :8080)
 ```
 
 Se a porta 5432 estiver ocupada, suba o banco com `POSTGRES_PORT=5433 make dev-db` e ajuste a `DATABASE_URL` do `.env` para a mesma porta.
 
-Produção: `make web-build` gera `frontend/dist`; o backend serve esse diretório com `STATIC_DIR=frontend/dist`.
+Produção local: rode `make web-build`, troque no `.env` `APP_BASE_URL=http://localhost:8080` e `STATIC_DIR=../frontend/dist`, e rode `make run`. O servidor entrega o `index.html` (SPA) e os assets de `/assets/` em `http://localhost:8080`.
 
 Testes:
 
@@ -526,25 +548,6 @@ Testes:
 |---|---|
 | `make web-test` | `typecheck` + `lint` + testes unitários (Vitest) do frontend |
 | `make e2e` | Sobe um Postgres isolado (projeto compose `truco-e2e`, porta 55432) e o backend servindo o build em `:8090`, e roda o Playwright com **quatro navegadores jogando uma partida** e retomando após reload. Requer Docker, Go, Node 24, pnpm e o **Google Chrome do sistema** (o Playwright usa `channel: 'chrome'`, não baixa navegador). Leva cerca de 6 minutos |
-
-### Acabamento visual
-
-A direção visual é **"Lousa e tentos"**: o placar é a lousa do bar, com tentos riscados a giz ao lado do feltro verde; o resto da interface é quieto (Atkinson Hyperlegible Next, sem gradientes decorativos). Kalam, o laranja e o movimento de giz aparecem só no placar e no pedido de truco; vermelho é só perigo. A mesa é sempre escura, o tema claro/escuro troca apenas o cromo. Detalhes, tokens, contrastes medidos e movimento: [`docs/superpowers/specs/2026-10-20-truco-frontend-design-brief.md`](docs/superpowers/specs/2026-10-20-truco-frontend-design-brief.md).
-
-A revisão final (auditoria visual de todas as telas, claro/escuro, 1440×900, 1366×768, 375×812 e 375×667 na mesa) ajustou:
-
-- **Mão de 11 em 375×812:** os botões "Jogar" e "Correr" ficam lado a lado em qualquer largura; empilhados, o painel (mão do parceiro + botões) comprimia o centro da mesa e a placa "Você" cobria a legenda da vira.
-- **Sem outras regressões:** contas, lobby (vazio/cheio, criar sala, código), sala de espera, mesa (minha vez, vez de outro, vaza com coberta, truco, resposta, Mão de 11, Mão de Ferro, corte, queima), sinais, banner de W.O. e fim de partida passaram na auditoria; `detect.mjs` do impeccable não apontou padrões ruins em `src/components` e `src/views`.
-- **Acessibilidade (teclado):** cadastro → login → lobby → criar sala → "Estou pronto" só com teclado; foco preso e devolvido ao gatilho nos modais; `1`–`3`, `C`, `T`, `A`/`R`/`U` e `Esc` na mesa; `prefers-reduced-motion` zera as durações; tema escuro conferido.
-- **Limite conhecido:** em celulares retrato com painel alto (corte e queima), o centro da mesa rola numa região própria; em janelas 768–1023 px baixas a mesa também rola.
-
-### Créditos de assets
-
-Só entram assets com licença livre (domínio público, CC0 ou OFL), todos servidos localmente (CSP sem recursos externos):
-
-- Cartas: [`frontend/src/assets/cards/frances/LICENSES.md`](frontend/src/assets/cards/frances/LICENSES.md) e [`frontend/src/assets/cards/espanhol/LICENSES.md`](frontend/src/assets/cards/espanhol/LICENSES.md)
-- Sons: [`frontend/src/assets/sfx/LICENSES.md`](frontend/src/assets/sfx/LICENSES.md)
-- Fontes (Atkinson Hyperlegible Next e Kalam): [`frontend/src/assets/fonts/LICENSES.md`](frontend/src/assets/fonts/LICENSES.md)
 
 ### Comandos disponíveis
 
@@ -557,6 +560,11 @@ Só entram assets com licença livre (domínio público, CC0 ou OFL), todos serv
 | `make run` | Aplica as migrations e sobe o servidor em `:8080` |
 | `make migrate` | Aplica as migrations pendentes e encerra |
 | `make gen-sql` | Regenera `backend/internal/db/dbgen` a partir de `queries/` (sqlc v1.31.1) |
+| `make web-install` | `pnpm install --frozen-lockfile` no `frontend/` |
+| `make web-dev` | Vite em `http://localhost:5173` |
+| `make web-build` | `vue-tsc` + build de produção em `frontend/dist` |
+| `make web-test` | `typecheck` + `lint` + testes do frontend |
+| `make e2e` | Teste ponta a ponta com quatro navegadores (Docker isolado, Chrome do sistema; ~6 min) |
 
 Outros comandos úteis:
 
@@ -693,6 +701,29 @@ O detector de vazamento foi validado por **mutação**: ao introduzir de propós
 - **Branches:** `main` (estável), `staging` (integração) e `feat/*` (funcionalidades).
 - **Engine:** proibido importar qualquer coisa fora da biblioteca padrão em `internal/engine`.
 - **Tipos gerados:** nunca edite `frontend/src/protocol/*.ts` à mão; rode `make gen-types`.
+
+---
+
+## 🎨 Acabamento visual
+
+A direção visual é **"Lousa e tentos"**: o placar é a lousa do bar, com tentos riscados a giz ao lado do feltro verde; o resto da interface é quieto (Atkinson Hyperlegible Next, sem gradientes decorativos). Kalam, o laranja e o movimento de giz aparecem só no placar, nos tentos e nos anúncios da mesa (como o pedido de truco); vermelho é só perigo. A mesa é sempre escura, o tema claro/escuro troca apenas o cromo. Detalhes, tokens, contrastes medidos e movimento: [`docs/superpowers/specs/2026-10-20-truco-frontend-design-brief.md`](docs/superpowers/specs/2026-10-20-truco-frontend-design-brief.md).
+
+A revisão final (auditoria visual de todas as telas, claro/escuro, 1440×900, 1366×768, 375×812 e 375×667 na mesa) ajustou:
+
+- **Mão de 11 em 375×812:** os botões "Jogar" e "Correr" ficam lado a lado em qualquer largura; empilhados, o painel (mão do parceiro + botões) comprimia o centro da mesa e a placa "Você" cobria a legenda da vira.
+- **Sem outras regressões:** contas, lobby (vazio/cheio, criar sala, código), sala de espera, mesa (minha vez, vez de outro, vaza com coberta, truco, resposta, Mão de 11, Mão de Ferro, corte, queima), sinais, banner de W.O. e fim de partida passaram na auditoria; `detect.mjs` do impeccable não apontou padrões ruins em `src/components` e `src/views`.
+- **Acessibilidade (teclado):** cadastro → login → lobby → criar sala → "Estou pronto" só com teclado; foco preso e devolvido ao gatilho nos modais; `1`–`3`, `C`, `T`, `A`/`R`/`U` e `Esc` na mesa; `prefers-reduced-motion` zera as durações; tema escuro conferido.
+- **Limite conhecido:** em celulares retrato com painel alto (corte e queima), o centro da mesa rola numa região própria; em janelas 768–1023 px baixas a mesa também rola.
+
+---
+
+## 🙏 Créditos de assets
+
+Só entram assets com licença livre (domínio público, CC0 ou OFL), todos servidos localmente (CSP sem recursos externos):
+
+- Cartas: [`frontend/src/assets/cards/frances/LICENSES.md`](frontend/src/assets/cards/frances/LICENSES.md) e [`frontend/src/assets/cards/espanhol/LICENSES.md`](frontend/src/assets/cards/espanhol/LICENSES.md)
+- Sons: [`frontend/src/assets/sfx/LICENSES.md`](frontend/src/assets/sfx/LICENSES.md)
+- Fontes (Atkinson Hyperlegible Next e Kalam): [`frontend/src/assets/fonts/LICENSES.md`](frontend/src/assets/fonts/LICENSES.md)
 
 ---
 
