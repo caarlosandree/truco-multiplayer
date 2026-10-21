@@ -184,6 +184,24 @@ type registry struct {
 	updates   []room.Summary
 	released  []string
 	destroyed int
+	seated    []string
+}
+
+func (r *registry) Seated(_, user string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.seated = append(r.seated, user)
+}
+
+func (r *registry) wasSeated(user string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, u := range r.seated {
+		if u == user {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *registry) Update(s room.Summary) {

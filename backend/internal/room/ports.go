@@ -39,6 +39,7 @@ type Registry interface {
 	Update(s Summary)               // o estado público da sala mudou
 	Released(roomID, userID string) // o usuário deixou de pertencer à sala
 	Destroyed(roomID string)        // a sala fechou e não aceita mais membros
+	Seated(roomID, userID string)   // o usuário ocupou um assento (chamado antes do publish)
 }
 
 // Summary é o que o lobby precisa saber da sala.

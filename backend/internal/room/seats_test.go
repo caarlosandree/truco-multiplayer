@@ -147,3 +147,85 @@ func TestDisconnectAndReconnectUpdateSeat(t *testing.T) {
 		t.Fatal("reconexão deve aparecer no room_state")
 	}
 }
+
+func TestJoinByInviteFallsBackToFreeSeat(t *testing.T) {
+	h := newHarness(t)
+	h.join(0)
+	h.join(1)
+	h.join(2) // ocupa o lugar 2
+	two := engine.Seat(2)
+	h.send(room.Join{UserID: "u9", DisplayName: "Eva", Seat: &two, Seq: 5, Invite: true})
+	st := last[protocol.RoomStatePayload](t, h.out, "u9", protocol.MsgRoomState)
+	if st.YourSeat != 3 || !h.reg.wasSeated("u9") || h.reg.wasReleased("u9") {
+		t.Fatalf("convite deve cair no primeiro livre e avisar Seated: %+v", st)
+	}
+}
+
+func TestJoinByInviteOnFullRoomExpires(t *testing.T) {
+	h := newHarness(t)
+	h.seatAll()
+	h.send(room.Join{UserID: "u9", DisplayName: "Eva", Seq: 7, Invite: true})
+	e := last[protocol.ErrorPayload](t, h.out, "u9", protocol.MsgError)
+	if e.Code != protocol.CodeInviteExpired || e.Seq != 7 || !h.reg.wasReleased("u9") || h.reg.wasSeated("u9") {
+		t.Fatalf("erro = %+v", e)
+	}
+	h.send(room.Join{UserID: "u8", DisplayName: "Fê", Seq: 8})
+	if lastCode(t, h.out, "u8") != protocol.CodeRoomFull {
+		t.Fatal("sem Invite continua room_full")
+	}
+}
+
+func TestJoinByInviteInMatchExpires(t *testing.T) {
+	h := newHarness(t)
+	h.startMatch()
+	h.send(room.Join{UserID: "u9", DisplayName: "Eva", Seq: 3, Invite: true})
+	if lastCode(t, h.out, "u9") != protocol.CodeInviteExpired || !h.reg.wasReleased("u9") {
+		t.Fatal("sala em jogo deve expirar o convite")
+	}
+}
+
+func TestVacate(t *testing.T) {
+	t.Run("em espera sai e é liberado", func(t *testing.T) {
+		h := newHarness(t)
+		h.join(0)
+		h.join(1)
+		h.send(room.Vacate{UserID: "u1"})
+		if last[protocol.LeftRoomPayload](t, h.out, "u1", protocol.MsgLeftRoom).Reason != protocol.LeftLeft || !h.reg.wasReleased("u1") {
+			t.Fatal("deve sair com left_room{left} e ser liberado")
+		}
+		if last[protocol.RoomStatePayload](t, h.out, "u0", protocol.MsgRoomState).Seats[1] != nil {
+			t.Fatal("assento deve esvaziar")
+		}
+	})
+	t.Run("em jogo recusa", func(t *testing.T) {
+		h := newHarness(t)
+		h.startMatch()
+		n := 0
+		h.send(room.Vacate{UserID: "u1", Refused: func() { n++ }})
+		if n != 1 || h.reg.wasReleased("u1") || last[protocol.RoomStatePayload](t, h.out, "u0", protocol.MsgRoomState).Seats[1] == nil {
+			t.Fatalf("Refused=%d, assento deve continuar", n)
+		}
+	})
+	t.Run("não sentado é liberado", func(t *testing.T) {
+		h := newHarness(t)
+		h.join(0)
+		h.send(room.Vacate{UserID: "u7"})
+		if !h.reg.wasReleased("u7") {
+			t.Fatal("deve liberar")
+		}
+	})
+}
+
+func TestClosedRoomRejectsInviteAndVacate(t *testing.T) {
+	h := newHarness(t)
+	h.join(0)
+	h.send(room.Vacate{UserID: "u0"}) // última pessoa sai: a sala fecha
+	h.send(room.Join{UserID: "u9", DisplayName: "Eva", Seq: 4, Invite: true})
+	if lastCode(t, h.out, "u9") != protocol.CodeInviteExpired || !h.reg.wasReleased("u9") {
+		t.Fatal("convite para sala fechada deve expirar e liberar")
+	}
+	h.send(room.Vacate{UserID: "u8"})
+	if !h.reg.wasReleased("u8") {
+		t.Fatal("Vacate em sala fechada deve liberar")
+	}
+}

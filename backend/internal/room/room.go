@@ -70,6 +70,8 @@ func (r *Room) Handle(ctx context.Context, m Msg) {
 	switch m := m.(type) {
 	case Join:
 		r.join(m)
+	case Vacate:
+		r.vacate(m)
 	case Command:
 		r.command(m)
 	case Connected:
@@ -93,8 +95,14 @@ func (r *Room) Handle(ctx context.Context, m Msg) {
 func (r *Room) rejectClosed(m Msg) {
 	switch m := m.(type) {
 	case Join:
-		r.opt.Out.Send(m.UserID, protocol.ErrorMsg(protocol.CodeRoomNotFound, m.Seq))
+		code := protocol.CodeRoomNotFound
+		if m.Invite {
+			code = protocol.CodeInviteExpired
+		}
+		r.opt.Out.Send(m.UserID, protocol.ErrorMsg(code, m.Seq))
 		r.opt.Registry.Released(r.opt.ID, m.UserID)
+	case Vacate:
+		r.opt.Registry.Released(r.opt.ID, m.UserID) // o lobby não pode esperar para sempre
 	case Command:
 		r.opt.Out.Send(m.UserID, protocol.ErrorMsg(protocol.CodeRoomNotFound, m.Message.Seq))
 	}

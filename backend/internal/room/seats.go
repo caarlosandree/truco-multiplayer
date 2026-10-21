@@ -57,10 +57,14 @@ func (r *Room) join(m Join) {
 		r.opt.Registry.Released(r.opt.ID, m.UserID)
 	}
 	if r.status != protocol.RoomWaiting {
-		fail(protocol.CodeMatchInProgress)
+		if m.Invite {
+			fail(protocol.CodeInviteExpired)
+		} else {
+			fail(protocol.CodeMatchInProgress)
+		}
 		return
 	}
-	seat, code := r.pickSeat(m.Seat)
+	seat, code := r.pickSeat(m.Seat, m.Invite)
 	if code != "" {
 		fail(code)
 		return
@@ -69,11 +73,30 @@ func (r *Room) join(m Join) {
 	if r.members() == 1 {
 		r.host = seat
 	}
+	r.opt.Registry.Seated(r.opt.ID, m.UserID)
 	r.publish()
 }
 
-func (r *Room) pickSeat(want *engine.Seat) (engine.Seat, string) {
+// vacate tira da sala de espera quem vai aceitar um convite para outra sala.
+func (r *Room) vacate(m Vacate) {
+	seat, ok := r.seatOf(m.UserID)
+	switch {
+	case !ok:
+		r.opt.Registry.Released(r.opt.ID, m.UserID)
+	case r.status != protocol.RoomWaiting:
+		if m.Refused != nil {
+			m.Refused()
+		}
+	default:
+		r.removeSeat(seat, protocol.LeftLeft)
+	}
+}
+
+func (r *Room) pickSeat(want *engine.Seat, invite bool) (engine.Seat, string) {
 	if r.members() == 4 {
+		if invite {
+			return 0, protocol.CodeInviteExpired
+		}
 		return 0, protocol.CodeRoomFull
 	}
 	if want != nil {
@@ -81,6 +104,9 @@ func (r *Room) pickSeat(want *engine.Seat) (engine.Seat, string) {
 			return 0, protocol.CodeBadRequest
 		}
 		if r.seats[*want] != nil {
+			if invite {
+				return r.freeSeat(), ""
+			}
 			return 0, protocol.CodeSeatTaken
 		}
 		return *want, ""

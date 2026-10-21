@@ -14,6 +14,12 @@ const (
 	CodeForfeitUnavailable = "forfeit_unavailable"
 	CodeTooManyRooms       = "too_many_rooms"
 	CodeRateLimited        = "rate_limited"
+	CodeInviteNotFound     = "invite_not_found"
+	CodeInviteExpired      = "invite_expired"
+	CodeInviteNotYours     = "invite_not_yours"
+	CodeInviteePlaying     = "invitee_playing"
+	CodeCannotInviteSelf   = "cannot_invite_self"
+	CodeUserNotFound       = "user_not_found"
 )
 
 var errorTexts = map[string]string{
@@ -29,6 +35,12 @@ var errorTexts = map[string]string{
 	CodeForfeitUnavailable: "W.O. indisponível",
 	CodeTooManyRooms:       "limite de salas atingido; tente mais tarde",
 	CodeRateLimited:        "devagar: aguarde um pouco",
+	CodeInviteNotFound:     "convite não encontrado",
+	CodeInviteExpired:      "o convite expirou",
+	CodeInviteNotYours:     "este convite é para outra pessoa",
+	CodeInviteePlaying:     "a pessoa está numa partida",
+	CodeCannotInviteSelf:   "você não pode convidar a si mesmo",
+	CodeUserNotFound:       "usuário não encontrado",
 }
 
 func errorText(code string) string {

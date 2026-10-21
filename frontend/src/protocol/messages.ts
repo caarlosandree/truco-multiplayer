@@ -134,6 +134,30 @@ export const CodeTooManyRooms = "too_many_rooms";
  * Códigos de erro de sala/lobby. Erros de regra usam engine.ErrorCode.
  */
 export const CodeRateLimited = "rate_limited";
+/**
+ * Códigos de erro de sala/lobby. Erros de regra usam engine.ErrorCode.
+ */
+export const CodeInviteNotFound = "invite_not_found";
+/**
+ * Códigos de erro de sala/lobby. Erros de regra usam engine.ErrorCode.
+ */
+export const CodeInviteExpired = "invite_expired";
+/**
+ * Códigos de erro de sala/lobby. Erros de regra usam engine.ErrorCode.
+ */
+export const CodeInviteNotYours = "invite_not_yours";
+/**
+ * Códigos de erro de sala/lobby. Erros de regra usam engine.ErrorCode.
+ */
+export const CodeInviteePlaying = "invitee_playing";
+/**
+ * Códigos de erro de sala/lobby. Erros de regra usam engine.ErrorCode.
+ */
+export const CodeCannotInviteSelf = "cannot_invite_self";
+/**
+ * Códigos de erro de sala/lobby. Erros de regra usam engine.ErrorCode.
+ */
+export const CodeUserNotFound = "user_not_found";
 
 //////////
 // source: server.go

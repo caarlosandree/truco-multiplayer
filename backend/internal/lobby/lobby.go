@@ -268,6 +268,9 @@ func (l *Lobby) Released(roomID, userID string) {
 	l.touchPresenceLocked(userID)
 }
 
+// Seated implementa room.Registry: o usuário já ocupou o assento. Vazio nesta tarefa; a T7 confirma a reserva aqui.
+func (l *Lobby) Seated(roomID, userID string) {}
+
 // Destroyed implementa room.Registry: remove a sala, o código e a linha da lista.
 func (l *Lobby) Destroyed(roomID string) {
 	l.mu.Lock()

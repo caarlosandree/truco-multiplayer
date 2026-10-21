@@ -29,6 +29,12 @@ const ERRORS: Record<string, string> = {
   forfeit_unavailable: 'O W.O. não está disponível agora.',
   too_many_rooms: 'O servidor atingiu o limite de salas. Tente mais tarde.',
   rate_limited: 'Calma! Espere um pouco antes de repetir.',
+  invite_not_found: 'Convite não encontrado.',
+  invite_expired: 'O convite expirou.',
+  invite_not_yours: 'Este convite é para outra pessoa.',
+  invitee_playing: 'Você está numa partida.',
+  cannot_invite_self: 'Você não pode convidar a si mesmo.',
+  user_not_found: 'Usuário não encontrado.',
   // Regras do engine
   invalid_phase: 'Essa ação não vale nesta fase.',
   not_your_turn: 'Não é a sua vez.',

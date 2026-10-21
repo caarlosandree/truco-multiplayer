@@ -14,6 +14,19 @@ type Join struct {
 	DisplayName string
 	Seat        *engine.Seat
 	Seq         int64
+	// Invite marca a entrada por aceite de convite: o lugar pedido ocupado cai no primeiro livre, e sala
+	// cheia ou em jogo responde invite_expired (o servidor decide a corrida "sala encheu x aceite").
+	Invite bool
+}
+
+// Vacate pede que o usuário deixe a sala de espera para aceitar um convite para outra sala.
+// Em espera, o usuário sai (left_room{left}) e o lobby é avisado por Registry.Released; em jogo nada muda e
+// Refused é chamado. Usuário que já não está sentado também só é liberado no lobby.
+type Vacate struct {
+	UserID string
+	// Refused é chamado só pelo ator da sala (nunca dentro de código que segure o mutex do Lobby),
+	// quando a recusa é por partida em andamento.
+	Refused func()
 }
 
 // Command é uma mensagem do cliente para a sala (assentos, jogo, W.O., sinais).
@@ -39,6 +52,7 @@ type Wake struct{}
 type tick struct{ gen uint64 }
 
 func (Join) roomMsg()         {}
+func (Vacate) roomMsg()       {}
 func (Command) roomMsg()      {}
 func (Connected) roomMsg()    {}
 func (Disconnected) roomMsg() {}
