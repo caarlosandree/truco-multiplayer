@@ -23,7 +23,8 @@ function tick() {
     warned = true
     sfx()?.play('timeLow')
   }
-  schedule()
+  // sem prazo (ou já esgotado) não há o que animar: o loop só roda enquanto houver contagem
+  if (left !== null && left > 0) schedule()
 }
 function schedule() {
   raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame(tick) : setTimeout(tick, 100)
@@ -37,6 +38,8 @@ watch(
   () => props.deadline,
   () => {
     warned = false
+    stop()
+    tick()
   },
 )
 onMounted(tick)

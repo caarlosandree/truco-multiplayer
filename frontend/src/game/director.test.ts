@@ -81,3 +81,57 @@ it('reset() cancela tudo', () => {
   vi.runAllTimers()
   expect(log).toEqual([`event:card_played:1:${EVENT_DURATION_MS.card_played}`])
 })
+
+describe('isolamento de erro nos callbacks', () => {
+  it('onEvent que lança: o timer é armado, o state é aplicado e a fila segue', () => {
+    const erro = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { d, log } = setup({
+      onEvent: () => {
+        throw new Error('áudio fechado')
+      },
+    })
+    d.pushEvents([played(1), played(2)])
+    d.pushState(st(2))
+    expect(d.busy).toBe(true)
+    vi.advanceTimersByTime(EVENT_DURATION_MS.card_played * 2)
+    expect(log).toEqual(['apply:2', 'idle'])
+    expect(d.busy).toBe(false)
+    expect(erro).toHaveBeenCalledTimes(2)
+    erro.mockRestore()
+  })
+
+  it('onApply que lança: o pendente é consumido e a próxima rodada de eventos funciona', () => {
+    const erro = vi.spyOn(console, 'error').mockImplementation(() => {})
+    let falhar = true
+    const { d, log } = setup({
+      onApply: (s) => {
+        if (falhar) throw new Error('render')
+        log.push(`apply:${s.view.handNumber}`)
+      },
+    })
+    d.pushState(st(1))
+    expect(d.busy).toBe(false)
+    falhar = false
+    d.pushEvents([played(1)])
+    d.pushState(st(2))
+    vi.advanceTimersByTime(EVENT_DURATION_MS.card_played)
+    expect(log.slice(-2)).toEqual(['apply:2', 'idle'])
+    expect(erro).toHaveBeenCalledOnce()
+    erro.mockRestore()
+  })
+
+  it('onIdle que lança não deixa a fila presa', () => {
+    const erro = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { d } = setup({
+      onIdle: () => {
+        throw new Error('idle')
+      },
+    })
+    d.pushEvents([played(1)])
+    d.pushState(st(1))
+    vi.advanceTimersByTime(EVENT_DURATION_MS.card_played)
+    expect(d.busy).toBe(false)
+    expect(erro).toHaveBeenCalled()
+    erro.mockRestore()
+  })
+})

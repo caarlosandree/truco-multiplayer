@@ -346,3 +346,21 @@ it('placar: tipo da mão completo para leitores de tela e chip curto visível no
   expect(curto.text()).toBe('Mão 11')
   expect(curto.attributes('aria-hidden')).toBe('true')
 })
+
+it('Prazo não agenda quadros sem prazo, religa quando ele chega e cancela ao sumir', async () => {
+  const raf = vi.spyOn(globalThis, 'requestAnimationFrame')
+  const caf = vi.spyOn(globalThis, 'cancelAnimationFrame')
+  const w = mount(Prazo, { props: { totalMs: 30_000, mine: false }, global: { plugins: [pinia] } })
+  expect(raf).not.toHaveBeenCalled()
+  await w.setProps({ deadline: Date.now() + 20_000 })
+  expect(raf).toHaveBeenCalled()
+  const antes = caf.mock.calls.length
+  await w.setProps({ deadline: undefined })
+  expect(caf.mock.calls.length).toBeGreaterThan(antes)
+  const chamadas = raf.mock.calls.length
+  await new Promise((r) => setTimeout(r, 80))
+  expect(raf.mock.calls.length).toBe(chamadas)
+  w.unmount()
+  raf.mockRestore()
+  caf.mockRestore()
+})

@@ -75,7 +75,7 @@ export class Director {
     this.queue = []
     this.playing = false
     this.applyPending()
-    this.o.onIdle?.()
+    this.guard('onIdle', () => this.o.onIdle?.())
   }
 
   reset(): void {
@@ -96,12 +96,12 @@ export class Director {
     if (!ev) {
       this.playing = false
       this.applyPending()
-      this.o.onIdle?.()
+      this.guard('onIdle', () => this.o.onIdle?.())
       return
     }
     this.playing = true
     const ms = this.duration(ev)
-    this.o.onEvent(ev, ms)
+    this.guard('onEvent', () => this.o.onEvent(ev, ms))
     this.timer = this.o.setTimer(() => {
       this.timer = null
       this.next()
@@ -112,7 +112,16 @@ export class Director {
     const s = this.pending
     if (!s) return
     this.pending = null
-    this.o.onApply(s)
+    this.guard('onApply', () => this.o.onApply(s))
+  }
+
+  /** Erro num callback (som, render) não pode travar a fila nem deixar de aplicar o state. */
+  private guard(nome: string, fn: () => void): void {
+    try {
+      fn()
+    } catch (e) {
+      console.error(`[diretor] falha em ${nome}`, e)
+    }
   }
 
   private duration(ev: Event): number {

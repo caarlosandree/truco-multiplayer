@@ -147,6 +147,15 @@ it('reconectando na vez: toggle e aumentar desabilitados', () => {
   expect(w.find('[data-acao="aumentar"]').attributes('disabled')).toBeDefined()
 })
 
+it('outra aba: o texto diz isso, não "Reconectando…"', () => {
+  useSessionStore().connection = 'replaced'
+  useGameStore().onState(makeState({ stake: 1 }))
+  const w = mountPainel()
+  expect(w.text()).toContain('Aberto em outra aba')
+  expect(w.text()).not.toContain('Reconectando')
+  expect(w.find('[data-anuncio]').text()).toBe('')
+})
+
 it('região viva única e persistente, sem aria-busy nem role dinâmico', async () => {
   useSessionStore().connection = 'reconnecting'
   const pending = { requester: 1, fromTeam: 1, prevStake: 1, toStake: 3 }
@@ -154,7 +163,7 @@ it('região viva única e persistente, sem aria-busy nem role dinâmico', async 
   const w = mountPainel()
   const vivo = w.findAll('[role="status"]')
   expect(vivo).toHaveLength(1)
-  expect(vivo[0]!.text()).toBe('Reconectando…')
+  expect(vivo[0]!.text()).toBe('') // a conexão é anunciada só pelo IndicadorConexao
   expect(w.find('[aria-busy]').exists()).toBe(false)
   useSessionStore().connection = 'open'
   await flushPromises()

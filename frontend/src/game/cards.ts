@@ -6,7 +6,6 @@ export type DeckStyle = 'frances' | 'espanhol'
 export const RANK_LADDER: readonly Rank[] = [4, 5, 6, 7, 10, 11, 12, 1, 2, 3]
 
 const SUIT_NAMES = ['ouros', 'espadas', 'copas', 'paus'] as const
-const SUIT_SYMBOLS = ['♦', '♠', '♥', '♣'] as const
 const FRENCH: Partial<Record<Rank, string>> = { 1: 'A', 10: 'J', 11: 'Q', 12: 'K' }
 
 export function cardFromId(id: CardID): Card {
@@ -24,12 +23,6 @@ export function suitName(suit: Suit): (typeof SUIT_NAMES)[number] {
   const name = SUIT_NAMES[suit]
   if (!name) throw new RangeError(`naipe inválido: ${suit}`)
   return name
-}
-
-export function suitSymbol(suit: Suit): (typeof SUIT_SYMBOLS)[number] {
-  const symbol = SUIT_SYMBOLS[suit]
-  if (!symbol) throw new RangeError(`naipe inválido: ${suit}`)
-  return symbol
 }
 
 export function cardLabel(id: CardID, deck: DeckStyle): string {

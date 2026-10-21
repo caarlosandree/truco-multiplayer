@@ -15,7 +15,8 @@ const toasts = useToastsStore()
 
 async function join() {
   if (room.inRoom) {
-    void router.replace({ name: 'sala' }) // já em sala: vai direto
+    toasts.push('Você já está em outra sala.')
+    void router.replace({ name: 'sala' }) // já em sala: o convite é ignorado, com aviso
     return
   }
   try {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, ref, watch, type Ref } from 'vue'
 import { useGameStore } from '@/stores/game'
+import { useSessionStore } from '@/stores/session'
 import { handKindText, stakeName } from '@/game/labels'
 import { teamOf } from '@/game/seats'
 import Corte from './Corte.vue'
@@ -23,6 +24,18 @@ const bloqueado = computed(() => game.inflight || !game.online)
 
 const nameOf = (seat: number) => game.latestView?.players.find((p) => p.seat === seat)?.name ?? `Lugar ${seat + 1}`
 
+// razão do bloqueio quando a conexão não está aberta (o texto da outra aba não pode dizer "Reconectando…")
+const semConexao = computed(() => {
+  switch (useSessionStore().connection) {
+    case 'replaced':
+      return 'Aberto em outra aba'
+    case 'unauthorized':
+      return 'Sessão encerrada'
+    default:
+      return 'Reconectando…'
+  }
+})
+
 const mode = computed(() => {
   if (game.mustChooseCut) return 'corte'
   if (game.mustBurn) return 'queima'
@@ -34,7 +47,7 @@ const mode = computed(() => {
 
 // uma linha de contexto acima dos botões (brief §2.3); offline ela vira a razão do bloqueio
 const contexto = computed(() => {
-  if (!game.online) return 'Reconectando…'
+  if (!game.online) return semConexao.value
   switch (mode.value) {
     case 'corte':
       return game.phase === 'dealer_choice'
@@ -57,7 +70,7 @@ const contexto = computed(() => {
 
 // sem painel: o que dizer no lugar (pendente sem ação, espera da Mão de 11, ou a vez de outro)
 const aguardo = computed(() => {
-  if (!game.online) return 'Reconectando…'
+  if (!game.online) return semConexao.value
   if (game.phase === 'eleven_decision' && !game.amPending) {
     const meu = game.myTeam
     const parceiroPendente = game.pendingSeats.some((s) => meu !== null && teamOf(s) === meu)
@@ -71,10 +84,10 @@ const aguardo = computed(() => {
 })
 
 // região viva única e persistente (sem trocar role), só do estado do painel: como agir nas decisões que o painel
-// apresenta (corte, queima, Mão de 11) e "Reconectando…". "Sua vez", pedidos de aumento e fim de rodada são do
-// Anunciador; repetir aqui faria os dois competirem pela leitura.
+// apresenta (corte, queima, Mão de 11). "Sua vez", pedidos de aumento e fim de rodada são do Anunciador, e o estado
+// da conexão é do IndicadorConexao; repetir aqui faria os dois competirem pela leitura.
 const anuncio = computed(() => {
-  if (!game.online) return 'Reconectando…'
+  if (!game.online) return ''
   return mode.value === 'corte' || mode.value === 'queima' || mode.value === 'onze' ? contexto.value : ''
 })
 

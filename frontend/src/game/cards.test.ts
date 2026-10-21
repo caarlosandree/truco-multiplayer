@@ -1,5 +1,5 @@
 import table from '@/protocol/cards.json'
-import { cardFromId, cardLabel, cardFileName, rankLabel, suitName, suitSymbol } from './cards'
+import { cardFromId, cardLabel, cardFileName, rankLabel, suitName } from './cards'
 
 describe('cardFromId', () => {
   it('espelha engine.CardFromID para os 40 ids', () => {
@@ -19,7 +19,6 @@ describe('rótulos', () => {
   })
   it('nomeia naipes na ordem do engine', () => {
     expect([0, 1, 2, 3].map(suitName)).toEqual(['ouros', 'espadas', 'copas', 'paus'])
-    expect([0, 1, 2, 3].map(suitSymbol)).toEqual(['♦', '♠', '♥', '♣'])
   })
   it('monta rótulo acessível e nome de arquivo', () => {
     const asDeEspadas = table.find((r) => r.rank === 1 && r.suit === 1)!.id

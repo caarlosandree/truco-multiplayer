@@ -55,6 +55,15 @@ export const useRoomStore = defineStore('room', {
       this.lastLeft = p.reason
       useGameStore().reset()
     },
+    /** Reconexão em que o servidor nos mandou ao lobby (lobby_snapshot): a sala e a partida antigas não existem mais. */
+    onOutsideRoom() {
+      if (this.room === null) return
+      this.room = null
+      this.forfeitTeam = null
+      this.ended = null
+      this.lastLeft = null
+      useGameStore().reset()
+    },
     onForfeit(p: ForfeitAvailablePayload) {
       this.forfeitTeam = p.team
     },

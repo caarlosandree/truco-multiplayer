@@ -94,3 +94,16 @@ it('W.O. com vencedor toca o som da dupla vencedora', () => {
   r.onMatchEnded({ reason: 'forfeit', winner: 1, score: [4, 12] })
   expect(play.mock.calls.map((c) => c[0])).toEqual(['defeat'])
 })
+
+it('onOutsideRoom limpa sala, desistência, fim de partida e jogo; sem sala não faz nada', () => {
+  const r = useRoomStore()
+  const reset = vi.spyOn(useGameStore(), 'reset')
+  r.onOutsideRoom()
+  expect(reset).not.toHaveBeenCalled()
+  r.onRoomState(state({ status: 'playing', matchId: 'm1' }))
+  r.onForfeit({ team: 1 })
+  r.onMatchEnded({ reason: 'game_over', winner: 0, score: [12, 3] })
+  r.onOutsideRoom()
+  expect([r.room, r.forfeitTeam, r.ended, r.lastLeft]).toEqual([null, null, null, null])
+  expect(reset).toHaveBeenCalledOnce()
+})

@@ -18,6 +18,8 @@ export function dispatch(msg: ServerMessage): void {
     case 'hello':
       return // tratado no WsClient (status e versão do protocolo)
     case 'lobby_snapshot':
+      // o servidor só manda o snapshot a quem está fora de sala (quem está recebe room_state): sala antiga = fantasma
+      useRoomStore().onOutsideRoom()
       return useLobbyStore().onSnapshot(msg.payload)
     case 'room_upserted':
       return useLobbyStore().onUpsert(msg.payload)

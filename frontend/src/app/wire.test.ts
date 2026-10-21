@@ -76,3 +76,43 @@ describe('sessão inválida (4003)', () => {
     expect(router.currentRoute.value.query.volta).toBe('/perfil')
   })
 })
+
+describe('reconexão e sala fantasma', () => {
+  const roomState = {
+    id: 'r',
+    code: 'ABC',
+    name: 'n',
+    visibility: 'public' as const,
+    host: 0,
+    status: 'waiting' as const,
+    seats: [null, null, null, null],
+    yourSeat: 0,
+  }
+
+  it('lobby_snapshot com sala antiga no store: o servidor diz que estamos fora, limpa sala e jogo', () => {
+    const room = useRoomStore()
+    const game = useGameStore()
+    dispatch({ type: 'room_state', payload: roomState })
+    expect(room.inRoom).toBe(true)
+    const reset = vi.spyOn(game, 'reset')
+    dispatch({ type: 'lobby_snapshot', payload: { rooms: [] } })
+    expect(room.inRoom).toBe(false)
+    expect(room.forfeitTeam).toBeNull()
+    expect(reset).toHaveBeenCalled()
+    expect(useLobbyStore().loaded).toBe(true)
+  })
+
+  it('reconexão dentro da sala (room_state, sem snapshot): mantém a sala', () => {
+    const room = useRoomStore()
+    dispatch({ type: 'room_state', payload: roomState })
+    dispatch({ type: 'room_state', payload: { ...roomState, name: 'novo' } })
+    expect(room.inRoom).toBe(true)
+    expect(room.room?.name).toBe('novo')
+  })
+
+  it('lobby_snapshot sem sala não mexe no jogo', () => {
+    const reset = vi.spyOn(useGameStore(), 'reset')
+    dispatch({ type: 'lobby_snapshot', payload: { rooms: [] } })
+    expect(reset).not.toHaveBeenCalled()
+  })
+})

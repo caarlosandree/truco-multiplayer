@@ -16,7 +16,3 @@ export function seatsInDisplayOrder(mySeat: Seat): Seat[] {
 export function teamOf(seat: Seat): Team {
   return seat % 2
 }
-
-export function partnerOf(seat: Seat): Seat {
-  return (seat + 2) % 4
-}

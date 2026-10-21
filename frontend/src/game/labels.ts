@@ -1,4 +1,4 @@
-import type { HandKind, Phase, VoteChoice } from '@/protocol/engine'
+import type { HandKind, VoteChoice } from '@/protocol/engine'
 import type { EndReason, SignalID } from '@/protocol/messages'
 
 const ERRORS: Record<string, string> = {
@@ -46,22 +46,6 @@ const ERRORS: Record<string, string> = {
 
 export function errorText(code: string, serverMessage?: string): string {
   return ERRORS[code] ?? serverMessage ?? 'Algo deu errado. Tente de novo.'
-}
-
-const PHASES: Record<Phase, string> = {
-  waiting: 'Aguardando',
-  cut_choice: 'Corte',
-  dealer_choice: 'Escolha do pé',
-  burn_fours: 'Queima dos 4',
-  eleven_decision: 'Mão de 11',
-  playing: 'Jogando',
-  awaiting_raise_response: 'Resposta ao aumento',
-  hand_end: 'Fim da mão',
-  game_over: 'Fim de jogo',
-}
-
-export function phaseText(phase: Phase): string {
-  return PHASES[phase] ?? phase
 }
 
 export function handKindText(kind: HandKind | undefined): string {
