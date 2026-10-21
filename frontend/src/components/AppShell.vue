@@ -44,7 +44,19 @@ function reload() {
         </svg>
         <span aria-hidden="true">Truco</span>
       </RouterLink>
-      <IndicadorConexao class="ml-auto" />
+      <nav
+        aria-label="Principal"
+        class="ml-auto"
+      >
+        <RouterLink
+          to="/ranking"
+          class="inline-flex h-11 items-center rounded-botao-2 px-3 font-bold hover:bg-surface-2"
+          active-class="underline decoration-2 underline-offset-8"
+        >
+          Ranking
+        </RouterLink>
+      </nav>
+      <IndicadorConexao />
       <RouterLink
         to="/perfil"
         class="inline-flex h-11 items-center gap-2 rounded-botao-2 pr-3 pl-1 font-bold hover:bg-surface-2"

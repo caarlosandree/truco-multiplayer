@@ -30,6 +30,7 @@ export function createAppRouter(history: RouterHistory = createWebHistory()): Ro
         },
       },
       { path: '/entrar-convite/:token', name: 'entrar-convite', component: () => import('./views/EntrarConviteView.vue') },
+      { path: '/ranking', name: 'ranking', component: () => import('./views/RankingView.vue') },
       { path: '/perfil', name: 'perfil', component: () => import('./views/PerfilView.vue') },
       { path: '/:pathMatch(.*)*', redirect: '/' },
     ],
