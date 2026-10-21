@@ -18,6 +18,7 @@ import (
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/db/dbgen"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/match"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/pagination"
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/replay"
 )
 
 // MatchAborter encerra a sala viva de uma partida abortada. A Spec 3 implementa.
@@ -234,7 +235,7 @@ func (s *Service) AbortMatch(ctx context.Context, actor auth.Principal, matchID,
 		reason = "abortada pelo administrador"
 	}
 	err := s.audited(ctx, actor, "match.abort", "match", matchID, map[string]any{"reason": reason}, func(q *dbgen.Queries, now time.Time) error {
-		return match.AbandonWith(ctx, q, matchID, reason, now)
+		return match.AbandonWith(ctx, q, matchID, reason, replay.EndAborted, now)
 	})
 	if err != nil {
 		return err

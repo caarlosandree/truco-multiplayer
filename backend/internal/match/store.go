@@ -200,8 +200,12 @@ func (s *Store) Finish(ctx context.Context, id string) error {
 			winner = engine.Other(winner)
 		}
 		now := s.now()
+		end := replay.EndGameOver
+		if n := len(rec.Actions); n > 0 && rec.Actions[n-1].Action.Kind == engine.ActSysForfeit {
+			end = replay.EndForfeit
+		}
 		err = q.FinishMatch(ctx, dbgen.FinishMatchParams{WinnerTeam: int16(winner), ScoreA: int16(perSeat[0].PointsFor),
-			ScoreB: int16(perSeat[0].PointsAgainst), Now: now, ID: id})
+			ScoreB: int16(perSeat[0].PointsAgainst), Now: now, EndReason: string(end), ID: id})
 		if err != nil {
 			return err
 		}
@@ -246,12 +250,12 @@ func writeStats(ctx context.Context, q *dbgen.Queries, matchID string, perSeat [
 }
 
 func (s *Store) Abandon(ctx context.Context, id, reason string) error {
-	return AbandonWith(ctx, s.q, id, reason, s.now())
+	return AbandonWith(ctx, s.q, id, reason, replay.EndAbandoned, s.now())
 }
 
 // AbandonWith marca a partida como abandonada usando q (que pode estar numa transação).
-func AbandonWith(ctx context.Context, q *dbgen.Queries, id, reason string, now time.Time) error {
-	n, err := q.AbandonMatch(ctx, dbgen.AbandonMatchParams{Now: now, Reason: reason, ID: id})
+func AbandonWith(ctx context.Context, q *dbgen.Queries, id, reason string, end replay.EndReason, now time.Time) error {
+	n, err := q.AbandonMatch(ctx, dbgen.AbandonMatchParams{Now: now, Reason: reason, EndReason: string(end), ID: id})
 	if err != nil {
 		return notFound(err)
 	}
@@ -271,14 +275,15 @@ type PlayerSummary struct {
 }
 
 type Summary struct {
-	ID            string          `json:"id"`
-	Status        replay.Status   `json:"status"`
-	Players       []PlayerSummary `json:"players"`
-	WinnerTeam    *int            `json:"winnerTeam"`
-	Score         *[2]int         `json:"score"`
-	CreatedAt     time.Time       `json:"createdAt"`
-	FinishedAt    *time.Time      `json:"finishedAt"`
-	AbandonReason *string         `json:"abandonReason,omitempty"`
+	ID            string            `json:"id"`
+	Status        replay.Status     `json:"status"`
+	Players       []PlayerSummary   `json:"players"`
+	WinnerTeam    *int              `json:"winnerTeam"`
+	Score         *[2]int           `json:"score"`
+	CreatedAt     time.Time         `json:"createdAt"`
+	FinishedAt    *time.Time        `json:"finishedAt"`
+	AbandonReason *string           `json:"abandonReason,omitempty"`
+	EndReason     *replay.EndReason `json:"endReason"`
 }
 
 func (s *Store) Summary(ctx context.Context, id string) (Summary, error) {
@@ -293,6 +298,10 @@ func (s *Store) Summary(ctx context.Context, id string) (Summary, error) {
 	out := Summary{ID: m.ID, Status: replay.Status(m.Status), CreatedAt: m.CreatedAt, FinishedAt: m.FinishedAt, AbandonReason: m.AbandonReason}
 	for _, p := range players {
 		out.Players = append(out.Players, PlayerSummary{Seat: int(p.Seat), Username: p.Username, DisplayName: p.DisplayName})
+	}
+	if m.EndReason != nil {
+		er := replay.EndReason(*m.EndReason)
+		out.EndReason = &er
 	}
 	if m.WinnerTeam != nil {
 		winner := int(*m.WinnerTeam)

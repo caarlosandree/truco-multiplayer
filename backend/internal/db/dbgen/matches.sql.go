@@ -12,18 +12,25 @@ import (
 
 const abandonMatch = `-- name: AbandonMatch :execrows
 UPDATE matches
-SET status = 'abandoned', finished_at = $1::timestamptz, abandon_reason = $2::text
-WHERE id = $3 AND status = 'in_progress'
+SET status = 'abandoned', finished_at = $1::timestamptz, abandon_reason = $2::text,
+    end_reason = $3::text
+WHERE id = $4 AND status = 'in_progress'
 `
 
 type AbandonMatchParams struct {
-	Now    time.Time
-	Reason string
-	ID     string
+	Now       time.Time
+	Reason    string
+	EndReason string
+	ID        string
 }
 
 func (q *Queries) AbandonMatch(ctx context.Context, arg AbandonMatchParams) (int64, error) {
-	result, err := q.db.Exec(ctx, abandonMatch, arg.Now, arg.Reason, arg.ID)
+	result, err := q.db.Exec(ctx, abandonMatch,
+		arg.Now,
+		arg.Reason,
+		arg.EndReason,
+		arg.ID,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -80,8 +87,8 @@ func (q *Queries) CreateMatch(ctx context.Context, arg CreateMatchParams) (strin
 const finishMatch = `-- name: FinishMatch :exec
 UPDATE matches
 SET status = 'finished', winner_team = $1::smallint, score_a = $2::smallint,
-    score_b = $3::smallint, finished_at = $4::timestamptz
-WHERE id = $5
+    score_b = $3::smallint, finished_at = $4::timestamptz, end_reason = $5::text
+WHERE id = $6
 `
 
 type FinishMatchParams struct {
@@ -89,6 +96,7 @@ type FinishMatchParams struct {
 	ScoreA     int16
 	ScoreB     int16
 	Now        time.Time
+	EndReason  string
 	ID         string
 }
 
@@ -98,13 +106,14 @@ func (q *Queries) FinishMatch(ctx context.Context, arg FinishMatchParams) error 
 		arg.ScoreA,
 		arg.ScoreB,
 		arg.Now,
+		arg.EndReason,
 		arg.ID,
 	)
 	return err
 }
 
 const getMatch = `-- name: GetMatch :one
-SELECT id, seed, first_dealer, engine_version, status, winner_team, score_a, score_b, created_at, finished_at, abandon_reason FROM matches WHERE id = $1
+SELECT id, seed, first_dealer, engine_version, status, winner_team, score_a, score_b, created_at, finished_at, abandon_reason, end_reason FROM matches WHERE id = $1
 `
 
 func (q *Queries) GetMatch(ctx context.Context, id string) (Match, error) {
@@ -122,6 +131,7 @@ func (q *Queries) GetMatch(ctx context.Context, id string) (Match, error) {
 		&i.CreatedAt,
 		&i.FinishedAt,
 		&i.AbandonReason,
+		&i.EndReason,
 	)
 	return i, err
 }
@@ -148,7 +158,7 @@ func (q *Queries) GetMatchAction(ctx context.Context, arg GetMatchActionParams) 
 }
 
 const getMatchForUpdate = `-- name: GetMatchForUpdate :one
-SELECT id, seed, first_dealer, engine_version, status, winner_team, score_a, score_b, created_at, finished_at, abandon_reason FROM matches WHERE id = $1 FOR UPDATE
+SELECT id, seed, first_dealer, engine_version, status, winner_team, score_a, score_b, created_at, finished_at, abandon_reason, end_reason FROM matches WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) GetMatchForUpdate(ctx context.Context, id string) (Match, error) {
@@ -166,6 +176,7 @@ func (q *Queries) GetMatchForUpdate(ctx context.Context, id string) (Match, erro
 		&i.CreatedAt,
 		&i.FinishedAt,
 		&i.AbandonReason,
+		&i.EndReason,
 	)
 	return i, err
 }

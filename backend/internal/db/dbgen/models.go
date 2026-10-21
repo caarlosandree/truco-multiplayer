@@ -37,6 +37,7 @@ type Match struct {
 	CreatedAt     time.Time
 	FinishedAt    *time.Time
 	AbandonReason *string
+	EndReason     *string
 }
 
 type MatchAction struct {

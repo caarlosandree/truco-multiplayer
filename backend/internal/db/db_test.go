@@ -61,13 +61,13 @@ func TestMatchesConstraints(t *testing.T) {
 	pool := testdb.New(t)
 	userID := testdb.CreateUser(t, pool, "ana")
 	insert := func(sql string) error {
-		_, err := pool.Exec(ctx, "INSERT INTO matches (seed, first_dealer, engine_version, status, winner_team, score_a, score_b, finished_at) VALUES "+sql)
+		_, err := pool.Exec(ctx, "INSERT INTO matches (seed, first_dealer, engine_version, status, winner_team, score_a, score_b, finished_at, end_reason) VALUES "+sql)
 		return err
 	}
 	valid := []string{
-		"(1, 0, 1, 'in_progress', NULL, NULL, NULL, NULL)",
-		"(1, 0, 1, 'finished', 0, 12, 7, now())",
-		"(1, 0, 1, 'abandoned', NULL, NULL, NULL, now())",
+		"(1, 0, 1, 'in_progress', NULL, NULL, NULL, NULL, NULL)",
+		"(1, 0, 1, 'finished', 0, 12, 7, now(), 'game_over')",
+		"(1, 0, 1, 'abandoned', NULL, NULL, NULL, now(), 'abandoned')",
 	}
 	for _, v := range valid {
 		if err := insert(v); err != nil {
@@ -75,14 +75,14 @@ func TestMatchesConstraints(t *testing.T) {
 		}
 	}
 	invalid := []string{
-		"(1, 0, 1, 'in_progress', NULL, NULL, NULL, now())",
-		"(1, 0, 1, 'finished', NULL, 12, 7, now())",
-		"(1, 0, 1, 'finished', 0, NULL, 7, now())",
-		"(1, 0, 1, 'finished', 0, 12, NULL, now())",
-		"(1, 0, 1, 'finished', 0, 12, 7, NULL)",
-		"(1, 0, 1, 'abandoned', NULL, NULL, NULL, NULL)",
-		"(1, 0, 1, 'finished', 0, 13, 7, now())",
-		"(1, 0, 1, 'finished', 0, 12, -1, now())",
+		"(1, 0, 1, 'in_progress', NULL, NULL, NULL, now(), NULL)",
+		"(1, 0, 1, 'finished', NULL, 12, 7, now(), 'game_over')",
+		"(1, 0, 1, 'finished', 0, NULL, 7, now(), 'game_over')",
+		"(1, 0, 1, 'finished', 0, 12, NULL, now(), 'game_over')",
+		"(1, 0, 1, 'finished', 0, 12, 7, NULL, 'game_over')",
+		"(1, 0, 1, 'abandoned', NULL, NULL, NULL, NULL, 'abandoned')",
+		"(1, 0, 1, 'finished', 0, 13, 7, now(), 'game_over')",
+		"(1, 0, 1, 'finished', 0, 12, -1, now(), 'game_over')",
 	}
 	for _, v := range invalid {
 		if err := insert(v); err == nil {
@@ -101,5 +101,71 @@ func TestMatchesConstraints(t *testing.T) {
 	var hands int
 	if err := pool.QueryRow(ctx, "SELECT hands_played + timeouts FROM match_player_stats WHERE match_id = $1", matchID).Scan(&hands); err != nil || hands != 0 {
 		t.Fatalf("hands=%d err=%v", hands, err)
+	}
+}
+
+func TestEndReasonBackfill(t *testing.T) {
+	ctx := context.Background()
+	pool := testdb.New(t)
+	if err := db.MigrateDownTo(ctx, pool, 3); err != nil {
+		t.Fatal(err)
+	}
+	actor := testdb.CreateUser(t, pool, "ana")
+	insert := func(status, reason string) string {
+		t.Helper()
+		var id string
+		var err error
+		switch status {
+		case "finished":
+			err = pool.QueryRow(ctx, `INSERT INTO matches (seed, first_dealer, engine_version, status, winner_team, score_a, score_b, finished_at)
+				VALUES (1, 0, 1, 'finished', 0, 12, 7, now()) RETURNING id::text`).Scan(&id)
+		case "abandoned":
+			err = pool.QueryRow(ctx, `INSERT INTO matches (seed, first_dealer, engine_version, status, finished_at, abandon_reason)
+				VALUES (1, 0, 1, 'abandoned', now(), $1) RETURNING id::text`, reason).Scan(&id)
+		default:
+			err = pool.QueryRow(ctx, `INSERT INTO matches (seed, first_dealer, engine_version) VALUES (1, 0, 1) RETURNING id::text`).Scan(&id)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	a := insert("finished", "")
+	if _, err := pool.Exec(ctx, `INSERT INTO match_actions (match_id, ply, action, source) VALUES ($1, 0, '{"kind":"sys_forfeit","seat":0,"team":1}', 'system')`, a); err != nil {
+		t.Fatal(err)
+	}
+	b := insert("finished", "")
+	c := insert("abandoned", "qualquer texto")
+	if _, err := pool.Exec(ctx, `INSERT INTO audit_log (actor_id, action, target_type, target_id) VALUES ($1, 'match.abort', 'match', $2)`, actor, c); err != nil {
+		t.Fatal(err)
+	}
+	d := insert("abandoned", "abortada pelo administrador") // sem auditoria: o texto livre não conta
+	e := insert("in_progress", "")
+
+	if err := db.Migrate(ctx, pool); err != nil {
+		t.Fatal(err)
+	}
+	ptr := func(s string) *string { return &s }
+	want := map[string]*string{a: ptr("forfeit"), b: ptr("game_over"), c: ptr("aborted"), d: ptr("abandoned"), e: nil}
+	for id, w := range want {
+		var got *string
+		if err := pool.QueryRow(ctx, "SELECT end_reason FROM matches WHERE id = $1", id).Scan(&got); err != nil {
+			t.Fatal(err)
+		}
+		if (got == nil) != (w == nil) || (got != nil && *got != *w) {
+			t.Errorf("partida %s: end_reason = %v, quer %v", id, got, w)
+		}
+	}
+	// finished sem end_reason viola o CHECK novo.
+	_, err := pool.Exec(ctx, `INSERT INTO matches (seed, first_dealer, engine_version, status, winner_team, score_a, score_b, finished_at)
+		VALUES (1, 0, 1, 'finished', 0, 12, 7, now())`)
+	if err == nil {
+		t.Error("finished com end_reason NULL deveria violar o CHECK")
+	}
+	// valor fora do domínio também.
+	_, err = pool.Exec(ctx, `INSERT INTO matches (seed, first_dealer, engine_version, status, winner_team, score_a, score_b, finished_at, end_reason)
+		VALUES (1, 0, 1, 'finished', 0, 12, 7, now(), 'xyz')`)
+	if err == nil {
+		t.Error("end_reason fora do domínio deveria ser rejeitado")
 	}
 }

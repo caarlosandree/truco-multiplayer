@@ -61,6 +61,14 @@ func MigrateDown(ctx context.Context, pool *pgxpool.Pool) error {
 	})
 }
 
+// MigrateDownTo desfaz as migrations acima de version (usado nos testes de backfill).
+func MigrateDownTo(ctx context.Context, pool *pgxpool.Pool, version int64) error {
+	return withProvider(pool, func(p *goose.Provider) error {
+		_, err := p.DownTo(ctx, version)
+		return err
+	})
+}
+
 // WithTx executa fn numa transação: commit se fn devolver nil, rollback caso contrário.
 func WithTx(ctx context.Context, pool *pgxpool.Pool, fn func(pgx.Tx) error) error {
 	return pgx.BeginFunc(ctx, pool, fn)

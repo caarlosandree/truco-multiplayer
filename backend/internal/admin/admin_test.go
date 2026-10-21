@@ -222,6 +222,9 @@ func TestAbortMatch(t *testing.T) {
 	if summary.Status != replay.StatusAbandoned || *summary.AbandonReason != "mesa travada" {
 		t.Fatalf("summary = %+v", summary)
 	}
+	if summary.EndReason == nil || *summary.EndReason != replay.EndAborted {
+		t.Fatalf("end_reason = %v", summary.EndReason)
+	}
 	if len(e.aborter.ids) != 1 || e.aborter.ids[0] != id || e.auditCount(t, "match.abort") != 1 {
 		t.Fatalf("aborter=%v", e.aborter.ids)
 	}

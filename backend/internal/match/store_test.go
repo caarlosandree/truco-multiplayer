@@ -424,7 +424,7 @@ func TestAppendActionWaitsForConcurrentAbandon(t *testing.T) {
 		t.Fatalf("AppendAction não esperou o encerramento concorrente: %v", err)
 	case <-time.After(200 * time.Millisecond):
 	}
-	if _, err := tx.Exec(ctx, "UPDATE matches SET status = 'abandoned', finished_at = now(), abandon_reason = 'teste' WHERE id = $1", id); err != nil {
+	if _, err := tx.Exec(ctx, "UPDATE matches SET status = 'abandoned', finished_at = now(), abandon_reason = 'teste', end_reason = 'abandoned' WHERE id = $1", id); err != nil {
 		t.Fatal(err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -560,5 +560,47 @@ func TestAppendActionIsIdempotentForIdenticalRetry(t *testing.T) {
 	full, _ := enginetest.RandomRecord(2)
 	if err := e.store.AppendAction(ctx, id, 2, full.Actions[4].Action, full.Actions[4].Source); !errors.Is(err, match.ErrPlyConflict) {
 		t.Fatalf("ação diferente no ply existente: %v", err)
+	}
+}
+
+func TestFinishRecordsEndReason(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	id, _ := e.persist(t, 5, -1)
+	if err := e.store.Finish(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	sum, _ := e.store.Summary(ctx, id)
+	if sum.EndReason == nil || *sum.EndReason != replay.EndGameOver {
+		t.Fatalf("fim normal: end_reason = %v", sum.EndReason)
+	}
+
+	id, _ = e.persist(t, 6, 20)
+	if err := e.store.AppendAction(ctx, id, 20, engine.Action{Kind: engine.ActSysForfeit, Team: 1}, replay.SourceSystem); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.store.Finish(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	sum, _ = e.store.Summary(ctx, id)
+	if sum.EndReason == nil || *sum.EndReason != replay.EndForfeit {
+		t.Fatalf("W.O.: end_reason = %v", sum.EndReason)
+	}
+}
+
+func TestAbandonRecordsEndReason(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	id, _ := e.persist(t, 1, 5)
+	sum, _ := e.store.Summary(ctx, id)
+	if sum.EndReason != nil {
+		t.Fatalf("em andamento: end_reason = %v", sum.EndReason)
+	}
+	if err := e.store.Abandon(ctx, id, "diverged"); err != nil {
+		t.Fatal(err)
+	}
+	sum, _ = e.store.Summary(ctx, id)
+	if sum.EndReason == nil || *sum.EndReason != replay.EndAbandoned {
+		t.Fatalf("end_reason = %v", sum.EndReason)
 	}
 }

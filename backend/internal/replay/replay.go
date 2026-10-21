@@ -31,6 +31,18 @@ const (
 	StatusAbandoned  Status = "abandoned"
 )
 
+// EndReason é o motivo do fim de uma partida encerrada (coluna matches.end_reason).
+// Os valores coincidem com protocol.EndReason (há teste que compara). Partidas que
+// divergiram do log ("diverged") aparecem como abandoned no histórico.
+type EndReason string
+
+const (
+	EndGameOver  EndReason = "game_over" // fim normal
+	EndForfeit   EndReason = "forfeit"   // W.O.
+	EndAborted   EndReason = "aborted"   // abortada por um administrador
+	EndAbandoned EndReason = "abandoned" // abandonada (sala vazia, divergência, falha ao iniciar…)
+)
+
 type PlayerSeat struct {
 	UserID      string
 	DisplayName string

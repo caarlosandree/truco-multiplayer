@@ -46,10 +46,11 @@ SELECT id FROM matches WHERE status = 'finished' ORDER BY finished_at, id;
 -- name: FinishMatch :exec
 UPDATE matches
 SET status = 'finished', winner_team = @winner_team::smallint, score_a = @score_a::smallint,
-    score_b = @score_b::smallint, finished_at = @now::timestamptz
+    score_b = @score_b::smallint, finished_at = @now::timestamptz, end_reason = @end_reason::text
 WHERE id = @id;
 
 -- name: AbandonMatch :execrows
 UPDATE matches
-SET status = 'abandoned', finished_at = @now::timestamptz, abandon_reason = @reason::text
+SET status = 'abandoned', finished_at = @now::timestamptz, abandon_reason = @reason::text,
+    end_reason = @end_reason::text
 WHERE id = @id AND status = 'in_progress';
