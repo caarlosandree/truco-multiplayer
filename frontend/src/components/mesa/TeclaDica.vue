@@ -6,6 +6,6 @@ defineProps<{ tecla: string }>()
 <template>
   <kbd
     aria-hidden="true"
-    class="rounded-sm border border-current/40 px-1 font-sans text-xs leading-4 font-normal opacity-75 max-md:hidden"
+    class="rounded-sm border border-current/60 px-1 font-sans text-xs leading-4 font-normal opacity-85 max-md:hidden"
   >{{ tecla }}</kbd>
 </template>

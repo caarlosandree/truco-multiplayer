@@ -43,7 +43,10 @@ watch(
 const totalMs = computed(() => (firstSeen.value ? Math.max(1, firstSeen.value.deadline - firstSeen.value.at) : 1))
 
 // mão de 11: a dupla vê as cartas do parceiro
-const partnerCards = computed(() => (props.position === 'top' ? (game.view?.partnerHand ?? []) : []))
+// (decidindo ou respondendo, a mão do parceiro fica no painel, junto da decisão; aqui seguem os versos)
+const partnerCards = computed(() =>
+  props.position === 'top' && !game.mustDecideEleven && !game.mustRespondRaise ? (game.view?.partnerHand ?? []) : [],
+)
 const cardCount = computed(() => player.value?.cardCount ?? 0)
 
 // cena: halo no corte/escolha e balões

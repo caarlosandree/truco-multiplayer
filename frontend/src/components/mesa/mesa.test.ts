@@ -283,3 +283,12 @@ it('coberta recusada pelo servidor: avisa e desarma a chave', async () => {
   expect(w.find('[role="switch"]').attributes('aria-checked')).toBe('false')
   w.unmount()
 })
+
+it('mão de 11: a mão do parceiro aparece só no painel; no assento seguem os versos', () => {
+  useGameStore().onState(
+    makeState({ seat: 1, phase: 'eleven_decision', turn: undefined, score: [4, 11], partnerHand: [{ slot: 0, card: 1, hidden: false }] }, [1, 3]),
+  )
+  const w = mount(Mesa, { global: { plugins: [pinia] } })
+  expect(w.findAll('[data-parceiro]')).toHaveLength(1)
+  expect(w.find('[data-posicao="top"] [aria-label="Cartas do parceiro"]').exists()).toBe(false)
+})

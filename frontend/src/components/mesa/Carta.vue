@@ -11,7 +11,7 @@ const props = withDefaults(
     covered?: boolean
     hidden?: boolean
     /** xs = mini-verso dos adversários, sm = vira, md = vaza, lg = minha mão */
-    size?: 'xs' | 'sm' | 'md' | 'lg'
+    size?: 'xs' | 'sm' | 'md' | 'lg' | 'lgc'
     interactive?: boolean
     disabled?: boolean
     /** só enfeite: o contêiner pai descreve o conjunto */
@@ -38,6 +38,8 @@ const SIZES = {
   sm: 'w-(--carta-largura-vira)',
   md: 'w-(--carta-largura-mesa) max-md:w-13',
   lg: 'w-(--carta-largura-mao) max-md:w-22',
+  // mão compacta (celular, painel grande aberto): a mesma largura no desktop, vaza no celular
+  lgc: 'w-(--carta-largura-mao) max-md:w-13',
 } as const
 </script>
 

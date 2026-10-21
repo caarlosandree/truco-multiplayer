@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, ref, type Ref } from 'vue'
+import { computed, inject, nextTick, ref, watch, type Ref } from 'vue'
 import { useGameStore } from '@/stores/game'
 import { handKindText, stakeName } from '@/game/labels'
 import { teamOf } from '@/game/seats'
@@ -18,6 +18,7 @@ const props = withDefaults(defineProps<{ ocioso?: string }>(), { ocioso: '' })
 const game = useGameStore()
 const covered = inject<Ref<boolean>>('coberta', ref(false))
 const confirming = ref(false)
+const painel = ref<HTMLElement | null>(null)
 const bloqueado = computed(() => game.inflight || !game.online)
 
 const nameOf = (seat: number) => game.latestView?.players.find((p) => p.seat === seat)?.name ?? `Lugar ${seat + 1}`
@@ -69,6 +70,29 @@ const aguardo = computed(() => {
   return props.ocioso
 })
 
+// região viva única e persistente (sem trocar role): mudança de fase do painel e "Reconectando…"
+const anuncio = computed(() => (game.online ? (mode.value ? contexto.value : '') : 'Reconectando…'))
+
+function digitando(el: Element | null): boolean {
+  return el instanceof HTMLElement && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName))
+}
+
+// o painel trocou: se o foco estava nele (ou caiu para o body), vai para a ação principal da nova fase.
+// Nunca rouba o foco de um modal aberto, de um campo de texto ou de outra região da página.
+let focoNoPainel = false
+watch(mode, () => {
+  const ativo = document.activeElement
+  focoNoPainel = ativo === null || ativo === document.body || (painel.value?.contains(ativo) ?? false)
+}, { flush: 'pre' })
+watch(mode, async (novo) => {
+  if (!novo || !focoNoPainel || document.querySelector('[aria-modal="true"]') || digitando(document.activeElement)) return
+  await nextTick()
+  const alvo =
+    painel.value?.querySelector<HTMLElement>('[data-primaria]:not(:disabled)') ??
+    painel.value?.querySelector<HTMLElement>('[data-corte] button:not(:disabled), [data-queima] [role="checkbox"]:not(:disabled)')
+  alvo?.focus()
+})
+
 const raiseLabel = computed(() => (game.nextStakeValue ? `${stakeName(game.nextStakeValue)}!` : ''))
 
 function raise() {
@@ -91,15 +115,14 @@ defineExpose({ raise })
 <template>
   <div
     v-if="mode"
+    ref="painel"
     data-painel
-    :aria-busy="!game.online || undefined"
     class="flex w-full flex-col gap-3 rounded-painel bg-(--painel-bg) p-4 text-(--painel-fg)"
   >
     <p
       class="text-sm"
       :class="game.online ? 'text-(--painel-dica)' : 'font-bold text-(--painel-fg)'"
       data-contexto
-      :role="game.online ? undefined : 'status'"
     >
       {{ contexto }}
     </p>
@@ -138,10 +161,18 @@ defineExpose({ raise })
   <p
     v-else-if="aguardo"
     data-vez-de
-    :role="game.online ? undefined : 'status'"
     class="rounded-painel bg-(--painel-bg) px-4 py-3 text-base font-bold text-(--painel-fg)"
   >
     {{ aguardo }}
+  </p>
+
+  <p
+    class="sr-only"
+    role="status"
+    aria-live="polite"
+    data-anuncio
+  >
+    {{ anuncio }}
   </p>
 
   <Modal

@@ -3,7 +3,7 @@ import type { HandSlotView } from '@/protocol/engine'
 import Carta from './Carta.vue'
 import TeclaDica from './TeclaDica.vue'
 
-const props = defineProps<{ slots: HandSlotView[]; interactive: boolean }>()
+const props = defineProps<{ slots: HandSlotView[]; interactive: boolean; compacta?: boolean }>()
 const emit = defineEmits<{ play: [slot: number] }>()
 </script>
 
@@ -14,7 +14,8 @@ const emit = defineEmits<{ play: [slot: number] }>()
     data-mao
     role="group"
     aria-label="Sua mão"
-    class="relative flex min-h-(--mao-altura) justify-center gap-3 [--mao-altura:7.7rem] max-md:[--mao-altura:8rem] md:mb-6"
+    :class="props.compacta ? 'max-md:[--mao-altura:4.9rem]' : 'max-md:[--mao-altura:8rem]'"
+    class="relative flex min-h-(--mao-altura) justify-center gap-3 [--mao-altura:7.7rem] md:mb-6"
   >
     <div
       v-for="(s, i) in props.slots"
@@ -26,7 +27,7 @@ const emit = defineEmits<{ play: [slot: number] }>()
         :hidden="s.hidden"
         :label="s.hidden ? `Carta ${i + 1}` : undefined"
         :aria-keyshortcuts="String(i + 1)"
-        size="lg"
+        :size="props.compacta ? 'lgc' : 'lg'"
         interactive
         :disabled="!props.interactive"
         @select="emit('play', s.slot)"

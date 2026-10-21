@@ -14,7 +14,7 @@ const game = useGameStore()
   >
     <div
       role="group"
-      aria-label="Mão do parceiro"
+      aria-label="Cartas do parceiro"
       class="flex justify-center gap-2"
     >
       <Carta
@@ -26,7 +26,8 @@ const game = useGameStore()
       />
     </div>
     <p class="text-sm text-(--painel-dica)">
-      <span class="text-giz">Parceiro:</span>
+      <span class="block font-bold text-(--painel-fg)">Mão do parceiro</span>
+      <span class="text-(--painel-fg)">Parceiro:</span>
       {{ game.latestView.partnerVote ? voteText(game.latestView.partnerVote) : 'ainda não decidiu' }}
     </p>
   </div>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useGameStore } from '@/stores/game'
 import Carta from './Carta.vue'
 import Botao from '@/components/ui/Botao.vue'
@@ -8,6 +8,14 @@ const game = useGameStore()
 const selected = ref<number[]>([])
 const bloqueado = computed(() => game.inflight || !game.online)
 const fours = computed(() => (game.latestView?.myHand ?? []).filter((h) => game.fourSlots.includes(h.slot)))
+
+// só ficam marcadas as que ainda são 4 da minha mão
+watch(
+  () => game.fourSlots.join(','),
+  () => {
+    selected.value = selected.value.filter((s) => game.fourSlots.includes(s))
+  },
+)
 
 function toggle(slot: number) {
   selected.value = selected.value.includes(slot) ? selected.value.filter((s) => s !== slot) : [...selected.value, slot].sort((a, b) => a - b)
@@ -51,7 +59,7 @@ function toggle(slot: number) {
       data-primaria
       class="w-full"
       :disabled="selected.length === 0 || bloqueado"
-      @click="game.burn(selected)"
+      @click="game.burn([...selected])"
     >
       Queimar {{ selected.length > 0 ? `(${selected.length})` : '' }}
     </Botao>

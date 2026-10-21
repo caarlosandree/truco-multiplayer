@@ -137,6 +137,8 @@ function medir() {
   if (mq('(min-width: 1024px)')) raiz.setProperty('--toast-right', 'calc(20rem + 1.5rem)')
   else raiz.removeProperty('--toast-right')
 }
+// decisão com painel alto (celular): a mão encolhe para caber acima dele
+const painelGrande = computed(() => game.mustChooseCut || game.mustBurn || game.mustDecideEleven || game.mustRespondRaise)
 const pode = computed(() => game.online && !game.inflight)
 onMounted(() => {
   off = installShortcuts(
@@ -180,37 +182,40 @@ onBeforeUnmount(() => {
     v-if="game.view"
     data-tema="escuro"
     data-mesa
-    class="textura-feltro flex min-h-[calc(100dvh-3.5rem)] flex-col text-giz lg:grid lg:grid-cols-[minmax(0,1fr)_20rem]"
+    class="textura-feltro flex min-h-[calc(100dvh-3.5rem)] flex-col text-giz max-lg:h-[calc(100dvh-3.5rem)] lg:grid lg:grid-cols-[minmax(0,1fr)_20rem]"
   >
     <h1 class="sr-only">
       Partida · {{ room.room?.name }}
     </h1>
     <section
       aria-label="Mesa"
-      class="relative flex min-w-0 flex-1 flex-col overflow-hidden"
+      class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
     >
-      <Placar />
-      <div class="relative mx-auto grid w-full max-w-[60rem] flex-1 grid-cols-3 grid-rows-[auto_1fr] content-start gap-x-2 gap-y-3 px-2 pt-7 md:grid-cols-[1fr_auto_1fr] md:gap-x-4 md:px-6 md:pt-6">
-        <!-- o oval da mesa, igual ao da sala de espera: só decoração, atrás dos lugares -->
-        <div
-          aria-hidden="true"
-          class="pointer-events-none absolute inset-x-4 inset-y-3 rounded-[50%] border-4 border-felt-deep bg-felt/60 max-md:hidden"
-        />
-        <AssentoMesa
-          v-for="o in others"
-          :key="o.seat"
-          :seat="o.seat"
-          :position="o.position"
-          :class="SLOT[o.position as Exclude<RelativePosition, 'bottom'>]"
-          class="max-md:justify-self-center"
-        />
-        <div class="relative col-span-3 row-start-2 place-self-center py-2 md:col-span-1 md:col-start-2">
-          <Centro />
+      <!-- celular: placar e mesa rolam aqui dentro; minha mão e o painel ficam embaixo, sem se cobrir -->
+      <div class="flex min-h-0 flex-1 flex-col max-lg:overflow-y-auto">
+        <Placar />
+        <div class="relative mx-auto grid w-full max-w-[60rem] flex-1 grid-cols-3 grid-rows-[auto_1fr] content-start gap-x-2 gap-y-3 px-2 pt-7 md:grid-cols-[1fr_auto_1fr] md:gap-x-4 md:px-6 md:pt-6">
+          <!-- o oval da mesa, igual ao da sala de espera: só decoração, atrás dos lugares -->
+          <div
+            aria-hidden="true"
+            class="pointer-events-none absolute inset-x-4 inset-y-3 rounded-[50%] border-4 border-felt-deep bg-felt/60 max-md:hidden"
+          />
+          <AssentoMesa
+            v-for="o in others"
+            :key="o.seat"
+            :seat="o.seat"
+            :position="o.position"
+            :class="SLOT[o.position as Exclude<RelativePosition, 'bottom'>]"
+            class="max-md:justify-self-center"
+          />
+          <div class="relative col-span-3 row-start-2 place-self-center py-2 md:col-span-1 md:col-start-2">
+            <Centro />
+          </div>
         </div>
       </div>
       <div
         ref="base"
-        class="flex flex-col items-center gap-3 px-2 pt-2 pb-3 md:pb-6"
+        class="flex shrink-0 flex-col items-center gap-3 px-2 pt-2 pb-3 md:pb-6"
       >
         <AssentoMesa
           :seat="game.view.seat"
@@ -219,6 +224,7 @@ onBeforeUnmount(() => {
         <Mao
           :slots="mao"
           :interactive="game.canPlay && pode"
+          :compacta="painelGrande"
           @play="play"
         />
       </div>
@@ -228,7 +234,7 @@ onBeforeUnmount(() => {
     <aside
       ref="painel"
       aria-label="Ações"
-      class="textura-lousa z-(--z-painel) flex flex-col gap-3 border-t-2 border-felt-deep p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] max-lg:sticky max-lg:bottom-0 lg:border-t-0 lg:border-l-2 lg:p-4"
+      class="textura-lousa z-(--z-painel) flex flex-col gap-3 border-t-2 border-felt-deep p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] max-lg:shrink-0 lg:border-t-0 lg:border-l-2 lg:p-4"
     >
       <slot name="aviso" />
       <slot name="painel">

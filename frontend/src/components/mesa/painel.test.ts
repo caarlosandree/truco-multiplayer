@@ -146,3 +146,67 @@ it('reconectando na vez: toggle e aumentar desabilitados', () => {
   expect(w.find('[role="switch"]').attributes('disabled')).toBeDefined()
   expect(w.find('[data-acao="aumentar"]').attributes('disabled')).toBeDefined()
 })
+
+it('região viva única e persistente, sem aria-busy nem role dinâmico', async () => {
+  useSessionStore().connection = 'reconnecting'
+  const pending = { requester: 1, fromTeam: 1, prevStake: 1, toStake: 3 }
+  useGameStore().onState(makeState({ phase: 'awaiting_raise_response', votingTeam: 0, pending }, [0, 2]))
+  const w = mountPainel()
+  const vivo = w.findAll('[role="status"]')
+  expect(vivo).toHaveLength(1)
+  expect(vivo[0]!.text()).toBe('Reconectando…')
+  expect(w.find('[aria-busy]').exists()).toBe(false)
+  useSessionStore().connection = 'open'
+  await flushPromises()
+  expect(w.findAll('[role="status"]')).toHaveLength(1)
+  expect(w.find('[data-anuncio]').text()).toContain('Sua dupla responde')
+  useGameStore().onState(makeState({ turn: 2 }, [2]))
+  await flushPromises()
+  expect(w.findAll('[role="status"]')).toHaveLength(1)
+  expect(w.find('[data-anuncio]').text()).toBe('')
+  w.unmount()
+})
+
+it('troca de painel: o foco vai para a ação principal; não rouba de modal nem de campo', async () => {
+  const game = useGameStore()
+  game.onState(makeState({ stake: 1 }))
+  const w = mountPainel()
+  const pending = { requester: 1, fromTeam: 1, prevStake: 1, toStake: 3 }
+  ;(document.activeElement as HTMLElement | null)?.blur()
+  game.onState(makeState({ phase: 'awaiting_raise_response', votingTeam: 0, pending }, [0, 2]))
+  await flushPromises()
+  expect(document.activeElement).toBe(w.find('[data-voto="accept"]').element)
+  // foco num campo de texto: não rouba
+  game.onState(makeState({ turn: 2 }, [2]))
+  await flushPromises()
+  const input = document.createElement('input')
+  document.body.append(input)
+  input.focus()
+  game.onState(makeState({ phase: 'awaiting_raise_response', votingTeam: 0, pending }, [0, 2]))
+  await flushPromises()
+  expect(document.activeElement).toBe(input)
+  input.remove()
+  w.unmount()
+})
+
+it('corte: o foco vai para a primeira carta oferecida', async () => {
+  const game = useGameStore()
+  game.onState(makeState({ turn: 2 }, [2]))
+  const w = mountPainel()
+  ;(document.activeElement as HTMLElement | null)?.blur()
+  game.onState(makeState({ phase: 'cut_choice', cutOffer: [{ keep: 0, card: 5 }, { keep: 1, card: 9 }] }))
+  await flushPromises()
+  expect(document.activeElement).toBe(w.findAll('[data-corte] button')[0]!.element)
+  w.unmount()
+})
+
+it('queima: marcas somem quando a carta deixa de ser 4 e burn recebe uma cópia', async () => {
+  const game = useGameStore()
+  game.onState(makeState({ phase: 'burn_fours', myHand: [{ slot: 0, card: 0, hidden: false }, { slot: 1, card: 3, hidden: false }, { slot: 2, card: 39, hidden: false }] }))
+  const w = mountPainel()
+  await w.findAll('[data-queima] [role="checkbox"]')[1]!.trigger('click')
+  game.onState(makeState({ phase: 'burn_fours', myHand: [{ slot: 0, card: 0, hidden: false }, { slot: 1, card: 20, hidden: false }, { slot: 2, card: 39, hidden: false }] }))
+  await flushPromises()
+  expect(w.find('[data-acao="queimar"]').attributes('disabled')).toBeDefined()
+  w.unmount()
+})
