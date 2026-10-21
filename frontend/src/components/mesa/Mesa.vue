@@ -93,14 +93,20 @@ async function play(slot: number) {
 // quem age agora vem de pendingSeats (voto, corte, queima, jogada); sem pendentes, cai para a vez do turno
 const euAjo = computed(() => game.euAjo)
 // "sua vez" (spec §8.2): com a aba em foco, som; sem foco, o título da aba pisca "Sua vez!" até voltar
+// immediate: montar ou reconectar já na minha vez também avisa; com o áudio bloqueado, o som espera o primeiro gesto
 let pararTitulo: (() => void) | null = null
-watch(euAjo, (vez) => {
-  pararTitulo?.()
-  pararTitulo = null
-  if (!vez || typeof document === 'undefined') return
-  if (document.hasFocus()) sfx()?.play('yourTurn')
-  else pararTitulo = startTabTitleBlink(document.title, 'Sua vez!')
-})
+watch(
+  euAjo,
+  (vez) => {
+    pararTitulo?.()
+    pararTitulo = null
+    sfx()?.cancelarPendente()
+    if (!vez || typeof document === 'undefined') return
+    if (document.hasFocus()) sfx()?.tocarQuandoLiberado('yourTurn')
+    else pararTitulo = startTabTitleBlink(document.title, 'Sua vez!')
+  },
+  { immediate: true },
+)
 const vezDe = computed(() => {
   const v = game.view
   if (!v) return ''
@@ -162,6 +168,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   off?.()
   pararTitulo?.()
+  sfx()?.cancelarPendente()
   observer?.disconnect()
   window.removeEventListener('resize', medir)
   clearTimeout(soltar)

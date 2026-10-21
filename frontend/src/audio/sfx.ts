@@ -58,6 +58,7 @@ export class Sfx {
   private ctx: AudioContextLike | null = null
   private buffers = new Map<SoundId, AudioBuffer>()
   private inflight: Promise<void> | null = null
+  private pendente: SoundId | null = null
 
   constructor(private readonly o: SfxOptions) {}
 
@@ -84,6 +85,10 @@ export class Sfx {
     this.ctx = ctx
     if (ctx.state !== 'running') await ctx.resume()
     await Promise.all(SOUND_IDS.map((id) => this.load(ctx, id)))
+    // um som pedido antes do desbloqueio toca agora, uma única vez (no gesto que liberou o áudio)
+    const pedido = this.pendente
+    this.pendente = null
+    if (pedido) this.play(pedido)
   }
 
   private async load(ctx: AudioContextLike, id: SoundId): Promise<void> {
@@ -95,6 +100,19 @@ export class Sfx {
     } catch {
       // som ausente não quebra o jogo
     }
+  }
+
+  /**
+   * Toca já se o áudio está liberado; senão guarda o pedido (só o último) para o próximo desbloqueio.
+   * Um som guardado some com `cancelarPendente`, p. ex. quando a vez passa antes de o áudio liberar.
+   */
+  tocarQuandoLiberado(id: SoundId): void {
+    if (this.running) this.play(id)
+    else this.pendente = id
+  }
+
+  cancelarPendente(): void {
+    this.pendente = null
   }
 
   play(id: SoundId): void {

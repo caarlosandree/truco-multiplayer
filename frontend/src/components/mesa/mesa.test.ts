@@ -13,12 +13,37 @@ import { makeState } from '@/test/fixtures'
 import { defineComponent, inject, onMounted, reactive, type Ref } from 'vue'
 
 const play = vi.fn()
-vi.mock('@/audio/install', () => ({ sfx: () => ({ play }) }))
+// espelha Sfx.tocarQuandoLiberado/cancelarPendente: sem áudio liberado, guarda só o último pedido
+const audio = { livre: true, pendente: null as string | null }
+vi.mock('@/audio/install', () => ({
+  sfx: () => ({
+    play,
+    get running() {
+      return audio.livre
+    },
+    tocarQuandoLiberado(id: string) {
+      if (audio.livre) play(id)
+      else audio.pendente = id
+    },
+    cancelarPendente() {
+      audio.pendente = null
+    },
+  }),
+}))
+// o primeiro gesto libera o áudio e toca o que ficou guardado
+function desbloquear() {
+  audio.livre = true
+  if (audio.pendente) play(audio.pendente)
+  audio.pendente = null
+}
+const vezes = (id: string) => play.mock.calls.filter(([x]) => x === id).length
 
 enableAutoUnmount(afterEach)
 let pinia: ReturnType<typeof createPinia>
 beforeEach(() => {
   play.mockClear()
+  audio.livre = true
+  audio.pendente = null
   pinia = createPinia()
   setActivePinia(pinia)
   useSessionStore().connection = 'open'
@@ -195,6 +220,47 @@ it('com a aba sem foco a vez não toca som: o título pisca "Sua vez!" até foca
   w.unmount()
   expect(document.title).toBe('Truco')
   vi.useRealTimers()
+})
+
+it('montar já na minha vez com a aba em foco toca "sua vez" uma única vez, mesmo com nova view da mesma vez', async () => {
+  vi.spyOn(document, 'hasFocus').mockReturnValue(true)
+  useGameStore().onState(makeState({ seat: 1, turn: 1 }, [1]))
+  const w = mount(Mesa, { global: { plugins: [pinia] } })
+  await flushPromises()
+  expect(vezes('yourTurn')).toBe(1)
+  useGameStore().onState(makeState({ seat: 1, turn: 1 }, [1]))
+  await flushPromises()
+  expect(vezes('yourTurn')).toBe(1)
+  w.unmount()
+})
+
+it('montar já na minha vez com a aba sem foco pisca o título e não toca som', async () => {
+  vi.useFakeTimers()
+  document.title = 'Truco'
+  vi.spyOn(document, 'hasFocus').mockReturnValue(false)
+  useGameStore().onState(makeState({ seat: 1, turn: 1 }, [1]))
+  const w = mount(Mesa, { global: { plugins: [pinia] } })
+  expect(vezes('yourTurn')).toBe(0)
+  vi.advanceTimersByTime(1000)
+  expect(document.title).toBe('Sua vez!')
+  w.unmount()
+  expect(document.title).toBe('Truco')
+  vi.useRealTimers()
+})
+
+it('com o áudio bloqueado a vez espera o primeiro gesto e toca uma única vez, mesmo após remontar', async () => {
+  vi.spyOn(document, 'hasFocus').mockReturnValue(true)
+  audio.livre = false
+  useGameStore().onState(makeState({ seat: 1, turn: 1 }, [1]))
+  const primeira = mount(Mesa, { global: { plugins: [pinia] } })
+  await flushPromises()
+  primeira.unmount()
+  const segunda = mount(Mesa, { global: { plugins: [pinia] } })
+  await flushPromises()
+  expect(vezes('yourTurn')).toBe(0)
+  desbloquear()
+  expect(vezes('yourTurn')).toBe(1)
+  segunda.unmount()
 })
 
 it('a mesa não tem região viva própria: o Anunciador é o único dono dos anúncios de mesa', async () => {

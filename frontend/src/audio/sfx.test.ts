@@ -54,6 +54,36 @@ it('não toca antes do desbloqueio nem com mudo; toca com o volume das preferên
   expect(started).toHaveLength(1)
 })
 
+it('pedido feito antes do desbloqueio toca uma única vez ao liberar; cancelado não toca', async () => {
+  const { ctx, started } = fakeContext()
+  const sfx = new Sfx({
+    createContext: () => ctx as never,
+    fetchBuffer: async () => new ArrayBuffer(8),
+    urls,
+    volume: () => 1,
+    muted: () => false,
+  })
+  sfx.tocarQuandoLiberado('yourTurn')
+  sfx.tocarQuandoLiberado('yourTurn')
+  expect(started).toHaveLength(0)
+  await sfx.unlock()
+  expect(started).toHaveLength(1)
+  await sfx.unlock()
+  expect(started).toHaveLength(1)
+
+  const outro = new Sfx({
+    createContext: () => ctx as never,
+    fetchBuffer: async () => new ArrayBuffer(8),
+    urls,
+    volume: () => 1,
+    muted: () => false,
+  })
+  outro.tocarQuandoLiberado('yourTurn')
+  outro.cancelarPendente()
+  await outro.unlock()
+  expect(started).toHaveLength(1)
+})
+
 it('chamadas concorrentes de unlock compartilham uma promessa (sem baixar em dobro)', async () => {
   const { ctx } = fakeContext()
   const createContext = vi.fn(() => ctx as never)
