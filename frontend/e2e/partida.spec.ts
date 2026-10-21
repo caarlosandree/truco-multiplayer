@@ -40,6 +40,22 @@ test('quatro jogadores jogam uma partida completa', async ({ browser }) => {
     await expect(dialog.getByRole('button', { name: 'Revanche' })).toBeVisible()
     await expect(dialog.getByRole('button', { name: 'Sair da sala' })).toBeVisible()
   }
+
+  // a partida terminada entra no ranking e no perfil de quem jogou
+  const p = players[0] as Page
+  const nome = (await p.locator('header a[href^="/jogadores/"]').getAttribute('href')) ?? ''
+  const username = nome.split('/').pop() as string
+  // com a sala aberta a navegação devolve à mesa: sai da sala antes
+  await p.getByRole('dialog', { name: 'Fim da partida' }).getByRole('button', { name: 'Sair da sala' }).click()
+  await expect(p.getByRole('heading', { name: 'Salas', exact: true })).toBeVisible()
+  await p.goto('/ranking')
+  await expect(p.getByRole('heading', { name: 'Ranking', exact: true })).toBeVisible()
+  await expect(p.locator('table tbody a[href^="/jogadores/"]').first()).toBeVisible()
+  await expect(p.locator(`table tbody a[href="/jogadores/${username}"]`)).toBeVisible()
+  await p.goto(`/jogadores/${username}`)
+  const recentes = p.getByRole('region', { name: 'Partidas recentes' })
+  await expect(recentes.getByTestId('partida')).toHaveCount(1)
+  await expect(recentes.getByTestId('partida')).toContainText(/\d+×\d+|W\.O\./)
 })
 
 test('recarregar no meio da partida retoma a mesa', async ({ browser }) => {

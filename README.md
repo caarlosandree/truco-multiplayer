@@ -82,13 +82,21 @@ O projeto foi decomposto em quatro sub-projetos, cada um com spec, plano e imple
 | 2 | **Contas e persistência** | Cadastro e login (usuário, e-mail e senha), sessão em cookie `HttpOnly`, recuperação de senha, histórico, ranking, replay | ✅ **Concluído** |
 | 3 | **Servidor de salas** | Lobby ao vivo, salas públicas e privadas, ator por sala, WebSocket, timers, W.O., reconexão e retomada após restart | ✅ **Concluído** |
 | 4 | **Frontend jogável (Spec 4a)** | Contas, lobby, sala de espera e mesa em Vue 3 + Pinia, baralho francês/espanhol, sinais, W.O., sons, teclado e acessibilidade, teste e2e com quatro navegadores | ✅ **Concluído** |
-| 4b | **Histórico, ranking, replay e admin** | Telas de histórico de partidas, ranking, replay e painel de administração | 🗓️ Planejado |
+| 4b | **Social, ranking e admin** | Presença e convites (no app e por e-mail), ranking por período, perfil público com histórico e painel de administração | ✅ **Concluído** |
 
-> O servidor joga partidas completas por WebSocket (lobby, salas, timers, W.O. e retomada após restart) e o frontend da Spec 4a é jogável de ponta a ponta. Falta a Spec 4b (histórico, ranking, replay e painel admin).
+> O servidor joga partidas completas por WebSocket (lobby, salas, timers, W.O. e retomada após restart), o frontend da Spec 4a é jogável de ponta a ponta e a Spec 4b entregou a camada social (quem está online, convites), o ranking, o perfil público com histórico e o painel de administração. O replay de partidas continua disponível só pela API (`GET /api/matches/{id}/replay`); ainda não há tela para ele.
 
-### Decisões já tomadas para as próximas etapas
+### Telas da Spec 4b
 
-- **Interface (Spec 4b):** histórico, ranking, replay e painel admin consomem a API HTTP já existente (`/api/...`), reaproveitando o cromo, os tokens e o `AppShell` da 4a; o replay usa o pacote `replay` do servidor.
+| Rota | Tela |
+|---|---|
+| `/ranking` | Ranking por vitórias ou aproveitamento, no período semana, mês ou geral; destaca a sua posição mesmo fora do topo |
+| `/jogadores/:username` | Perfil público: posição em cada período, números, partidas recentes e parceiros frequentes; botão para convidar à sua sala |
+| `/jogadores/:username/partidas` | Histórico completo de partidas do jogador, paginado |
+| `/entrar-convite/:token` | Aceite do convite recebido por e-mail, com estados de expirado, de outra conta e de já estar numa partida |
+| `/admin/usuarios`, `/admin/dominios`, `/admin/partidas`, `/admin/auditoria` | Painel de administração: usuários (desativar, reativar, forçar nova senha), domínios de e-mail, partidas em andamento (encerrar) e trilha de auditoria. Não há controle para promover ou rebaixar administradores |
+
+Na sala de espera, o botão **Convidar** (ou o de um lugar vazio) abre o seletor de pessoas: quem está **Online** aparece com o status (no lobby, esperando numa sala ou jogando) e os demais colegas vêm da busca por nome ou usuário. Quem recebe o convite vê um aviso persistente com *Entrar* e *Agora não*, com som, título da aba e notificação do navegador quando a aba está em segundo plano. Quem estava offline recebe um e-mail com um link que, depois do login, coloca direto na sala. A lista **Convites** da sala mostra o estado de cada um: aguardando, aceitou, agora não, e-mail enviado.
 
 ---
 
@@ -349,7 +357,23 @@ Conexão em `GET /ws`, autenticada pelo mesmo cookie de sessão da API e com `Or
 | `claim_forfeit` | — | quando o W.O. está disponível para a sua dupla |
 | `signal` | `{ "id": "truco" \| "boa" \| "vamos" \| "calma" \| "desculpa" \| "valeu" }` | durante a partida, 1 a cada 3 s |
 
-**Servidor → cliente:** `hello`, `lobby_snapshot`, `room_upserted`, `room_removed`, `room_state`, `left_room`, `state` (`PlayerView` + `deadlines` + `pendingSeats`), `events`, `forfeit_available`, `match_ended`, `signal` e `error`. Os tipos TypeScript são **gerados**: payloads em [`messages.ts`](frontend/src/protocol/messages.ts) e uniões discriminadas `ClientMessage`/`ServerMessage` em [`union.ts`](frontend/src/protocol/union.ts).
+**Servidor → cliente:** `hello`, `lobby_snapshot`, `room_upserted`, `room_removed`, `room_state`, `left_room`, `state` (`PlayerView` + `deadlines` + `pendingSeats`), `events`, `forfeit_available`, `match_ended`, `signal` e `error`, mais as mensagens sociais da Spec 4b (tabela abaixo). Os tipos TypeScript são **gerados**: payloads em [`messages.ts`](frontend/src/protocol/messages.ts) e uniões discriminadas `ClientMessage`/`ServerMessage` em [`union.ts`](frontend/src/protocol/union.ts).
+
+**Presença e convites (Spec 4b)**
+
+| `type` | Direção | Descrição |
+|---|---|---|
+| `presence_snapshot` | servidor → cliente | Lista de quem está online (usuário, nome e status: lobby, esperando ou jogando); enviada ao conectar |
+| `presence_updated` | servidor → cliente | Alguém entrou online ou mudou de status |
+| `presence_removed` | servidor → cliente | Alguém saiu (inclusive conta desativada, que cai com `4003`) |
+| `invite` | cliente → servidor | `{ "username", "seat"? }`: convida para a sua sala; offline vira e-mail com link |
+| `invite_respond` | cliente → servidor | `{ "inviteId", "accept" }`: aceita ou recusa ("agora não") um convite recebido |
+| `invite_accept_token` | cliente → servidor | Aceita o convite do e-mail pelo token do link `/entrar-convite/:token` |
+| `invite_received` | servidor → cliente | Convite novo (reenviado na reconexão enquanto estiver pendente) |
+| `invite_expired` | servidor → cliente | O convite deixou de valer: sala cheia, partida iniciada, sala fechada ou conta desativada |
+| `room_invites` | servidor → cliente | Convites da sua sala e o estado de cada um (aguardando, aceitou, agora não, e-mail enviado) |
+
+Erros novos: `invite_not_found`, `invite_expired`, `invite_not_yours` (link aberto por outra conta), `invitee_playing` e `cannot_invite_self`.
 
 **Regras da partida em tempo real**
 
@@ -380,7 +404,8 @@ Rotas sob `/api`, com JSON. A sessão vai no cookie `__Host-truco_session` (ou `
 | `GET` | `/api/me` | Usuário da sessão (autenticada) |
 | `PATCH` | `/api/me` | Altera o nome de exibição (autenticada) |
 | `POST` | `/api/me/password` | Troca a senha, encerra as outras sessões e renova a atual (autenticada) |
-| `GET` | `/api/ranking` | Ranking de jogadores (autenticada) |
+| `GET` | `/api/ranking?period=&metric=` | Ranking de jogadores; `period` = `week`, `month` ou `all`, `metric` = `wins` ou `winrate` (autenticada) |
+| `GET` | `/api/users?q=&cursor=` | Diretório de colegas para o seletor de convite, com busca por nome ou usuário e paginação por cursor (autenticada) |
 | `GET` | `/api/users/{username}` | Perfil e estatísticas de um jogador (autenticada) |
 | `GET` | `/api/matches` | Histórico de partidas de um jogador, paginado por cursor (autenticada) |
 | `GET` | `/api/matches/{id}` | Resumo de uma partida (autenticada) |
@@ -389,13 +414,15 @@ Rotas sob `/api`, com JSON. A sessão vai no cookie `__Host-truco_session` (ou `
 | `POST` | `/api/admin/users/{id}/disable` | Desativa a conta e encerra as sessões (admin) |
 | `POST` | `/api/admin/users/{id}/enable` | Reativa a conta (admin) |
 | `POST` | `/api/admin/users/{id}/force-password-reset` | Obriga a redefinição de senha no próximo acesso (admin) |
-| `PUT` | `/api/admin/users/{id}/admin` | Concede ou remove o papel de administrador (admin) |
 | `GET` | `/api/admin/email-domains` | Lista os domínios de e-mail permitidos (admin) |
 | `POST` | `/api/admin/email-domains` | Adiciona um domínio permitido (admin) |
 | `DELETE` | `/api/admin/email-domains/{domain}` | Remove um domínio permitido (admin) |
+| `GET` | `/api/admin/matches` | Lista as partidas em andamento (admin) |
 | `POST` | `/api/admin/matches/{id}/abort` | Encerra uma partida em andamento (admin) |
 | `GET` | `/api/admin/audit` | Trilha de auditoria, paginada por cursor (admin) |
 | `GET` | `/healthz` | Saúde do servidor, fora de `/api`: `200` se o pool do banco responde a `SELECT 1` (sem autenticação) |
+
+> **Administrador só pelo CLI.** Não existe rota nem tela para conceder ou retirar o papel de administrador (a antiga `PUT /api/admin/users/{id}/admin` foi removida na Spec 4b): isso só se faz com `promote-admin` e `demote-admin` no servidor, e ambos gravam a auditoria. O `demote-admin` recusa rebaixar o último administrador ativo. Administradores desativados antes da 4b só voltam pelo CLI: `demote-admin`, reativar a conta no painel e `promote-admin` de novo.
 
 Erros usam sempre o mesmo formato:
 
@@ -433,7 +460,7 @@ Erros usam sempre o mesmo formato:
 truco-multiplayer/
 ├── backend/
 │   ├── go.mod                         # módulo github.com/caarlosandree/truco-multiplayer/backend
-│   ├── cmd/server/                    # binário: serve, migrate, promote-admin, recompute-stats
+│   ├── cmd/server/                    # binário: serve, migrate, promote-admin, demote-admin, recompute-stats
 │   ├── tygo.yaml                      # configuração da geração de tipos TS
 │   └── internal/
 │       ├── engine/                    # motor de regras PURO (somente stdlib)
@@ -518,7 +545,10 @@ cp .env.example .env        # ajuste ALLOWED_EMAIL_DOMAINS; e-mails vão para o 
 make dev-db                 # Postgres 18 no Docker
 make run                    # aplica migrations e sobe em :8080
 cd backend && go run ./cmd/server promote-admin ana@empresa.com.br
+cd backend && go run ./cmd/server demote-admin ana@empresa.com.br   # remove o papel; recusa o último admin ativo
 ```
+
+O papel de administrador só muda por esses dois subcomandos (ver [API HTTP](#-api-http)).
 
 ### Rodando o frontend
 
@@ -547,7 +577,7 @@ Testes:
 | Comando | O que faz |
 |---|---|
 | `make web-test` | `typecheck` + `lint` + testes unitários (Vitest) do frontend |
-| `make e2e` | Sobe um Postgres isolado (projeto compose `truco-e2e`, porta 55432) e o backend servindo o build em `:8090`, e roda o Playwright com **quatro navegadores jogando uma partida** e retomando após reload. Requer Docker, Go, Node 24, pnpm e o **Google Chrome do sistema** (o Playwright usa `channel: 'chrome'`, não baixa navegador). Leva cerca de 6 minutos |
+| `make e2e` | Sobe um Postgres isolado (projeto compose `truco-e2e`, porta 55432) e o backend servindo o build em `:8090`, e roda o Playwright com **quatro navegadores jogando uma partida** (que depois aparece no ranking e no perfil), retomando após reload, e os fluxos de convite no app e por e-mail. Requer Docker, Go, Node 24, pnpm e o **Google Chrome do sistema** (o Playwright usa `channel: 'chrome'`, não baixa navegador). Leva cerca de 8 minutos |
 
 ### Comandos disponíveis
 
@@ -564,7 +594,7 @@ Testes:
 | `make web-dev` | Vite em `http://localhost:5173` |
 | `make web-build` | `vue-tsc` + build de produção em `frontend/dist` |
 | `make web-test` | `typecheck` + `lint` + testes do frontend |
-| `make e2e` | Teste ponta a ponta com quatro navegadores (Docker isolado, Chrome do sistema; ~6 min) |
+| `make e2e` | Testes ponta a ponta: partida com quatro navegadores, convites e ranking (Docker isolado, Chrome do sistema; ~8 min) |
 
 Outros comandos úteis:
 
@@ -736,6 +766,7 @@ O desenho de cada etapa fica versionado no repositório:
 - **Spec 2 – Contas e persistência:** [`docs/superpowers/specs/2026-10-14-truco-contas-persistencia-design.md`](docs/superpowers/specs/2026-10-14-truco-contas-persistencia-design.md)
 - **Plano de implementação da Spec 2:** [`docs/superpowers/plans/2026-10-14-truco-contas-persistencia.md`](docs/superpowers/plans/2026-10-14-truco-contas-persistencia.md)
 - **Spec 3 – Servidor de salas:** [`docs/superpowers/specs/2026-10-14-truco-salas-websocket-design.md`](docs/superpowers/specs/2026-10-14-truco-salas-websocket-design.md) e plano [`docs/superpowers/plans/2026-10-14-truco-salas-websocket.md`](docs/superpowers/plans/2026-10-14-truco-salas-websocket.md)
+- **Spec 4b – Social, ranking e admin:** [`docs/superpowers/specs/2026-10-21-truco-social-ranking-admin-design.md`](docs/superpowers/specs/2026-10-21-truco-social-ranking-admin-design.md)
 - **Spec 4a – Frontend jogável:** [`docs/superpowers/specs/2026-10-15-truco-frontend-jogavel-design.md`](docs/superpowers/specs/2026-10-15-truco-frontend-jogavel-design.md), plano [`docs/superpowers/plans/2026-10-15-truco-frontend-jogavel.md`](docs/superpowers/plans/2026-10-15-truco-frontend-jogavel.md) e design brief [`docs/superpowers/specs/2026-10-20-truco-frontend-design-brief.md`](docs/superpowers/specs/2026-10-20-truco-frontend-design-brief.md)
 
 ---
