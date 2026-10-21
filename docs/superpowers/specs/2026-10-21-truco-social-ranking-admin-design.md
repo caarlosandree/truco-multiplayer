@@ -57,7 +57,7 @@ Levantado no código em 2026-10-21:
 - **Histórico:** `GET /api/matches?user=&cursor=` (keyset, 20 por página) sem jogadores nem motivo do fim; `GET /api/matches/{id}` traz jogadores, placar, `abandonReason`. Não há campo que distinga vitória normal de W.O. (`status='finished'` nos dois).
 - **Perfil:** `GET /api/users/{username}` traz `Totals` detalhado; sem partidas recentes, parceiros ou posição.
 - **Presença:** o `Lobby` mantém `clients` (usuário → conexão) e `index` (usuário → sala) sob mutex, mas nada é exposto.
-- **Convites:** inexistentes. Sala privada tem código de 6 caracteres; sala pública não tem código. `Lobby.Send(userID, msg)` já envia a um usuário específico.
+- **Convites:** inexistentes. Toda sala (pública ou privada) recebe um código de 6 caracteres em `createRoomLocked`, registrado em `l.codes`; ele só é exibido nas privadas, e `join_room{code}` não checa visibilidade. `Lobby.Send(userID, msg)` já envia a um usuário específico. `kick` não impede voltar pelo código (nem será impedido de ser reconvidado — coerente com o comportamento atual).
 - **E-mail:** `mail` com drivers `resend`/`log`, templates em `mail/templates.go`; envio assíncrono via `sendLater`.
 - **Admin:** rotas `/api/admin/*` completas (usuários, domínios, abortar partida, auditoria) com `requireAdmin`; `PUT /api/admin/users/{id}/admin` permite a um admin promover outro; primeiro admin pelo CLI `server promote-admin`. Não há listagem de partidas em andamento.
 - **Frontend 4a:** `AppShell`, kit de UI, tokens e design brief (`docs/superpowers/specs/2026-10-20-truco-frontend-design-brief.md`), stores Pinia, `ws/client.ts` com roteamento exaustivo de `ServerMessage`, toasts, `Anunciador`, `tabTitle.ts`, `sfx`.
@@ -73,7 +73,7 @@ Levantado no código em 2026-10-21:
 - Cada item: `userId`, `username`, `displayName`, `status`, e, quando em sala, `roomName` **só se a sala for pública** (sala privada aparece como "sala privada", sem nome nem código).
 - **Entrega:** um snapshot na conexão e atualizações incrementais por WebSocket para **todos** os conectados (inclusive quem está em sala, porque o convite é feito de dentro da sala). Novos `ServerMessage` (nomes indicativos): `presence_snapshot`, `presence_updated`, `presence_removed`.
 - Debounce/coalescência de atualizações a cargo do builder, contanto que a lista não fique visivelmente atrasada (alvo: < 1 s).
-- Usuário desabilitado não aparece.
+- Usuário desabilitado não aparece. Ao desativar um usuário, o serviço `admin` avisa o `Lobby` (porta nova, no mesmo padrão do `MatchAborter`) para derrubar a conexão WS dele na hora, tirando-o da presença e cancelando convites pendentes para ele — sem esperar a próxima revalidação de sessão do `ws/client.go`.
 
 ### 4.2 Convites
 
@@ -81,14 +81,15 @@ Levantado no código em 2026-10-21:
 - **Estados:** `pending` → `accepted` | `declined` | `expired`. Expira quando a sala enche, a partida começa ou a sala fecha; **não** expira se quem convidou sair (o convite é da sala — decisão do controlador, §10). Expirar é avaliado pelo servidor; o cliente só exibe.
 - **Fluxo no app (convidado online):**
   1. Quem está sentado envia `invite{userId, seat?}` (novo `ClientMessage`).
-  2. Servidor valida: remetente sentado, sala com lugar, convidado existe e não está desabilitado, lugar (se dado) vazio.
+  2. Servidor valida: remetente sentado, sala com lugar, convidado existe e não está desabilitado, convidado não é o próprio remetente nem já está **nesta** sala (`already_in_room`), lugar (se dado) vazio.
   3. Convidado online recebe `invite_received{inviteId, room{id, name, visibility}, from{displayName}, seat?, freeSeats}`.
   4. Convidado responde `invite_respond{inviteId, accept: bool}`. Aceitar faz o equivalente a sair da sala de espera atual (se houver) e entrar na sala convidante (no lugar indicado, se ainda livre; senão, no primeiro livre). Se o convidado estiver **jogando**, aceitar é recusado pelo servidor com erro (o cliente nem oferece o botão nesse caso — mostra "Você está numa partida").
   5. Os membros da sala recebem a lista de convites e seus estados no `room_state` (ou mensagem dedicada), para a lista "Convites" da sala de espera.
   6. Quando o convite expira, o convidado recebe `invite_expired{inviteId}` e o aviso some.
 - **Fluxo por e-mail (convidado offline no momento do convite):**
   - Servidor envia e-mail com template novo `RoomInvite` (nome de quem convidou, nome da sala, link).
-  - O link usa um **token de convite** opaco (não o código da sala, porque sala pública não tem código): `/convite/{token}`. O token identifica o convite e só é válido enquanto o convite estiver `pending`.
+  - O link usa um **token de convite** opaco, `/entrar-convite/{token}` — não o código da sala, porque o token vincula convite → convidado (é o que permite recusar outra conta com `invite_not_yours`), enquanto o código abre a sala para qualquer um. O token identifica o convite e só é válido enquanto o convite estiver `pending`.
+  - O aceite por token usa uma mensagem própria (ex.: `invite_accept_token{token}`, ou `invite_respond` aceitando `token` em vez de `inviteId`), tratada no nível do `Lobby`, que resolve token → convite, confere o convidado e segue o mesmo caminho do aceite no app.
   - Abrir o link: guarda de rotas exige login (com `volta` preservado, como o convite por código da 4a); logado, o frontend envia a aceitação e segue para `/sala`; convite expirado mostra a tela "Convite expirado" com botão para o lobby.
   - O token vale **só para o convidado**: o servidor confere que o usuário logado é o convidado; outra conta recebe erro `invite_not_yours` e a tela "Este convite é para outra pessoa". E-mail encaminhado não dá acesso à sala.
   - Se o convidado ficar online enquanto o convite está pendente, ele também recebe o `invite_received` no app.
@@ -104,8 +105,8 @@ Levantado no código em 2026-10-21:
 ### 4.4 Ranking por período e métrica
 
 - `GET /api/ranking?period=all|month|week&metric=wins|winrate&limit=`:
-  - `all` pode continuar lendo `player_stats`; `month`/`week` agregam `match_player_stats` ⨝ `matches.finished_at` dentro da janela no fuso `America/Sao_Paulo` (semana de segunda 00:00; mês do dia 1 00:00).
-  - `metric=wins`: ordem por vitórias, depois aproveitamento, partidas, username (como hoje).
+  - `month`/`week` agregam `match_player_stats` ⨝ `matches.finished_at` dentro da janela no fuso `America/Sao_Paulo` (semana de segunda 00:00; mês do dia 1 00:00). `all` pode ler `player_stats`, mas com query própria por métrica (a query atual aplica o mínimo a tudo).
+  - `metric=wins`: lista **todos** com ≥ 1 partida no período (sem o mínimo, senão a aba ficaria vazia toda segunda de manhã); ordem por vitórias, depois aproveitamento, partidas, username.
   - `metric=winrate`: só quem tem `≥ RANKING_MIN_MATCHES` partidas **no período**; ordem por aproveitamento, depois vitórias, partidas, username.
   - A resposta inclui `me` — a linha do usuário logado com sua posição (ou `null` se não ranqueado no período), para destacá-lo mesmo fora do top.
   - Só partidas `finished` contam (abandonadas não).
@@ -114,7 +115,7 @@ Levantado no código em 2026-10-21:
 ### 4.5 Histórico enriquecido
 
 - `GET /api/matches` passa a trazer, por item: jogadores (`seat`, `username`, `displayName`), minha dupla, resultado do ponto de vista do usuário consultado, placar e **motivo do fim**: `game_over`, `forfeit` (W.O.), `aborted` (admin) ou `abandoned`.
-- Hoje W.O. e fim normal são indistinguíveis no banco. O builder decide como obter o motivo: nova coluna `end_reason` em `matches` (migração 0004, preenchida no `FinishMatch`/`Abandon`, com backfill a partir do log de ações para partidas antigas) **ou** derivação do log de ações. O histórico precisa mostrar "W.O." corretamente.
+- Hoje W.O. e fim normal são indistinguíveis no banco, e aborto de admin e abandono são ambos `status='abandoned'`, separados só pelo texto livre `abandon_reason` ("abortada pelo administrador", "all_absent", "diverged"…). **Decisão:** nova coluna `end_reason` em `matches` (migração 0004, `CHECK` em `game_over|forfeit|aborted|abandoned`), preenchida no `FinishMatch`/`Abandon`/abortar. Backfill das partidas antigas: W.O. pelo `match_actions` (`source='system'`, ação `sys_forfeit`); aborto de admin pelo `audit_log` (`match.abort`), nunca pelo texto livre; demais abandonadas → `abandoned`; demais finalizadas → `game_over`.
 
 ### 4.6 Perfil público enriquecido
 
@@ -149,7 +150,7 @@ Fonte da verdade visual: o design brief da 4a. Tudo reaproveita `AppShell`, kit 
 | `/ranking` | Ranking |
 | `/jogadores/:username` | Perfil público (o meu também) |
 | `/jogadores/:username/partidas` | Histórico completo, paginado |
-| `/convite/:token` | Aceitar convite por e-mail (exige login; preserva `volta`) |
+| `/entrar-convite/:token` | Aceitar convite por e-mail (exige login; preserva `volta`). Nome escolhido para não confundir com a rota nomeada `convite` da 4a (`/sala/:codigo`). |
 | `/admin`, `/admin/usuarios`, `/admin/dominios`, `/admin/partidas`, `/admin/auditoria` | Painel admin |
 
 Cabeçalho ganha "Ranking"; o link "Admin" só aparece para `isAdmin` (a proteção real é no servidor). `/perfil` (preferências e conta, da 4a) continua; o nome no cabeçalho leva ao meu perfil público, e o perfil público tem "Editar conta" quando sou eu.
@@ -166,7 +167,7 @@ Cabeçalho ganha "Ranking"; o link "Admin" só aparece para `isAdmin` (a proteç
 - **Convidado:** aviso persistente (não o toast de 5 s) com "Fulano te chamou pra mesa!", nome da sala, lugares livres, e "Entrar" / "Agora não". Se estou numa sala de espera, o aviso diz que aceitar me tira dela; se estou jogando, não há "Entrar" — só "Agora não" e o texto "Você está numa partida". Vários convites empilham (no máximo 3 visíveis, o mais novo em cima).
 - **Aba em segundo plano:** som `invite` (novo, CC0, dentro do orçamento de áudio da 4a), título da aba alternando "Convite: <sala>" (reaproveitar `tabTitle.ts`, sem brigar com o "Sua vez!") e notificação do navegador (`Notification`) com clique levando ao aviso. A permissão é pedida uma única vez, num momento contextual (ex.: primeira vez que convido ou sou convidado), com toggle em Perfil › Preferências; recusa é respeitada sem insistir.
 - **Acessibilidade:** aviso anunciado pelo `Anunciador` (uma única região viva, como na 4a); "Entrar" recebe foco só se o usuário não estiver digitando nem com modal aberto; Esc = "Agora não".
-- **`/convite/:token`:** estados "Entrando na sala…", "Convite expirado" (sala cheia/começou/fechou) e "Você está numa partida".
+- **`/entrar-convite/:token`:** estados "Entrando na sala…", "Convite expirado" (sala cheia/começou/fechou) e "Você está numa partida".
 
 ### 5.4 Ranking
 
@@ -207,7 +208,7 @@ Cabeçalho ganha "Ranking"; o link "Admin" só aparece para `isAdmin` (a proteç
 
 ## 8. Testes
 
-- **Go:** presença (status por transição: conectar, entrar em sala, começar partida, sair, desconectar; sala privada sem nome), convites (validações, um pendente por convidado/sala, expirar ao encher/começar/fechar, aceitar tirando da sala de espera, recusa de quem está jogando, e-mail só para offline, token), ranking por período com fronteiras de semana/mês em `America/Sao_Paulo` (inclusive virada de horário e partidas na borda), métrica winrate com mínimo no período, `me` fora do top, histórico com motivo do fim (W.O.), perfil com posições/recentes/parceiros, diretório sem e-mail, admin (§7), template de e-mail.
+- **Go:** presença (status por transição: conectar, entrar em sala, começar partida, sair, desconectar; sala privada sem nome; usuário desativado sai da presença na hora e perde convites pendentes), convites (validações incl. `already_in_room` e convidar a si mesmo, um pendente por convidado/sala, reconvite após recusa sem novo e-mail, expirar ao encher/começar/fechar, aceitar tirando da sala de espera, recusa de quem está jogando, e-mail só para offline, token), ranking por período com fronteiras de semana/mês em `America/Sao_Paulo` (inclusive virada de horário e partidas na borda), métrica winrate com mínimo no período e wins sem mínimo (≥ 1 partida), `me` fora do top, histórico com motivo do fim (W.O. e aborto de admin, inclusive backfill de partidas antigas), perfil com posições/recentes/parceiros, diretório sem e-mail, admin (§7), template de e-mail.
 - **Vitest:** stores de presença e convites (roteamento exaustivo das mensagens novas), seletor de pessoas, aviso de convite (foco, Esc, empilhamento, jogando), ranking (abas, período, `me`), perfil, histórico paginado, painel admin (sem controle de admin), notificação/som/título com aba oculta.
 - **E2E (Playwright, compose isolado):** dois navegadores — A cria sala e convida B pelo "Online"; B aceita e senta; um terceiro convite a alguém offline gera e-mail (link lido do log, `MAIL_DRIVER=log`) que leva à sala; ranking e perfil carregam após uma partida.
 - Ciclo de revisão visual da 4a (screenshots 1440/1366/375, claro/escuro; `impeccable` critique/polish; `fixing-accessibility`/`ui-a11y`) para cada tela nova.
@@ -228,6 +229,6 @@ Cabeçalho ganha "Ranking"; o link "Admin" só aparece para `isAdmin` (a proteç
 - Nomes exatos das mensagens WS, campos e códigos de erro (mantendo o padrão do protocolo existente).
 - Onde guardar o estado dos convites (dentro do ator da sala ou no `Lobby`), desde que não haja corrida entre "sala encheu" e "convite aceito" (o servidor é a autoridade; aceitar sem lugar vira `invite_expired`).
 - Se o convite expira quando **quem convidou** sai da sala: decisão do controlador — **não expira** (o convite é da sala, não da pessoa), enquanto a sala existir com lugar.
-- Como obter o motivo do fim no histórico (coluna nova com backfill ou derivação do log), contanto que W.O. apareça certo para partidas antigas e novas.
+- Detalhes da migração e do backfill de `end_reason` (§4.5).
 - Debounce da presença, índices SQL para as janelas de ranking, quais estatísticas de `Totals` aparecem no perfil.
 - Layout exato do seletor de pessoas e do aviso de convite no celular, seguindo o design brief.
