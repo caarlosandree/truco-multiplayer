@@ -1,0 +1,55 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import { useGameStore } from '@/stores/game'
+import { nextStake, stakeName } from '@/game/labels'
+import MaoParceiro from './MaoParceiro.vue'
+import TeclaDica from './TeclaDica.vue'
+import Botao from '@/components/ui/Botao.vue'
+
+const game = useGameStore()
+const bloqueado = computed(() => game.inflight || !game.online)
+const back = computed(() => {
+  const to = game.latestView?.pending?.toStake
+  return game.canRaiseBack && to !== undefined ? nextStake(to) : null
+})
+</script>
+
+<template>
+  <div class="flex flex-col gap-3">
+    <MaoParceiro />
+    <Botao
+      data-voto="accept"
+      data-primaria
+      aria-keyshortcuts="A"
+      class="w-full"
+      :disabled="bloqueado"
+      @click="game.vote('accept')"
+    >
+      Aceitar <TeclaDica tecla="A" />
+    </Botao>
+    <div class="flex gap-3">
+      <Botao
+        data-voto="run"
+        variant="secondary"
+        aria-keyshortcuts="R"
+        class="flex-1"
+        :disabled="bloqueado"
+        @click="game.vote('run')"
+      >
+        Correr <TeclaDica tecla="R" />
+      </Botao>
+      <Botao
+        v-if="back !== null"
+        data-voto="raise"
+        data-aposta
+        variant="aposta"
+        aria-keyshortcuts="U"
+        class="flex-1"
+        :disabled="bloqueado"
+        @click="game.vote('raise')"
+      >
+        {{ stakeName(back) }}! <TeclaDica tecla="U" />
+      </Botao>
+    </div>
+  </div>
+</template>

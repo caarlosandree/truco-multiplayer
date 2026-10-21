@@ -22,5 +22,6 @@ const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
       />
     </span>
     <span>{{ props.label }}</span>
+    <slot />
   </button>
 </template>

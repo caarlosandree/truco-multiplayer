@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { HandSlotView } from '@/protocol/engine'
 import Carta from './Carta.vue'
+import TeclaDica from './TeclaDica.vue'
 
 const props = defineProps<{ slots: HandSlotView[]; interactive: boolean }>()
 const emit = defineEmits<{ play: [slot: number] }>()
@@ -13,18 +14,28 @@ const emit = defineEmits<{ play: [slot: number] }>()
     data-mao
     role="group"
     aria-label="Sua mão"
-    class="relative flex min-h-(--mao-altura) justify-center gap-3 [--mao-altura:7.7rem] max-md:[--mao-altura:8rem]"
+    class="relative flex min-h-(--mao-altura) justify-center gap-3 [--mao-altura:7.7rem] max-md:[--mao-altura:8rem] md:mb-6"
   >
-    <Carta
+    <div
       v-for="(s, i) in props.slots"
       :key="s.slot"
-      :card="s.card"
-      :hidden="s.hidden"
-      :label="s.hidden ? `Carta ${i + 1}` : undefined"
-      size="lg"
-      interactive
-      :disabled="!props.interactive"
-      @select="emit('play', s.slot)"
-    />
+      class="relative"
+    >
+      <Carta
+        :card="s.card"
+        :hidden="s.hidden"
+        :label="s.hidden ? `Carta ${i + 1}` : undefined"
+        :aria-keyshortcuts="String(i + 1)"
+        size="lg"
+        interactive
+        :disabled="!props.interactive"
+        @select="emit('play', s.slot)"
+      />
+      <TeclaDica
+        v-show="props.interactive"
+        :tecla="String(i + 1)"
+        class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-giz-muted"
+      />
+    </div>
   </TransitionGroup>
 </template>

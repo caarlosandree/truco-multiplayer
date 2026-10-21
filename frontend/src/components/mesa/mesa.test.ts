@@ -1,4 +1,4 @@
-import { flushPromises, mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { setSender } from '@/app/transport'
 import Mesa from './Mesa.vue'
@@ -8,17 +8,20 @@ import Placar from './Placar.vue'
 import { aplicarEvento, anuncioDoEvento, type Cena } from '@/game/cena'
 import { useGameStore } from '@/stores/game'
 import { useRoomStore } from '@/stores/room'
+import { useSessionStore } from '@/stores/session'
 import { makeState } from '@/test/fixtures'
 import { defineComponent, inject, onMounted, reactive, type Ref } from 'vue'
 
 const play = vi.fn()
 vi.mock('@/audio/install', () => ({ sfx: () => ({ play }) }))
 
+enableAutoUnmount(afterEach)
 let pinia: ReturnType<typeof createPinia>
 beforeEach(() => {
   play.mockClear()
   pinia = createPinia()
   setActivePinia(pinia)
+  useSessionStore().connection = 'open'
   useRoomStore().onRoomState({
     id: 'r', code: 'ABC234', name: 'Sala', visibility: 'public', host: 0, status: 'playing', matchId: 'm',
     seats: [0, 1, 2, 3].map((s) => ({ userId: `u${s}`, displayName: ['Ana', 'Bia', 'Caio', 'Duda'][s]!, ready: true, connected: true, absent: s === 3 })),
@@ -203,7 +206,7 @@ it('em awaiting_raise_response quem age vem de pendingSeats, não do turno', () 
 it('em awaiting_raise_response, se sou eu quem responde o painel diz "Sua vez" e meu assento fica ativo', () => {
   useGameStore().onState(makeState({ seat: 1, phase: 'awaiting_raise_response', turn: 0, votingTeam: 1 }, [1, 3]))
   const w = mount(Mesa, { global: { plugins: [pinia] } })
-  expect(w.find('[data-vez-de]').text()).toBe('Sua vez.')
+  expect(w.find('[data-painel]').text()).toContain('Sua dupla responde')
   expect(w.find('[data-posicao="bottom"]').attributes('data-vez')).toBeDefined()
   expect(w.find('[data-posicao="bottom"]').text()).toContain('Sua vez')
   expect(w.find('[data-posicao="right"]').attributes('data-vez')).toBeUndefined()
@@ -246,5 +249,37 @@ it('"coberta" só desarma quando a minha jogada é aceita', async () => {
   game.onEvents([{ kind: 'card_played', seat: 1 }])
   await flushPromises()
   expect(w.find('[data-coberta]').text()).toBe('false')
+  w.unmount()
+})
+
+it('reconectando: a mão fica desabilitada e os atalhos não jogam', async () => {
+  const send = vi.fn().mockResolvedValue(undefined)
+  setSender(send)
+  useSessionStore().connection = 'reconnecting'
+  useGameStore().onState(makeState({ seat: 1, turn: 1 }, [1]))
+  const w = mount(Mesa, { global: { plugins: [pinia] }, attachTo: document.body })
+  for (const b of w.findAll('[data-mao] button')) expect(b.attributes('disabled')).toBeDefined()
+  expect(w.text()).toContain('Reconectando…')
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: '1' }))
+  await flushPromises()
+  expect(send).not.toHaveBeenCalled()
+  useSessionStore().connection = 'open'
+  await flushPromises()
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: '1' }))
+  await flushPromises()
+  expect(send).toHaveBeenCalledWith({ type: 'play_card', payload: { slot: 0, covered: false } })
+  w.unmount()
+})
+
+it('coberta recusada pelo servidor: avisa e desarma a chave', async () => {
+  setSender(vi.fn().mockRejectedValue({ code: 'covered_not_allowed', message: 'x' }))
+  useGameStore().onState(makeState({ seat: 1, turn: 1, stake: 1 }, [1]))
+  const w = mount(Mesa, { global: { plugins: [pinia] }, attachTo: document.body })
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'c' }))
+  await flushPromises()
+  expect(w.find('[role="switch"]').attributes('aria-checked')).toBe('true')
+  await w.findAll('[data-mao] button')[0]!.trigger('click')
+  await flushPromises()
+  expect(w.find('[role="switch"]').attributes('aria-checked')).toBe('false')
   w.unmount()
 })

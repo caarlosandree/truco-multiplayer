@@ -11,10 +11,12 @@ import CenaEvento from './CenaEvento.vue'
 import Centro from './Centro.vue'
 import Mao from './Mao.vue'
 import Placar from './Placar.vue'
+import PainelAcao from './PainelAcao.vue'
+import { installShortcuts } from '@/game/shortcuts'
 
 /**
  * A mesa. Encaixes para as próximas tarefas:
- *  - slot `painel` (T18): painel de ação; o padrão mostra de quem é a vez;
+ *  - slot `painel`: o padrão é o PainelAcao (T18), que também mostra de quem é a vez;
  *  - slot `sinais` (T19): barra de sinais; slot `aviso` (T19): banner de W.O./fim, no topo da coluna da direita;
  *  - `inject('coberta')` (Ref<boolean>): jogar a próxima carta coberta.
  */
@@ -71,7 +73,12 @@ watch(
 async function play(slot: number) {
   const antes = game.latest
   clicada.value = slot
-  await game.playCard(slot, covered.value)
+  const r = await game.playCard(slot, covered.value)
+  // coberta recusada: o toast explica e a chave desarma (spec §7.4); a carta volta para a mão
+  if (r.code === 'covered_not_allowed') {
+    covered.value = false
+    clicada.value = null
+  }
   clearTimeout(soltar)
   soltar = setTimeout(() => {
     if (game.latest === antes) clicada.value = null
@@ -115,8 +122,10 @@ const vezDe = computed(() => {
 
 // celular: toasts sobem acima da mão e do painel (a região lê --toast-offset)
 const base = ref<HTMLElement | null>(null)
+const acao = ref<InstanceType<typeof PainelAcao> | null>(null)
 const painel = ref<HTMLElement | null>(null)
 let observer: ResizeObserver | undefined
+let off: (() => void) | null = null
 function medir() {
   const mq = (q: string) => typeof matchMedia === 'function' && matchMedia(q).matches
   const celular = mq('(max-width: 767px)')
@@ -128,7 +137,26 @@ function medir() {
   if (mq('(min-width: 1024px)')) raiz.setProperty('--toast-right', 'calc(20rem + 1.5rem)')
   else raiz.removeProperty('--toast-right')
 }
+const pode = computed(() => game.online && !game.inflight)
 onMounted(() => {
+  off = installShortcuts(
+    (a) => {
+      if (a.kind === 'play') {
+        const slot = mao.value[a.index]?.slot
+        if (slot !== undefined) void play(slot)
+      } else if (a.kind === 'toggleCover') covered.value = !covered.value
+      else if (a.kind === 'raise') acao.value?.raise()
+      else void game.vote(a.choice)
+    },
+    () => ({
+      canPlay: game.canPlay && pode.value,
+      canCover: game.canCover && pode.value,
+      canRaise: game.canRaise && pode.value,
+      mustRespondRaise: game.mustRespondRaise && pode.value,
+      canRaiseBack: game.canRaiseBack,
+      handSize: mao.value.length,
+    }),
+  )
   medir()
   if (typeof ResizeObserver === 'function') {
     observer = new ResizeObserver(medir)
@@ -138,6 +166,7 @@ onMounted(() => {
   window.addEventListener('resize', medir)
 })
 onBeforeUnmount(() => {
+  off?.()
   observer?.disconnect()
   window.removeEventListener('resize', medir)
   clearTimeout(soltar)
@@ -189,7 +218,7 @@ onBeforeUnmount(() => {
         />
         <Mao
           :slots="mao"
-          :interactive="game.canPlay && !game.inflight"
+          :interactive="game.canPlay && pode"
           @play="play"
         />
       </div>
@@ -199,16 +228,14 @@ onBeforeUnmount(() => {
     <aside
       ref="painel"
       aria-label="Ações"
-      class="textura-lousa flex flex-col gap-3 border-t-2 border-felt-deep p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:border-t-0 lg:border-l-2 lg:p-4"
+      class="textura-lousa z-(--z-painel) flex flex-col gap-3 border-t-2 border-felt-deep p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] max-lg:sticky max-lg:bottom-0 lg:border-t-0 lg:border-l-2 lg:p-4"
     >
       <slot name="aviso" />
       <slot name="painel">
-        <p
-          class="rounded-painel bg-(--painel-bg) px-4 py-3 text-base font-bold text-giz"
-          data-vez-de
-        >
-          {{ vezDe }}
-        </p>
+        <PainelAcao
+          ref="acao"
+          :ocioso="vezDe"
+        />
       </slot>
       <slot name="sinais" />
     </aside>

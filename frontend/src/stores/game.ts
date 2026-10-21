@@ -8,11 +8,18 @@ import { nextStake } from '@/game/labels'
 import { cardFromId } from '@/game/cards'
 import { teamOf } from '@/game/seats'
 import { useToastsStore } from './toasts'
+import { useSessionStore } from './session'
 
 export interface Scene {
   event: Event | null
   key: number
   durationMs: number
+}
+
+/** Resultado de uma ação enviada: `code` é o código do erro do servidor (ex.: covered_not_allowed). */
+export interface ActResult {
+  ok: boolean
+  code?: string
 }
 
 export interface ActiveSignal {
@@ -57,6 +64,10 @@ export const useGameStore = defineStore('game', {
     },
     phase(): PlayerView['phase'] | null {
       return this.latestView?.phase ?? null
+    },
+    /** Ações de jogo só valem com a conexão aberta (spec §5). */
+    online(): boolean {
+      return useSessionStore().connection === 'open'
     },
     isMyTurn(): boolean {
       const v = this.latestView
@@ -150,13 +161,16 @@ export const useGameStore = defineStore('game', {
       directors.delete(this.$state)
       this.$reset()
     },
-    async act(msg: Outgoing) {
-      if (this.inflight) return
+    async act(msg: Outgoing): Promise<ActResult> {
+      if (this.inflight) return { ok: false }
       this.inflight = true
       try {
         await send(msg)
+        return { ok: true }
       } catch (err) {
         useToastsStore().fromError(err)
+        const code = (err as { code?: unknown } | null)?.code
+        return typeof code === 'string' ? { ok: false, code } : { ok: false }
       } finally {
         this.inflight = false
       }
