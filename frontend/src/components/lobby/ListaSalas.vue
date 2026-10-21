@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import type { Seat } from '@/protocol/engine'
 import { useLobbyStore } from '@/stores/lobby'
 import { useToastsStore } from '@/stores/toasts'
@@ -9,11 +10,17 @@ const emit = defineEmits<{ criar: [] }>()
 const lobby = useLobbyStore()
 const toasts = useToastsStore()
 
+const joining = ref(false)
+
 async function join(roomId: string, seat?: Seat) {
+  if (joining.value) return
+  joining.value = true
   try {
     await lobby.joinById(roomId, seat)
   } catch (err) {
     toasts.fromError(err)
+  } finally {
+    joining.value = false
   }
 }
 </script>

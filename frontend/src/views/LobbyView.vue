@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import { useLobbyStore } from '@/stores/lobby'
 import Botao from '@/components/ui/Botao.vue'
 import ListaSalas from '@/components/lobby/ListaSalas.vue'
 import CriarSala from '@/components/lobby/CriarSala.vue'
 import EntrarComCodigo from '@/components/lobby/EntrarComCodigo.vue'
 
+const lobby = useLobbyStore()
+const vazio = computed(() => lobby.loaded && lobby.list.length === 0)
 const criando = ref(false)
 const entrando = ref(false)
 </script>
@@ -24,6 +27,7 @@ const entrando = ref(false)
           Entrar com código
         </Botao>
         <Botao
+          :variant="vazio ? 'secondary' : 'primary'"
           data-abrir="criar"
           @click="criando = true"
         >
