@@ -39,6 +39,8 @@ export const useRoomStore = defineStore('room', {
   actions: {
     onRoomState(p: RoomStatePayload) {
       const wasPlaying = this.room?.status === 'playing'
+      // outra sala ou outra partida: o fim de partida anterior não volta a aparecer
+      if (this.room?.id !== p.id || (!wasPlaying && p.status === 'playing')) this.ended = null
       this.room = p
       this.lastLeft = null
       if (wasPlaying && p.status === 'waiting') {
@@ -49,6 +51,7 @@ export const useRoomStore = defineStore('room', {
     onLeft(p: LeftRoomPayload) {
       this.room = null
       this.forfeitTeam = null
+      this.ended = null
       this.lastLeft = p.reason
       useGameStore().reset()
     },

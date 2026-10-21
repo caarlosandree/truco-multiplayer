@@ -70,8 +70,13 @@ const aguardo = computed(() => {
   return props.ocioso
 })
 
-// região viva única e persistente (sem trocar role): mudança de fase do painel e "Reconectando…"
-const anuncio = computed(() => (game.online ? (mode.value ? contexto.value : '') : 'Reconectando…'))
+// região viva única e persistente (sem trocar role), só do estado do painel: como agir nas decisões que o painel
+// apresenta (corte, queima, Mão de 11) e "Reconectando…". "Sua vez", pedidos de aumento e fim de rodada são do
+// Anunciador; repetir aqui faria os dois competirem pela leitura.
+const anuncio = computed(() => {
+  if (!game.online) return 'Reconectando…'
+  return mode.value === 'corte' || mode.value === 'queima' || mode.value === 'onze' ? contexto.value : ''
+})
 
 function digitando(el: Element | null): boolean {
   return el instanceof HTMLElement && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName))

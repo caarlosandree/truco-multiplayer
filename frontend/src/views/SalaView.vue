@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useLobbyStore } from '@/stores/lobby'
 import { useRoomStore } from '@/stores/room'
 import { useSessionStore } from '@/stores/session'
+import FimPartida from '@/components/mesa/FimPartida.vue'
 import Mesa from '@/components/mesa/Mesa.vue'
 import SalaEspera from '@/components/sala/SalaEspera.vue'
 
@@ -35,4 +36,6 @@ watch(
   >
     Carregando sala…
   </p>
+  <!-- fora dos v-if: o fim de partida aparece sobre a mesa ou sobre a sala de espera (o servidor já voltou a sala a "waiting") -->
+  <FimPartida />
 </template>

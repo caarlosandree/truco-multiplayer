@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import type { Seat } from '@/protocol/engine'
-import { anuncioDoEvento, provideCena } from '@/game/cena'
+import { provideCena } from '@/game/cena'
 import { relativePosition, seatsInDisplayOrder, type RelativePosition } from '@/game/seats'
 import { sfx } from '@/audio/install'
 import { useGameStore } from '@/stores/game'
@@ -12,12 +12,17 @@ import Centro from './Centro.vue'
 import Mao from './Mao.vue'
 import Placar from './Placar.vue'
 import PainelAcao from './PainelAcao.vue'
+import Anunciador from './Anunciador.vue'
+import BannerWO from './BannerWO.vue'
+import BarraSinais from './BarraSinais.vue'
 import { installShortcuts } from '@/game/shortcuts'
+import { startTabTitleBlink } from '@/game/tabTitle'
 
 /**
  * A mesa. Encaixes para as próximas tarefas:
  *  - slot `painel`: o padrão é o PainelAcao (T18), que também mostra de quem é a vez;
- *  - slot `sinais` (T19): barra de sinais; slot `aviso` (T19): banner de W.O./fim, no topo da coluna da direita;
+ *  - coluna da direita: BannerWO (topo), painel de ação e BarraSinais (secundária, embaixo);
+ *  - anúncios para leitores de tela: só o Anunciador (a mesa não tem região viva própria);
  *  - `inject('coberta')` (Ref<boolean>): jogar a próxima carta coberta.
  */
 const game = useGameStore()
@@ -85,30 +90,17 @@ async function play(slot: number) {
   }, 1500)
 }
 
-// região viva (visualmente oculta): vez e eventos da cena
-const fala = ref('')
-watch(
-  () => game.scene.key,
-  () => {
-    const e = game.scene.event
-    const texto = e ? anuncioDoEvento(e, nameOf, game.myTeam) : null
-    if (texto) fala.value = texto
-  },
-)
 // quem age agora vem de pendingSeats (voto, corte, queima, jogada); sem pendentes, cai para a vez do turno
-const euAjo = computed(() => {
-  const seat = game.view?.seat
-  return seat !== undefined && game.pendingSeats.includes(seat)
+const euAjo = computed(() => game.euAjo)
+// "sua vez" (spec §8.2): com a aba em foco, som; sem foco, o título da aba pisca "Sua vez!" até voltar
+let pararTitulo: (() => void) | null = null
+watch(euAjo, (vez) => {
+  pararTitulo?.()
+  pararTitulo = null
+  if (!vez || typeof document === 'undefined') return
+  if (document.hasFocus()) sfx()?.play('yourTurn')
+  else pararTitulo = startTabTitleBlink(document.title, 'Sua vez!')
 })
-watch(
-  euAjo,
-  (vez) => {
-    if (!vez) return
-    fala.value = 'Sua vez.'
-    // "sua vez": som só com a aba em foco (spec §8.2); o título da aba é tratado na T19
-    if (typeof document !== 'undefined' && document.hasFocus()) sfx()?.play('yourTurn')
-  },
-)
 const vezDe = computed(() => {
   const v = game.view
   if (!v) return ''
@@ -169,6 +161,7 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   off?.()
+  pararTitulo?.()
   observer?.disconnect()
   window.removeEventListener('resize', medir)
   clearTimeout(soltar)
@@ -234,26 +227,19 @@ onBeforeUnmount(() => {
     <aside
       ref="painel"
       aria-label="Ações"
-      class="textura-lousa z-(--z-painel) flex flex-col gap-3 border-t-2 border-felt-deep p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] max-lg:shrink-0 lg:border-t-0 lg:border-l-2 lg:p-4"
+      class="textura-lousa relative z-(--z-painel) flex flex-col gap-3 border-t-2 border-felt-deep p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] max-lg:shrink-0 lg:border-t-0 lg:border-l-2 lg:p-4"
     >
-      <slot name="aviso" />
+      <BannerWO />
       <slot name="painel">
         <PainelAcao
           ref="acao"
           :ocioso="vezDe"
         />
       </slot>
-      <slot name="sinais" />
+      <BarraSinais />
     </aside>
 
-    <p
-      class="sr-only"
-      role="status"
-      aria-live="polite"
-      data-fala
-    >
-      {{ fala }}
-    </p>
+    <Anunciador />
   </div>
   <p
     v-else

@@ -159,7 +159,11 @@ it('região viva única e persistente, sem aria-busy nem role dinâmico', async 
   useSessionStore().connection = 'open'
   await flushPromises()
   expect(w.findAll('[role="status"]')).toHaveLength(1)
-  expect(w.find('[data-anuncio]').text()).toContain('Sua dupla responde')
+  // resposta ao aumento e "sua vez" são do Anunciador; o painel só fala das decisões que ele apresenta
+  expect(w.find('[data-anuncio]').text()).toBe('')
+  useGameStore().onState(makeState({ phase: 'burn_fours', myHand: [{ slot: 0, card: 0, hidden: false }, { slot: 1, card: 3, hidden: false }, { slot: 2, card: 39, hidden: false }] }))
+  await flushPromises()
+  expect(w.find('[data-anuncio]').text()).toContain('Queima dos 4')
   useGameStore().onState(makeState({ turn: 2 }, [2]))
   await flushPromises()
   expect(w.findAll('[role="status"]')).toHaveLength(1)

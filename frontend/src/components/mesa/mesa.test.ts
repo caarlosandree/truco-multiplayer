@@ -164,6 +164,42 @@ it('Mesa toca "sua vez" quando a vez chega e define --toast-offset só no celula
   expect(document.documentElement.style.getPropertyValue('--toast-offset')).toBe('')
 })
 
+it('com a aba sem foco a vez não toca som: o título pisca "Sua vez!" até focar', async () => {
+  vi.useFakeTimers()
+  document.title = 'Truco'
+  const game = useGameStore()
+  game.onState(makeState({ seat: 1, turn: 2 }, [2]))
+  vi.spyOn(document, 'hasFocus').mockReturnValue(false)
+  const w = mount(Mesa, { global: { plugins: [pinia] } })
+  game.onState(makeState({ seat: 1, turn: 1 }, [1]))
+  await flushPromises()
+  expect(play).not.toHaveBeenCalled()
+  vi.advanceTimersByTime(1000)
+  expect(document.title).toBe('Sua vez!')
+  window.dispatchEvent(new Event('focus'))
+  expect(document.title).toBe('Truco')
+  // sair da mesa também restaura o título
+  game.onState(makeState({ seat: 1, turn: 2 }, [2]))
+  await flushPromises()
+  game.onState(makeState({ seat: 1, turn: 1 }, [1]))
+  await flushPromises()
+  vi.advanceTimersByTime(1000)
+  expect(document.title).toBe('Sua vez!')
+  w.unmount()
+  expect(document.title).toBe('Truco')
+  vi.useRealTimers()
+})
+
+it('a mesa não tem região viva própria: o Anunciador é o único dono dos anúncios de mesa', async () => {
+  const game = useGameStore()
+  game.onState(makeState({ seat: 1, turn: 2 }, [2]))
+  const w = mount(Mesa, { global: { plugins: [pinia] } })
+  expect(w.find('[data-fala]').exists()).toBe(false)
+  expect(w.findAll('[data-anunciador]')).toHaveLength(1)
+  expect(w.find('[data-banner-wo]').exists()).toBe(false)
+  expect(w.find('[data-sinais]').exists()).toBe(true)
+})
+
 it('no celular a Mesa define --toast-offset (mão + painel); no desktop largo reserva a coluna do painel; limpa ao sair', () => {
   useGameStore().onState(makeState({ seat: 1, turn: 1 }, [1]))
   const q = { celular: true, largo: true }

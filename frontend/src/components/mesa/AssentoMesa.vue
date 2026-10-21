@@ -8,6 +8,8 @@ import { useRoomStore } from '@/stores/room'
 import { useSessionStore } from '@/stores/session'
 import Carta from './Carta.vue'
 import Prazo from './Prazo.vue'
+import BalaoSinal from './BalaoSinal.vue'
+import { BALAO_LADO } from './balaoLado'
 
 const props = defineProps<{ seat: Seat; position: RelativePosition }>()
 const game = useGameStore()
@@ -120,15 +122,20 @@ const balao = computed(() => {
           :key="game.scene.key"
           aria-hidden="true"
           class="absolute left-1/2 z-(--z-balao) w-max max-w-44 -translate-x-1/2 rounded-toast bg-(--balao-bg) px-3 py-1.5 text-center text-sm font-bold text-(--balao-fg) inset-ring-1 inset-ring-line"
-          :class="props.position === 'top' ? 'top-full mt-3' : 'bottom-full mb-3'"
+          :class="BALAO_LADO[props.position].balao"
         >
           {{ balao }}
           <span
             class="absolute left-1/2 size-2 -translate-x-1/2 rotate-45 bg-(--balao-bg) inset-ring-1 inset-ring-line"
-            :class="props.position === 'top' ? '-top-1' : '-bottom-1'"
+            :class="BALAO_LADO[props.position].rabicho"
           />
         </p>
       </Transition>
+      <BalaoSinal
+        :seat="props.seat"
+        :position="props.position"
+        :deslocado="balao !== null"
+      />
     </div>
 
     <!-- mini-verso dos adversários; a dupla vê as cartas do parceiro na mão de 11 -->

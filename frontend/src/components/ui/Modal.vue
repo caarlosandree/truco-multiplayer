@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, ref, useId, watch } from 'vue'
 
-const props = defineProps<{ open: boolean; title: string }>()
+/** `descricaoId`: id de um elemento do conteúdo que descreve o diálogo (lido junto com o título). */
+const props = defineProps<{ open: boolean; title: string; descricaoId?: string }>()
 const emit = defineEmits<{ close: [] }>()
 const dialog = ref<HTMLElement | null>(null)
 const titleId = useId()
@@ -78,6 +79,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
           role="dialog"
           aria-modal="true"
           :aria-labelledby="titleId"
+          :aria-describedby="props.descricaoId"
           tabindex="-1"
           class="modal-caixa w-full max-w-(--modal-largura) rounded-modal bg-(--modal-bg) p-6 text-(--modal-fg) shadow-modal"
         >

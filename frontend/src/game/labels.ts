@@ -1,4 +1,4 @@
-import type { Event, HandKind, Phase, VoteChoice } from '@/protocol/engine'
+import type { HandKind, Phase, VoteChoice } from '@/protocol/engine'
 import type { EndReason, SignalID } from '@/protocol/messages'
 
 const ERRORS: Record<string, string> = {
@@ -109,24 +109,4 @@ const END_REASONS: Record<EndReason, string> = {
 
 export function endReasonText(reason: EndReason): string {
   return END_REASONS[reason] ?? reason
-}
-
-export function eventAnnouncement(ev: Event, nameOf: (seat: number) => string): string | null {
-  const who = ev.seat !== undefined ? nameOf(ev.seat) : ev.team !== undefined ? `A dupla ${ev.team + 1}` : 'Alguém'
-  switch (ev.kind) {
-    case 'raise_requested':
-      return `${who} pediu ${stakeName(ev.stake ?? 0)}!`
-    case 'raise_resolved':
-      return ev.choice === 'run' ? 'A dupla correu.' : `Aceito: a mão vale ${ev.stake ?? ''}.`
-    case 'raise_punished':
-      return 'Pedido proibido: a dupla perdeu a partida.'
-    case 'round_ended':
-      return ev.team === undefined ? 'Rodada empatada.' : `Rodada para a dupla ${ev.team + 1}.`
-    case 'hand_ended':
-      return ev.score ? `Fim da mão. Placar ${ev.score[0]} a ${ev.score[1]}.` : 'Fim da mão.'
-    case 'vira_revealed':
-      return 'Vira revelada.'
-    default:
-      return null
-  }
 }

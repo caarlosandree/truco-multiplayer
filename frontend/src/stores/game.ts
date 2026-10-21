@@ -73,6 +73,10 @@ export const useGameStore = defineStore('game', {
       const v = this.latestView
       return v !== null && v.turn !== undefined && v.turn === v.seat
     },
+    /** Sou um dos assentos que precisam agir agora (jogada, voto, corte, queima…). */
+    euAjo(): boolean {
+      return this.mySeat !== null && this.pendingSeats.includes(this.mySeat)
+    },
     amPending(): boolean {
       return this.mySeat !== null && (this.latest?.pendingSeats ?? []).includes(this.mySeat)
     },
