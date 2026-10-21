@@ -263,12 +263,12 @@ it('com o áudio bloqueado a vez espera o primeiro gesto e toca uma única vez, 
   segunda.unmount()
 })
 
-it('a mesa não tem região viva própria: o Anunciador é o único dono dos anúncios de mesa', async () => {
+it('a mesa não monta o Anunciador nem tem região viva própria (o AppShell é o dono dos anúncios)', async () => {
   const game = useGameStore()
   game.onState(makeState({ seat: 1, turn: 2 }, [2]))
   const w = mount(Mesa, { global: { plugins: [pinia] } })
   expect(w.find('[data-fala]').exists()).toBe(false)
-  expect(w.findAll('[data-anunciador]')).toHaveLength(1)
+  expect(w.findAll('[data-anunciador]')).toHaveLength(0)
   expect(w.find('[data-banner-wo]').exists()).toBe(false)
   expect(w.find('[data-sinais]').exists()).toBe(true)
 })

@@ -4,16 +4,18 @@ import type { Seat } from '@/protocol/engine'
 import { anuncioDoEvento } from '@/game/cena'
 import { signalText } from '@/game/labels'
 import { useGameStore } from '@/stores/game'
+import { useInvitesStore } from '@/stores/invites'
 import { useRoomStore } from '@/stores/room'
 
 /**
- * Dono dos anúncios da mesa para leitores de tela (brief §6.3): "Sua vez", pedidos e respostas de aumento,
- * fim de rodada e de mão, sinais dos outros jogadores e W.O. disponível. Uma única região viva, que só ACRESCENTA
+ * Dono dos anúncios para leitores de tela (brief §6.3), montado uma vez no AppShell: "Sua vez", pedidos e respostas de
+ * aumento, fim de rodada e de mão, sinais dos outros jogadores, W.O. disponível e convites novos. Uma única região viva, que só ACRESCENTA
  * itens (aria-relevant="additions"): o mesmo texto duas vezes seguidas é lido duas vezes, e nada é reescrito.
  * O painel de ação (PainelAcao) fala só do estado do próprio painel (como agir, "Reconectando…").
  */
 const game = useGameStore()
 const room = useRoomStore()
+const invites = useInvitesStore()
 
 const KEEP = 4
 const TTL_MS = 8000
@@ -62,6 +64,18 @@ watch(
   () => room.forfeitTeam !== null && room.forfeitTeam !== room.myTeam,
   (disponivel) => {
     if (disponivel) dizer('Adversários ausentes. Você pode pedir W.O.')
+  },
+)
+
+const convitesVistos = new Set<string>(invites.received.map((r) => r.inviteId))
+watch(
+  () => invites.received.map((r) => r.inviteId),
+  () => {
+    for (const inv of invites.received) {
+      if (convitesVistos.has(inv.inviteId)) continue
+      convitesVistos.add(inv.inviteId)
+      dizer(`${inv.from.displayName} te chamou pra mesa: ${inv.room.name}`)
+    }
   },
 )
 

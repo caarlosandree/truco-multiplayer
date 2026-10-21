@@ -7,6 +7,7 @@ import BannerWO from './BannerWO.vue'
 import FimPartida from './FimPartida.vue'
 import Anunciador from './Anunciador.vue'
 import { useGameStore } from '@/stores/game'
+import { useInvitesStore } from '@/stores/invites'
 import { useRoomStore } from '@/stores/room'
 import { useSessionStore } from '@/stores/session'
 import { useToastsStore } from '@/stores/toasts'
@@ -304,6 +305,16 @@ describe('Anunciador (dono dos anúncios da mesa)', () => {
     expect(t).toContain('Caio: Vamos!')
     expect(t).not.toContain('Boa!')
     expect(t).toContain('Adversários ausentes')
+  })
+
+  it('anuncia convite novo, uma vez por convite', async () => {
+    const w = mount(Anunciador, { global: { plugins: [pinia] } })
+    const convite = { inviteId: 'a', room: { id: 'r', name: 'Mesa do RH', visibility: 'private' as const }, from: { displayName: 'Ana' }, freeSeats: 2 }
+    useInvitesStore().onReceived(convite)
+    await w.vm.$nextTick()
+    useInvitesStore().onReceived(convite)
+    await w.vm.$nextTick()
+    expect(regiao(w).findAll('p').map((p) => p.text())).toEqual(['Ana te chamou pra mesa: Mesa do RH'])
   })
 
   it('as mensagens antigas saem da região depois de um tempo', async () => {

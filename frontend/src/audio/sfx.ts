@@ -2,11 +2,11 @@ import type { Event } from '@/protocol/engine'
 
 export type SoundId =
   | 'shuffle' | 'deal' | 'card' | 'cardCovered' | 'burn' | 'flip' | 'trickWon'
-  | 'truco' | 'accept' | 'run' | 'point' | 'yourTurn' | 'timeLow' | 'victory' | 'defeat'
+  | 'truco' | 'accept' | 'run' | 'point' | 'yourTurn' | 'timeLow' | 'victory' | 'defeat' | 'invite'
 
 export const SOUND_IDS: readonly SoundId[] = [
   'shuffle', 'deal', 'card', 'cardCovered', 'burn', 'flip', 'trickWon',
-  'truco', 'accept', 'run', 'point', 'yourTurn', 'timeLow', 'victory', 'defeat',
+  'truco', 'accept', 'run', 'point', 'yourTurn', 'timeLow', 'victory', 'defeat', 'invite',
 ]
 
 export function soundForEvent(ev: Event, _myTeam: number | null): SoundId | null {

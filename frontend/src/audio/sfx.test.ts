@@ -126,3 +126,7 @@ it('não baixa sons com URL vazia', async () => {
   expect(fetchBuffer).toHaveBeenCalledTimes(SOUND_IDS.length - 1)
   expect(fetchBuffer).not.toHaveBeenCalledWith('')
 })
+
+it('o som de convite é um id conhecido', () => {
+  expect(SOUND_IDS).toContain('invite')
+})

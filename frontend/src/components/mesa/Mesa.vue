@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import type { Seat } from '@/protocol/engine'
 import { provideCena } from '@/game/cena'
 import { relativePosition, seatsInDisplayOrder, type RelativePosition } from '@/game/seats'
@@ -12,7 +12,6 @@ import Centro from './Centro.vue'
 import Mao from './Mao.vue'
 import Placar from './Placar.vue'
 import PainelAcao from './PainelAcao.vue'
-import Anunciador from './Anunciador.vue'
 import BannerWO from './BannerWO.vue'
 import BarraSinais from './BarraSinais.vue'
 import { installShortcuts } from '@/game/shortcuts'
@@ -22,7 +21,7 @@ import { startTabTitleBlink } from '@/game/tabTitle'
  * A mesa. Encaixes para as próximas tarefas:
  *  - slot `painel`: o padrão é o PainelAcao (T18), que também mostra de quem é a vez;
  *  - coluna da direita: BannerWO (topo), painel de ação e BarraSinais (secundária, embaixo);
- *  - anúncios para leitores de tela: só o Anunciador (a mesa não tem região viva própria);
+ *  - anúncios para leitores de tela: só o Anunciador, montado no AppShell (a mesa não tem região viva própria);
  *  - `inject('coberta')` (Ref<boolean>): jogar a próxima carta coberta.
  */
 const game = useGameStore()
@@ -138,6 +137,21 @@ function medir() {
 // decisão com painel alto (celular): a mão encolhe para caber acima dele
 const painelGrande = computed(() => game.mustChooseCut || game.mustBurn || game.mustDecideEleven || game.mustRespondRaise)
 const pode = computed(() => game.online && !game.inflight)
+// a mesa pode montar antes do primeiro estado da partida: mede e observa assim que a visão chega (senão --toast-offset fica 0)
+function observar() {
+  medir()
+  if (typeof ResizeObserver !== 'function') return
+  observer?.disconnect()
+  observer = new ResizeObserver(medir)
+  if (base.value) observer.observe(base.value)
+  if (painel.value) observer.observe(painel.value)
+}
+watch(
+  () => game.view !== null,
+  (tem) => {
+    if (tem) void nextTick(observar)
+  },
+)
 onMounted(() => {
   off = installShortcuts(
     (a) => {
@@ -157,12 +171,7 @@ onMounted(() => {
       handSize: mao.value.length,
     }),
   )
-  medir()
-  if (typeof ResizeObserver === 'function') {
-    observer = new ResizeObserver(medir)
-    if (base.value) observer.observe(base.value)
-    if (painel.value) observer.observe(painel.value)
-  }
+  observar()
   window.addEventListener('resize', medir)
 })
 onBeforeUnmount(() => {
@@ -245,8 +254,6 @@ onBeforeUnmount(() => {
       </slot>
       <BarraSinais />
     </aside>
-
-    <Anunciador />
   </div>
   <p
     v-else

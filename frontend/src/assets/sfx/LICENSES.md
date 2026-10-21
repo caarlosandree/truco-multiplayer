@@ -19,3 +19,4 @@ Todos os arquivos desta pasta derivam de pacotes da Kenney (https://kenney.nl), 
 | timeLow | Interface Sounds | tick_002.ogg |
 | victory | Interface Sounds | maximize_006.ogg |
 | defeat | Interface Sounds | minimize_006.ogg |
+| invite | Interface Sounds | question_001.ogg |

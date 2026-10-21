@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { RouterLink, RouterView } from 'vue-router'
 import { useSessionStore } from '@/stores/session'
+import Anunciador from './mesa/Anunciador.vue'
+import AvisosConvite from './convite/AvisosConvite.vue'
 import Botao from './ui/Botao.vue'
 import IndicadorConexao from './ui/IndicadorConexao.vue'
 import Toasts from './ui/Toasts.vue'
@@ -87,6 +89,9 @@ function reload() {
     >
       <RouterView />
     </main>
+    <AvisosConvite v-if="session.isLoggedIn" />
     <Toasts />
+    <!-- a única região viva de anúncios do app (mesa, sinais, convites) -->
+    <Anunciador />
   </div>
 </template>

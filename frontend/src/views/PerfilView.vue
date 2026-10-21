@@ -233,6 +233,11 @@ function onVolume(e: Event) {
         label="Sem som"
         @update:model-value="prefs.setMuted($event)"
       />
+      <Toggle
+        :model-value="prefs.notifications"
+        label="Notificações do navegador para convites"
+        @update:model-value="prefs.setNotifications($event)"
+      />
     </section>
 
     <section

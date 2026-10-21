@@ -15,7 +15,9 @@ it('usa padrões e persiste mudanças', () => {
   prefs.setDeck('espanhol')
   prefs.setVolume(2)
   expect(prefs.volume).toBe(1)
-  expect(JSON.parse(localStorage.getItem('truco.prefs')!)).toEqual({ deck: 'espanhol', volume: 1, muted: false })
+  expect(JSON.parse(localStorage.getItem('truco.prefs')!)).toEqual({
+    deck: 'espanhol', volume: 1, muted: false, notifications: true, notifyAsked: false,
+  })
 })
 
 it('lê valores salvos e ignora lixo', () => {
@@ -37,4 +39,32 @@ it('funciona sem localStorage', () => {
   expect(prefs.deck).toBe('frances')
   expect(() => prefs.setMuted(true)).not.toThrow()
   expect(prefs.muted).toBe(true)
+})
+
+it('notificações: padrão ligado, nunca perguntado; persistem', () => {
+  const prefs = usePrefsStore()
+  expect(prefs.notifications).toBe(true)
+  expect(prefs.notifyAsked).toBe(false)
+  prefs.setNotifications(false)
+  prefs.markNotifyAsked()
+  const salvo = JSON.parse(localStorage.getItem('truco.prefs') ?? '{}')
+  expect(salvo).toMatchObject({ notifications: false, notifyAsked: true })
+  setActivePinia(createPinia())
+  const outra = usePrefsStore()
+  expect(outra.notifications).toBe(false)
+  expect(outra.notifyAsked).toBe(true)
+})
+
+it('notificações têm padrão com localStorage quebrado', () => {
+  vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+    throw new Error('bloqueado')
+  })
+  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    throw new Error('bloqueado')
+  })
+  const prefs = usePrefsStore()
+  expect(prefs.notifications).toBe(true)
+  expect(prefs.notifyAsked).toBe(false)
+  expect(() => prefs.markNotifyAsked()).not.toThrow()
+  expect(prefs.notifyAsked).toBe(true)
 })
