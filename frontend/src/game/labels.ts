@@ -1,5 +1,5 @@
 import type { HandKind, VoteChoice } from '@/protocol/engine'
-import type { EndReason, SignalID } from '@/protocol/messages'
+import type { EndReason, PresenceEntry, SignalID } from '@/protocol/messages'
 
 const ERRORS: Record<string, string> = {
   // HTTP / contas
@@ -93,4 +93,12 @@ const END_REASONS: Record<EndReason, string> = {
 
 export function endReasonText(reason: EndReason): string {
   return END_REASONS[reason] ?? reason
+}
+
+/** Linha de status da pessoa na lista de online: "no lobby", "esperando · Mesa do RH", "jogando · Truco da TI". */
+export function presenceText(e: PresenceEntry): string {
+  if (e.status === 'lobby') return 'no lobby'
+  const where = e.privateRoom ? 'sala privada' : (e.roomName ?? '')
+  const verb = e.status === 'waiting' ? 'esperando' : 'jogando'
+  return where ? `${verb} · ${where}` : verb
 }

@@ -37,6 +37,9 @@ const (
 	MsgForfeitAvailable ServerMessageType = "forfeit_available"
 	MsgMatchEnded       ServerMessageType = "match_ended"
 	MsgSignal           ServerMessageType = "signal"
+	MsgPresenceSnapshot ServerMessageType = "presence_snapshot"
+	MsgPresenceUpdated  ServerMessageType = "presence_updated"
+	MsgPresenceRemoved  ServerMessageType = "presence_removed"
 	MsgError            ServerMessageType = "error"
 )
 
@@ -152,6 +155,21 @@ func RoomUpserted(r RoomSummary) ServerMessage {
 
 func RoomRemoved(id string) ServerMessage {
 	return Message(MsgRoomRemoved, RoomRemovedPayload{RoomID: id})
+}
+
+func PresenceSnapshot(users []PresenceEntry) ServerMessage {
+	if users == nil {
+		users = []PresenceEntry{}
+	}
+	return Message(MsgPresenceSnapshot, PresenceSnapshotPayload{Users: users})
+}
+
+func PresenceUpdated(u PresenceEntry) ServerMessage {
+	return Message(MsgPresenceUpdated, PresenceUpdatedPayload{User: u})
+}
+
+func PresenceRemoved(userID string) ServerMessage {
+	return Message(MsgPresenceRemoved, PresenceRemovedPayload{UserID: userID})
 }
 
 func LeftRoom(reason LeftReason) ServerMessage {

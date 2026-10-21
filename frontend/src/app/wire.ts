@@ -9,6 +9,7 @@ import { setResumeHandler, useSessionStore } from '@/stores/session'
 import { useLobbyStore } from '@/stores/lobby'
 import { useRoomStore } from '@/stores/room'
 import { useGameStore } from '@/stores/game'
+import { usePresenceStore } from '@/stores/presence'
 import { useToastsStore } from '@/stores/toasts'
 
 let client: WsClient | null = null
@@ -39,6 +40,12 @@ export function dispatch(msg: ServerMessage): void {
       return useGameStore().onEvents(msg.payload)
     case 'signal':
       return useGameStore().onSignal(msg.payload)
+    case 'presence_snapshot':
+      return usePresenceStore().onSnapshot(msg.payload)
+    case 'presence_updated':
+      return usePresenceStore().onUpdated(msg.payload)
+    case 'presence_removed':
+      return usePresenceStore().onRemoved(msg.payload)
     case 'error':
       return // tratado no WsClient (rejeição do send ou onUnackedError)
     default: {
@@ -84,6 +91,7 @@ function stop(): void {
   setSender(null)
   useLobbyStore().$reset()
   useRoomStore().$reset()
+  usePresenceStore().$reset()
   useGameStore().reset()
 }
 

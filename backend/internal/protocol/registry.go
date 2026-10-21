@@ -42,6 +42,9 @@ var ServerMessages = []MessageSpec{
 	{string(MsgForfeitAvailable), reflect.TypeFor[ForfeitAvailablePayload]()},
 	{string(MsgMatchEnded), reflect.TypeFor[MatchEndedPayload]()},
 	{string(MsgSignal), reflect.TypeFor[SignalBroadcastPayload]()},
+	{string(MsgPresenceSnapshot), reflect.TypeFor[PresenceSnapshotPayload]()},
+	{string(MsgPresenceUpdated), reflect.TypeFor[PresenceUpdatedPayload]()},
+	{string(MsgPresenceRemoved), reflect.TypeFor[PresenceRemovedPayload]()},
 	{string(MsgError), reflect.TypeFor[ErrorPayload]()},
 }
 

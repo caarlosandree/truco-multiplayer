@@ -31,4 +31,7 @@ export type ServerMessage =
   | { type: "forfeit_available"; payload: m.ForfeitAvailablePayload }
   | { type: "match_ended"; payload: m.MatchEndedPayload }
   | { type: "signal"; payload: m.SignalBroadcastPayload }
+  | { type: "presence_snapshot"; payload: m.PresenceSnapshotPayload }
+  | { type: "presence_updated"; payload: m.PresenceUpdatedPayload }
+  | { type: "presence_removed"; payload: m.PresenceRemovedPayload }
   | { type: "error"; payload: m.ErrorPayload };

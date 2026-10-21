@@ -7,6 +7,7 @@ import { dispatch, installConnection } from './wire'
 import { useLobbyStore } from '@/stores/lobby'
 import { useRoomStore } from '@/stores/room'
 import { useGameStore } from '@/stores/game'
+import { usePresenceStore } from '@/stores/presence'
 import type { PlayerView } from '@/protocol/engine'
 
 beforeEach(() => setActivePinia(createPinia()))
@@ -30,6 +31,7 @@ it('entrega cada tipo à store dona', () => {
   const lobby = useLobbyStore()
   const room = useRoomStore()
   const game = useGameStore()
+  const presence = usePresenceStore()
   const spies = {
     snapshot: vi.spyOn(lobby, 'onSnapshot'),
     upsert: vi.spyOn(lobby, 'onUpsert'),
@@ -41,6 +43,9 @@ it('entrega cada tipo à store dona', () => {
     state: vi.spyOn(game, 'onState'),
     events: vi.spyOn(game, 'onEvents'),
     signal: vi.spyOn(game, 'onSignal'),
+    presSnapshot: vi.spyOn(presence, 'onSnapshot'),
+    presUpdated: vi.spyOn(presence, 'onUpdated'),
+    presRemoved: vi.spyOn(presence, 'onRemoved'),
   }
   dispatch({ type: 'lobby_snapshot', payload: { rooms: [] } })
   dispatch({ type: 'room_upserted', payload: { room: { id: 'r', name: 'n', status: 'waiting', seats: [null, null, null, null] } } })
@@ -55,6 +60,9 @@ it('entrega cada tipo à store dona', () => {
   dispatch({ type: 'state', payload: { view, deadlines: {}, pendingSeats: [] } })
   dispatch({ type: 'events', payload: [] })
   dispatch({ type: 'signal', payload: { seat: 1, id: 'boa' } })
+  dispatch({ type: 'presence_snapshot', payload: { users: [] } })
+  dispatch({ type: 'presence_updated', payload: { user: { userId: 'u', username: 'u', displayName: 'U', status: 'lobby' } } })
+  dispatch({ type: 'presence_removed', payload: { userId: 'u' } })
   for (const spy of Object.values(spies)) {
     expect(spy).toHaveBeenCalledOnce()
   }
@@ -114,5 +122,28 @@ describe('reconexão e sala fantasma', () => {
     const reset = vi.spyOn(useGameStore(), 'reset')
     dispatch({ type: 'lobby_snapshot', payload: { rooms: [] } })
     expect(reset).not.toHaveBeenCalled()
+  })
+})
+
+describe('presença', () => {
+  const ana = { userId: 'u-ana', username: 'ana', displayName: 'Ana', status: 'lobby' as const }
+
+  it('snapshot, atualização e remoção chegam à store', () => {
+    const presence = usePresenceStore()
+    dispatch({ type: 'presence_snapshot', payload: { users: [ana] } })
+    dispatch({ type: 'presence_updated', payload: { user: { ...ana, status: 'waiting', roomName: 'Mesa' } } })
+    expect(presence.byUsername('ana')?.status).toBe('waiting')
+    dispatch({ type: 'presence_removed', payload: { userId: 'u-ana' } })
+    expect(presence.count).toBe(0)
+  })
+
+  it('logout (stop) zera a presença', () => {
+    const presence = usePresenceStore()
+    dispatch({ type: 'presence_snapshot', payload: { users: [ana] } })
+    expect(presence.count).toBe(1)
+    useSessionStore().user = null
+    installConnection(createAppRouter(createMemoryHistory())) // sem usuário, o watch imediato roda stop()
+    expect(presence.count).toBe(0)
+    expect(presence.loaded).toBe(false)
   })
 })

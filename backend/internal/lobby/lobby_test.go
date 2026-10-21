@@ -141,7 +141,8 @@ func TestConnectSendsHelloAndSnapshot(t *testing.T) {
 	l := newLobby(t, 3)
 	c := connect(l, "u0", "Ana")
 	msgs := c.messages()
-	if len(msgs) != 2 || msgs[0].Type != protocol.MsgHello || msgs[1].Type != protocol.MsgLobbySnapshot {
+	if len(msgs) != 3 || msgs[0].Type != protocol.MsgHello || msgs[1].Type != protocol.MsgLobbySnapshot ||
+		msgs[2].Type != protocol.MsgPresenceSnapshot {
 		t.Fatalf("mensagens = %+v", msgs)
 	}
 	if hello := msgs[0].Payload.(protocol.HelloPayload); hello.User.ID != "u0" || hello.ProtocolVersion != protocol.ProtocolVersion {

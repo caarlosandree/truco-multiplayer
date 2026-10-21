@@ -115,3 +115,34 @@ type ErrorPayload struct {
 	Message string `json:"message"`
 	Seq     int64  `json:"seq,omitempty"`
 }
+
+// PresenceStatus é onde a pessoa está: no lobby, numa sala em espera ou numa partida.
+type PresenceStatus string
+
+const (
+	PresenceLobby   PresenceStatus = "lobby"
+	PresenceWaiting PresenceStatus = "waiting"
+	PresencePlaying PresenceStatus = "playing"
+)
+
+// PresenceEntry é uma pessoa online; RoomName só vai para sala pública (sala privada vira PrivateRoom).
+type PresenceEntry struct {
+	UserID      string         `json:"userId"`
+	Username    string         `json:"username"`
+	DisplayName string         `json:"displayName"`
+	Status      PresenceStatus `json:"status"`
+	RoomName    string         `json:"roomName,omitempty"`
+	PrivateRoom bool           `json:"privateRoom,omitempty"`
+}
+
+type PresenceSnapshotPayload struct {
+	Users []PresenceEntry `json:"users"`
+}
+
+type PresenceUpdatedPayload struct {
+	User PresenceEntry `json:"user"`
+}
+
+type PresenceRemovedPayload struct {
+	UserID string `json:"userId"`
+}

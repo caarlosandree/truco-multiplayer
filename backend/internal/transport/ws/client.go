@@ -55,6 +55,10 @@ func (c *client) Close(reason lobby.CloseReason) {
 		c.closeWith(codeReplaced, "replaced")
 		return
 	}
+	if reason == lobby.CloseRevoked {
+		c.closeWith(codeSessionInvalid, "session_invalid")
+		return
+	}
 	c.closeWith(websocket.StatusGoingAway, "going_away")
 }
 

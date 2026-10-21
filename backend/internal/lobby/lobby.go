@@ -23,6 +23,7 @@ type CloseReason int
 const (
 	CloseReplaced CloseReason = iota + 1 // o mesmo usuário abriu outra conexão
 	CloseShutdown                        // o servidor está desligando
+	CloseRevoked                         // a conta foi desativada (DropUser)
 )
 
 // Client é a conexão de um usuário. Send e Close nunca bloqueiam.
@@ -63,6 +64,8 @@ type Lobby struct {
 	rooms   map[string]*entry  // sala → ator e resumo
 	codes   map[string]string  // código → sala
 	index   map[string]string  // usuário → sala (uma sala por usuário)
+
+	lastPresence map[string]protocol.PresenceEntry // última presença transmitida, para não repetir
 }
 
 func New(ctx context.Context, o Options) *Lobby {
@@ -71,7 +74,8 @@ func New(ctx context.Context, o Options) *Lobby {
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	return &Lobby{opt: o, ctx: ctx, cancel: cancel, rand: &lockedReader{r: o.Rand},
-		clients: map[string]*member{}, rooms: map[string]*entry{}, codes: map[string]string{}, index: map[string]string{}}
+		clients: map[string]*member{}, rooms: map[string]*entry{}, codes: map[string]string{}, index: map[string]string{},
+		lastPresence: map[string]protocol.PresenceEntry{}}
 }
 
 // lockedReader serializa o gerador compartilhado pelas salas.
@@ -86,8 +90,8 @@ func (l *lockedReader) Read(p []byte) (int, error) {
 	return l.r.Read(p)
 }
 
-// Connect registra a conexão (substituindo a anterior do mesmo usuário) e manda hello e,
-// para quem está fora de sala, a lista; quem está em sala recebe o estado pela própria sala.
+// Connect registra a conexão (substituindo a anterior do mesmo usuário) e manda hello, a lista
+// (só a quem está fora de sala; quem está em sala recebe o estado pela própria sala) e a presença.
 func (l *Lobby) Connect(c Client, info protocol.UserInfo) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -99,11 +103,17 @@ func (l *Lobby) Connect(c Client, info protocol.UserInfo) bool {
 	}
 	l.clients[info.ID] = &member{client: c, info: info}
 	c.Send(protocol.Hello(info))
-	if e := l.roomOfLocked(info.ID); e != nil {
-		e.actor.Push(room.Connected{UserID: info.ID})
-		return true
+	e := l.roomOfLocked(info.ID)
+	if e == nil {
+		c.Send(l.snapshotLocked())
 	}
-	c.Send(l.snapshotLocked())
+	entry, _ := l.entryLocked(info.ID)
+	l.lastPresence[info.ID] = entry
+	c.Send(l.presenceSnapshotLocked())
+	l.broadcastAllLocked(protocol.PresenceUpdated(entry), info.ID)
+	if e != nil {
+		e.actor.Push(room.Connected{UserID: info.ID})
+	}
 	return true
 }
 
@@ -119,6 +129,7 @@ func (l *Lobby) Disconnect(c Client) {
 	if e := l.roomOfLocked(id); e != nil {
 		e.actor.Push(room.Disconnected{UserID: id})
 	}
+	l.forgetLocked(id)
 }
 
 // Dispatch trata create_room/join_room e repassa o resto para a sala do usuário.
@@ -179,6 +190,7 @@ func (l *Lobby) createRoomLocked(m *member, msg protocol.ClientMessage) {
 	l.codes[code] = id
 	l.index[m.info.ID] = id
 	l.opt.Log.Info("sala criada", "room_id", id, "public", public, "user_id", m.info.ID)
+	l.touchPresenceLocked(m.info.ID)
 	actor.Push(room.Join{UserID: m.info.ID, DisplayName: m.info.DisplayName, Seq: msg.Seq})
 }
 
@@ -207,6 +219,11 @@ func (l *Lobby) joinRoomLocked(m *member, msg protocol.ClientMessage) {
 	if !e.actor.Push(room.Join{UserID: m.info.ID, DisplayName: m.info.DisplayName, Seat: p.Seat, Seq: msg.Seq}) {
 		delete(l.index, m.info.ID)
 		m.client.Send(protocol.ErrorMsg(protocol.CodeRoomNotFound, msg.Seq))
+		return
+	}
+	// sala em jogo recusa; só reserva em sala em espera muda a presença (a T7 move isto para o assento)
+	if e.summary.Room.Status == protocol.RoomWaiting {
+		l.touchPresenceLocked(m.info.ID)
 	}
 }
 
@@ -227,7 +244,11 @@ func (l *Lobby) Update(s room.Summary) {
 	if e == nil {
 		return
 	}
+	changed := e.summary.Room.Status != s.Room.Status
 	e.summary = s
+	if changed {
+		l.touchPresenceLocked(l.membersLocked(s.Room.ID)...)
+	}
 	if s.Public {
 		l.broadcastLobbyLocked(protocol.RoomUpserted(s.Room))
 	}
@@ -244,6 +265,7 @@ func (l *Lobby) Released(roomID, userID string) {
 	if m := l.clients[userID]; m != nil && !l.closing {
 		m.client.Send(l.snapshotLocked())
 	}
+	l.touchPresenceLocked(userID)
 }
 
 // Destroyed implementa room.Registry: remove a sala, o código e a linha da lista.
@@ -272,6 +294,7 @@ func (l *Lobby) Destroyed(roomID string) {
 				m.client.Send(snap)
 			}
 		}
+		l.touchPresenceLocked(freed...)
 	}
 	if e.summary.Public {
 		l.broadcastLobbyLocked(protocol.RoomRemoved(roomID))

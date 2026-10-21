@@ -68,8 +68,9 @@ func (nopStore) Finish(context.Context, string) error          { return nil }
 func (nopStore) Abandon(context.Context, string, string) error { return nil }
 
 type env struct {
-	srv  *httptest.Server
-	auth *fakeAuth
+	srv   *httptest.Server
+	auth  *fakeAuth
+	lobby *lobby.Lobby
 }
 
 func newEnv(t *testing.T, tweak ...func(*ws.Limits)) env {
@@ -93,7 +94,7 @@ func newEnv(t *testing.T, tweak ...func(*ws.Limits)) env {
 		_ = l.Shutdown(ctx)
 		srv.Close()
 	})
-	return env{srv: srv, auth: a}
+	return env{srv: srv, auth: a, lobby: l}
 }
 
 func (e env) dial(token, from string) (*websocket.Conn, *http.Response, error) {
@@ -234,6 +235,16 @@ func TestRevalidationClosesRevokedSession(t *testing.T) {
 	c := e.connect(t, "tok-ana")
 	readType(t, c, "hello")
 	e.auth.revoke("tok-ana")
+	if code := closeStatus(t, c); code != 4003 {
+		t.Fatalf("código = %d", code)
+	}
+}
+
+func TestRevokedClosesWith4003(t *testing.T) {
+	e := newEnv(t)
+	c := e.connect(t, "tok-ana")
+	readType(t, c, "presence_snapshot")
+	e.lobby.DropUser("u0")
 	if code := closeStatus(t, c); code != 4003 {
 		t.Fatalf("código = %d", code)
 	}

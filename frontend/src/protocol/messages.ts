@@ -233,3 +233,30 @@ export interface ErrorPayload {
   message: string;
   seq?: number /* int64 */;
 }
+/**
+ * PresenceStatus é onde a pessoa está: no lobby, numa sala em espera ou numa partida.
+ */
+export type PresenceStatus = string;
+export const PresenceLobby: PresenceStatus = "lobby";
+export const PresenceWaiting: PresenceStatus = "waiting";
+export const PresencePlaying: PresenceStatus = "playing";
+/**
+ * PresenceEntry é uma pessoa online; RoomName só vai para sala pública (sala privada vira PrivateRoom).
+ */
+export interface PresenceEntry {
+  userId: string;
+  username: string;
+  displayName: string;
+  status: PresenceStatus;
+  roomName?: string;
+  privateRoom?: boolean;
+}
+export interface PresenceSnapshotPayload {
+  users: PresenceEntry[];
+}
+export interface PresenceUpdatedPayload {
+  user: PresenceEntry;
+}
+export interface PresenceRemovedPayload {
+  userId: string;
+}
