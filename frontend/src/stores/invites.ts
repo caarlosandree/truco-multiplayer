@@ -67,8 +67,16 @@ export const useInvitesStore = defineStore('invites', {
     resetToken() {
       this.tokenOutcome = null
     },
-    invite(username: string, seat?: Seat): Promise<void> {
-      return send({ type: 'invite', payload: seat === undefined ? { username } : { username, seat } })
+    /** Convida por username. `already_in_room` aqui quer dizer "essa pessoa já está nesta sala", não "você". */
+    async invite(username: string, seat?: Seat): Promise<void> {
+      try {
+        await send({ type: 'invite', payload: seat === undefined ? { username } : { username, seat } })
+      } catch (err) {
+        if (errorCode(err) === 'already_in_room') {
+          throw Object.assign(new Error('Essa pessoa já está nesta sala.'), { code: 'invitee_already_here' })
+        }
+        throw err
+      }
     },
     /** Retira o aviso na hora e envia a resposta; se o aceite for recusado por partida em andamento, o aviso volta. */
     async respond(inviteId: string, accept: boolean): Promise<void> {

@@ -1,5 +1,7 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import { createMemoryHistory } from 'vue-router'
+import { createAppRouter } from '@/router'
 import { setSender } from '@/app/transport'
 import LobbyView from '@/views/LobbyView.vue'
 import { useLobbyStore } from '@/stores/lobby'
@@ -22,7 +24,7 @@ afterEach(() => {
 
 const wrappers: VueWrapper[] = []
 function mountLobby() {
-  const w = mount(LobbyView, { global: { plugins: [pinia] }, attachTo: document.body })
+  const w = mount(LobbyView, { global: { plugins: [pinia, createAppRouter(createMemoryHistory())] }, attachTo: document.body })
   wrappers.push(w)
   return w
 }

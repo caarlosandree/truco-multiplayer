@@ -107,3 +107,21 @@ it('onOutsideRoom limpa sala, desistência, fim de partida e jogo; sem sala não
   expect([r.room, r.forfeitTeam, r.ended, r.lastLeft]).toEqual([null, null, null, null])
   expect(reset).toHaveBeenCalledOnce()
 })
+
+describe('convidar para a sala', () => {
+  it('freeSeats lista os lugares vazios; canInvite só em espera com lugar livre', () => {
+    const r = useRoomStore()
+    expect([r.freeSeats, r.canInvite]).toEqual([[], false])
+    r.onRoomState(state())
+    expect([r.freeSeats, r.canInvite]).toEqual([[1, 3], true])
+  })
+
+  it('canInvite é falso com 4 sentados e durante o jogo', () => {
+    const r = useRoomStore()
+    const seat = (userId: string) => ({ userId, displayName: userId, ready: true, connected: true, absent: false })
+    r.onRoomState(state({ seats: [seat('a'), seat('b'), seat('c'), seat('d')] }))
+    expect([r.freeSeats, r.canInvite]).toEqual([[], false])
+    r.onRoomState(state({ status: 'playing' }))
+    expect([r.freeSeats, r.canInvite]).toEqual([[1, 3], false])
+  })
+})

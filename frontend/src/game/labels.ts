@@ -33,6 +33,8 @@ const ERRORS: Record<string, string> = {
   invite_expired: 'O convite expirou.',
   invite_not_yours: 'Este convite é para outra pessoa.',
   invitee_playing: 'Você está numa partida.',
+  // already_in_room no contexto de convite: a pessoa convidada já está sentada nesta sala
+  invitee_already_here: 'Essa pessoa já está nesta sala.',
   cannot_invite_self: 'Você não pode convidar a si mesmo.',
   user_not_found: 'Usuário não encontrado.',
   // Regras do engine

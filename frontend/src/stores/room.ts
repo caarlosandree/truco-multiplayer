@@ -34,6 +34,12 @@ export const useRoomStore = defineStore('room', {
     },
     isHost: (s) => s.room !== null && s.room.host === s.room.yourSeat,
     isPlaying: (s) => s.room?.status === 'playing',
+    /** Lugares vazios da sala em que estou. */
+    freeSeats: (s): Seat[] => (s.room ? s.room.seats.flatMap((x, i) => (x === null ? [i as Seat] : [])) : []),
+    /** Posso convidar alguém: em sala de espera com lugar livre. */
+    canInvite(): boolean {
+      return this.room?.status === 'waiting' && this.freeSeats.length > 0
+    },
     amReady: (s) => (s.room ? (s.room.seats[s.room.yourSeat]?.ready ?? false) : false),
   },
   actions: {
