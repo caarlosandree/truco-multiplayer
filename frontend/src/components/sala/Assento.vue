@@ -10,8 +10,10 @@ const props = defineProps<{
   canKick: boolean
   /** mesma dupla de quem está sentado vendo a tela: "nós" (contínuo) ou "eles" (pontilhado) */
   ally: boolean
+  /** há lugar livre numa sala de espera: oferece "Convidar" ao lado de "Sentar" */
+  canInvite: boolean
 }>()
-const emit = defineEmits<{ take: []; kick: [] }>()
+const emit = defineEmits<{ take: []; kick: []; invite: [] }>()
 </script>
 
 <template>
@@ -119,16 +121,27 @@ const emit = defineEmits<{ take: []; kick: [] }>()
         </span>
       </p>
     </template>
-    <button
-      v-else
-      type="button"
-      data-acao="sentar"
-      class="flex min-h-14 w-full items-center justify-center rounded-placa border-2 border-dashed bg-felt border-giz/60 px-3 py-2 text-sm font-bold text-giz hover:bg-giz/10 active:translate-y-(--botao-pressao-y)"
-      :aria-label="`Sentar no lugar ${props.seat + 1}, ${props.ally ? 'nós' : 'eles'}`"
-      @click="emit('take')"
-    >
-      Sentar aqui
-    </button>
+    <template v-else>
+      <button
+        type="button"
+        data-acao="sentar"
+        class="flex min-h-14 w-full items-center justify-center rounded-placa border-2 border-dashed bg-felt border-giz/60 px-3 py-2 text-sm font-bold text-giz hover:bg-giz/10 active:translate-y-(--botao-pressao-y)"
+        :aria-label="`Sentar no lugar ${props.seat + 1}, ${props.ally ? 'nós' : 'eles'}`"
+        @click="emit('take')"
+      >
+        Sentar aqui
+      </button>
+      <button
+        v-if="props.canInvite"
+        type="button"
+        data-acao="convidar-lugar"
+        class="flex min-h-11 w-full items-center justify-center rounded-botao-2 px-3 text-sm font-bold text-giz inset-ring-2 inset-ring-giz/40 hover:bg-giz/10 active:translate-y-(--botao-pressao-y)"
+        :aria-label="`Convidar para o lugar ${props.seat + 1}, ${props.ally ? 'nós' : 'eles'}`"
+        @click="emit('invite')"
+      >
+        Convidar
+      </button>
+    </template>
 
     <!-- marca da dupla: contínuo = nós, pontilhado = eles; o rótulo diz a mesma coisa em texto -->
     <p class="flex items-center justify-center gap-2 text-sm text-giz-muted">

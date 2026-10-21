@@ -5,6 +5,8 @@ import { useRoomStore } from '@/stores/room'
 import { useToastsStore } from '@/stores/toasts'
 import { relativePosition, teamOf, type RelativePosition } from '@/game/seats'
 import Assento from './Assento.vue'
+import ListaConvites from './ListaConvites.vue'
+import SeletorPessoas from './SeletorPessoas.vue'
 import Toggle from '@/components/ui/Toggle.vue'
 import Botao from '@/components/ui/Botao.vue'
 import Modal from '@/components/ui/Modal.vue'
@@ -17,6 +19,8 @@ const r = computed(() => {
 })
 const inviteLink = computed(() => `${location.origin}/sala/${r.value.code}`)
 const removendo = ref<Seat | null>(null)
+/** seletor de pessoas: fechado (null) ou aberto, com ou sem lugar escolhido */
+const convidando = ref<{ seat?: Seat } | null>(null)
 const removendoNome = computed(() => (removendo.value === null ? '' : (r.value.seats[removendo.value]?.displayName ?? '')))
 
 // celular: parceiro em cima, mesa, adversários lado a lado, eu embaixo; desktop: losango em volta do oval
@@ -86,7 +90,7 @@ const resumo = computed(() => {
           </template>
         </p>
       </div>
-      <div class="flex flex-wrap items-center gap-2">
+      <div class="flex flex-wrap items-center gap-1 md:gap-2">
         <Botao
           v-if="r.visibility === 'private'"
           data-acao="copiar"
@@ -96,8 +100,16 @@ const resumo = computed(() => {
           Copiar link
         </Botao>
         <Botao
-          data-acao="sair"
+          v-if="room.canInvite"
+          data-acao="convidar"
           variant="secondary"
+          @click="convidando = {}"
+        >
+          Convidar
+        </Botao>
+        <Botao
+          data-acao="sair"
+          variant="ghost"
           @click="run(room.leave())"
         >
           Sair da sala
@@ -133,8 +145,10 @@ const resumo = computed(() => {
               :is-host="s.seat === r.host"
               :can-kick="room.isHost && s.info !== null && s.seat !== r.yourSeat"
               :ally="s.ally"
+              :can-invite="room.canInvite"
               @take="run(room.takeSeat(s.seat))"
               @kick="removendo = s.seat"
+              @invite="convidando = { seat: s.seat }"
             />
           </li>
           <li class="col-span-2 row-start-2 flex items-center justify-center text-center md:col-span-1 md:col-start-2">
@@ -162,6 +176,16 @@ const resumo = computed(() => {
         />
       </div>
     </section>
+
+    <div class="mx-auto w-full max-w-3xl px-4 py-6 md:px-6">
+      <ListaConvites />
+    </div>
+
+    <SeletorPessoas
+      :open="convidando !== null"
+      :seat="convidando?.seat"
+      @close="convidando = null"
+    />
 
     <Modal
       :open="removendo !== null"
