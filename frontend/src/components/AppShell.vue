@@ -82,7 +82,8 @@ function reload() {
     </div>
     <main
       id="conteudo"
-      class="flex flex-1 flex-col"
+      tabindex="-1"
+      class="flex flex-1 flex-col focus:outline-none"
     >
       <RouterView />
     </main>

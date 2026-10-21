@@ -31,3 +31,9 @@ it('mostra o banner de nova versão', async () => {
   await w.vm.$nextTick()
   expect(w.get('[data-testid="banner-versao"]').text()).toContain('Nova versão disponível — recarregue a página')
 })
+
+it('o conteúdo principal recebe foco programático (link de pular)', async () => {
+  const w = await montar()
+  const main = w.get('main#conteudo')
+  expect(main.attributes('tabindex')).toBe('-1')
+})

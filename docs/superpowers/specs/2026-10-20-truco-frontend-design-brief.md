@@ -70,7 +70,7 @@ Declarados também em `:root, [data-tema]`. Estados comuns: **hover** `--dur-rap
 | Botão fantasma | `--botao-fantasma-bg-hover` | texto `ink`, sem borda; ações terciárias ("Copiar link") |
 | Campo | `--campo-*`, `rounded-campo`, 44 px | fundo `surface`, borda 2 px `line`; erro: borda `danger` + texto `danger` 14 px abaixo, ligado por `aria-describedby`. Rótulo visível acima, 14 px 700 |
 | Modal | `--modal-*`, `rounded-modal`, `shadow-modal`, `max-w-(--modal-largura)` 448 px | título Atkinson 20 px 700 (não Kalam); scrim `--modal-scrim`; ações à direita, primária por último |
-| Toast | `--toast-info-*`, `--toast-erro-*`, `rounded-toast`, `shadow-toast` | info = invertido (`ink` com texto `surface`); erro = `danger`/`on-danger`; topo-centro, abaixo do cabeçalho, até 3 empilhados, 5 s |
+| Toast | `--toast-info-*`, `--toast-erro-*`, `rounded-toast`, `shadow-toast` | info = invertido (`ink` com texto `surface`); erro = `danger`/`on-danger`; canto inferior direito (384 px) no desktop; no celular (< 768 px) largura total acima da área segura; até 3 empilhados no total, 5 s. Nunca cobre cabeçalho nem banner. A região lê `--toast-offset` (padrão 0): **a view da mesa deve defini-lo no celular** com a altura da mão + painel de ação, para que o toast não cubra a mão nem os botões |
 | Assento (mesa) | `--assento-*`, `rounded-placa` | placa de lousa com nome em giz 14 px 700; marca de dupla = traço de 3×40 px abaixo (nós contínuo, eles pontilhado); vez = contorno 2 px **tracejado** giz, afastado 3 px; ausente = opacidade `--assento-ausente-opacidade` (0,5) **só na placa do nome e na marca de dupla**; o ícone e o texto de estado "desconectado"/"ausente" (giz-muted 14 px, 5,03:1 no feltro) ficam fora do elemento esmaecido, em opacidade total |
 | Carta | `rounded-card` 6 px, `shadow-card`; `--carta-largura-mao/-mesa/-vira` 84/68/48 px | mão: erguida `--carta-ergue-y` (−12 px) + `shadow-carta-erguida` no hover/seleção; nunca gira em movimento |
 | Placar/tento | `--placar-bg`, `--tento-nos/-eles`, `--tento-traco` 3 px, `--valor-borda`, `rounded-valor` | ver §3 e §5 |
@@ -201,7 +201,7 @@ Atraso > 3 s ou aba oculta: o diretor descarta a fila; os componentes mostram o 
 | Botão pressionado | `translateY(1px)` + cor `-active`, `--dur-instante` |
 | Hover de botão/linha | cor, `--dur-rapido` (150 ms) `ease-padrao` |
 | Carta da mão (hover/seleção) | ergue −12 px + sombra, `--dur-rapido` `ease-desliza` |
-| Toast | entra 200 ms (desce 8 px + opacidade) `ease-desliza`; sai 150 ms `ease-sai` |
+| Toast | entra 200 ms (sobe 8 px + opacidade) `ease-desliza`; sai 150 ms `ease-sai` |
 | Modal | scrim 200 ms; caixa 200 ms opacidade + escala 0,98→1 `ease-padrao`; sai 150 ms |
 | Balão de sinal | entra 150 ms `ease-quique`; fica ~3 s; sai 200 ms `ease-sai` |
 | Anel de prazo | contínuo (rAF), linear — é progresso real |
