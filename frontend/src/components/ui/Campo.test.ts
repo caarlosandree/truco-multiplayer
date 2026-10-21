@@ -17,3 +17,10 @@ it('com erro marca aria-invalid e aponta aria-describedby para a mensagem', () =
   const msg = w.get(`#${CSS.escape(input.attributes('aria-describedby') ?? '')}`)
   expect(msg.text()).toBe('Usuário ou senha incorretos.')
 })
+
+it('dica e erro entram juntos no aria-describedby', () => {
+  const w = mount(Campo, { props: { label: 'Senha', modelValue: '', hint: 'Mínimo de 10 caracteres', error: 'Muito curta.' } })
+  const ids = (w.get('input').attributes('aria-describedby') ?? '').split(' ')
+  expect(ids).toHaveLength(2)
+  expect(ids.map((i) => w.get(`#${CSS.escape(i)}`).text())).toEqual(['Mínimo de 10 caracteres', 'Muito curta.'])
+})

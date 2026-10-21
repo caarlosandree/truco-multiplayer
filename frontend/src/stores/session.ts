@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { authApi, type User } from '@/api/auth'
+import { authApi, type RegisterInput, type User } from '@/api/auth'
 import { ApiError } from '@/api/http'
 import type { WsStatus } from '@/ws/client'
 
@@ -47,6 +47,21 @@ export const useSessionStore = defineStore('session', {
     async logoutAll() {
       await authApi.logoutAll()
       this.clear()
+    },
+    register(input: RegisterInput) {
+      return authApi.register(input)
+    },
+    verifyEmail(token: string) {
+      return authApi.verifyEmail(token)
+    },
+    resendVerification(email: string) {
+      return authApi.resendVerification(email)
+    },
+    forgotPassword(email: string) {
+      return authApi.forgotPassword(email)
+    },
+    resetPassword(token: string, password: string) {
+      return authApi.resetPassword(token, password)
     },
     async updateDisplayName(name: string) {
       this.user = await authApi.updateMe(name)
