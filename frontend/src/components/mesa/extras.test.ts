@@ -70,6 +70,18 @@ describe('BarraSinais', () => {
     expect(toggle.attributes('aria-expanded')).toBe('false')
   })
 
+  it('Esc com um modal aberto por cima não fecha a folha', async () => {
+    const w = mount(BarraSinais, { global: { plugins: [pinia] }, attachTo: document.body })
+    await w.find('[data-sinais-toggle]').trigger('click')
+    const m = document.createElement('div')
+    m.setAttribute('aria-modal', 'true')
+    document.body.append(m)
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await w.vm.$nextTick()
+    expect(w.find('[data-sinais-toggle]').attributes('aria-expanded')).toBe('true')
+    m.remove()
+  })
+
   it('erro de envio vira toast traduzido', async () => {
     send.mockRejectedValueOnce({ code: 'rate_limited', message: 'x' })
     const w = mount(BarraSinais, { global: { plugins: [pinia] } })
@@ -162,6 +174,13 @@ describe('FimPartida', () => {
     await flushPromises()
     expect(corpo()).toContain(texto)
     expect(corpo()).toContain('Sem vencedor')
+  })
+
+  it('o foco inicial vai para "Revanche" (ação principal), não para "Sair da sala"', async () => {
+    useRoomStore().onMatchEnded({ reason: 'game_over', winner: 0, score: [12, 7] })
+    abrir()
+    await flushPromises()
+    expect(document.activeElement).toBe(document.querySelector('[data-acao="revanche"]'))
   })
 
   it('o diálogo é descrito pelo resultado e o foco entra nele', async () => {
@@ -264,6 +283,13 @@ describe('Anunciador (dono dos anúncios da mesa)', () => {
     }
     expect(regiao(w).findAll('p').map((p) => p.text())).toEqual(['Sua vez', 'Sua vez'])
     expect(regiao(w).attributes('aria-relevant')).toBe('additions')
+  })
+
+  it('montar a mesa já na minha vez anuncia "Sua vez" (reconexão)', () => {
+    const game = useGameStore()
+    game.onState(makeState({ seat: 0, turn: 0 }, [0]))
+    const w = mount(Anunciador, { global: { plugins: [pinia] } })
+    expect(regiao(w).text()).toBe('Sua vez')
   })
 
   it('anuncia sinais dos outros (não os meus) e o W.O. disponível', async () => {

@@ -46,6 +46,7 @@ watch(
   (vez) => {
     if (vez) dizer('Sua vez')
   },
+  { immediate: true },
 )
 watch(
   () => game.signals,

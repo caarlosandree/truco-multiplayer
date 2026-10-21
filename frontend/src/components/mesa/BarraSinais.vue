@@ -50,7 +50,8 @@ async function enviar(id: SignalID) {
 
 function fechar(e: Event) {
   if (e instanceof KeyboardEvent) {
-    if (e.key === 'Escape') recolher(true)
+    // com um modal aberto por cima, o Esc é do modal
+    if (e.key === 'Escape' && !document.querySelector('[aria-modal="true"]')) recolher(true)
   } else if (!raiz.value?.contains(e.target as Node)) recolher(false)
 }
 watch(aberto, (a) => {

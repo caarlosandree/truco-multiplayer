@@ -122,6 +122,7 @@ async function sair() {
         </Botao>
         <Botao
           data-acao="revanche"
+          data-autofocus
           @click="room.dismissEnded()"
         >
           Revanche

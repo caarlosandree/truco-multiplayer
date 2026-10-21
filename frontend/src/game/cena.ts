@@ -76,8 +76,15 @@ export function useCena(): Cena {
 export function anuncioDoEvento(ev: Event, nameOf: (seat: number) => string, myTeam: Team | null): string | null {
   const quem = ev.seat !== undefined ? nameOf(ev.seat) : 'Alguém'
   switch (ev.kind) {
-    case 'raise_requested':
-      return `${quem} pediu ${stakeName(ev.stake ?? 0)}.`
+    case 'raise_requested': {
+      const valor = stakeName(ev.stake ?? 0)
+      // contra-aumento (voto "raise") vem só com a dupla, sem seat
+      if (ev.seat === undefined && ev.team !== undefined) {
+        if (myTeam === null) return `A dupla ${ev.team + 1} pediu ${valor}.`
+        return ev.team === myTeam ? `Nós pedimos ${valor}.` : `Eles pediram ${valor}.`
+      }
+      return `${quem} pediu ${valor}.`
+    }
     case 'raise_resolved':
       return ev.choice === 'run' ? 'Correu.' : 'Aceito.'
     case 'raise_punished':

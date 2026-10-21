@@ -135,6 +135,13 @@ it('anúncios da região viva falam em nós/eles', () => {
   expect(anuncioDoEvento({ kind: 'card_played', seat: 0 }, nome, 1)).toBeNull()
 })
 
+it('contra-aumento (só com a dupla, sem seat) é anunciado em nós/eles', () => {
+  const nome = (s: number) => ['Ana', 'Bia', 'Caio', 'Duda'][s]!
+  expect(anuncioDoEvento({ kind: 'raise_requested', team: 1, stake: 6 }, nome, 1)).toBe('Nós pedimos Seis.')
+  expect(anuncioDoEvento({ kind: 'raise_requested', team: 0, stake: 6 }, nome, 1)).toBe('Eles pediram Seis.')
+  expect(anuncioDoEvento({ kind: 'raise_requested', team: 0, stake: 9 }, nome, null)).toBe('A dupla 1 pediu Nove.')
+})
+
 it('Prazo mostra os segundos e toca timeLow uma vez nos últimos 5 s quando é o meu', async () => {
   const w = mount(Prazo, { props: { deadline: Date.now() + 4_000, totalMs: 30_000, mine: true }, global: { plugins: [pinia] } })
   await vi.waitFor(() => expect(play).toHaveBeenCalledWith('timeLow'))

@@ -23,7 +23,9 @@ watch(
       previous = document.activeElement as HTMLElement | null
       document.addEventListener('keydown', onKeydown)
       await nextTick()
-      ;(focusables()[0] ?? dialog.value)?.focus()
+      // foco inicial: o elemento marcado com data-autofocus (a ação segura/principal), senão o primeiro focável
+      const itens = focusables()
+      ;(itens.find((el) => el.hasAttribute('data-autofocus')) ?? itens[0] ?? dialog.value)?.focus()
     } else {
       document.removeEventListener('keydown', onKeydown)
       previous?.focus()
