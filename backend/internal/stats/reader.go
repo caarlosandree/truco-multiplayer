@@ -26,10 +26,15 @@ const maxQueryRunes = 64
 type Reader struct {
 	q          *dbgen.Queries
 	minMatches int
+	now        func() time.Time
 }
 
-func NewReader(pool *pgxpool.Pool, minMatches int) *Reader {
-	return &Reader{q: dbgen.New(pool), minMatches: minMatches}
+// NewReader cria o leitor; now nil usa time.Now (as janelas do ranking dependem dele).
+func NewReader(pool *pgxpool.Pool, minMatches int, now func() time.Time) *Reader {
+	if now == nil {
+		now = time.Now
+	}
+	return &Reader{q: dbgen.New(pool), minMatches: minMatches, now: now}
 }
 
 type RankingEntry struct {
@@ -79,6 +84,7 @@ type Profile struct {
 	Stats         Totals        `json:"stats"`
 	RecentMatches []HistoryItem `json:"recentMatches"`
 	Partners      []Partner     `json:"partners"`
+	Positions     Positions     `json:"positions"`
 }
 
 // MatchPlayer é um jogador sentado numa partida do histórico.
@@ -140,17 +146,112 @@ func winRate(wins, played int) float64 {
 	return float64(wins) / float64(played)
 }
 
-// Ranking devolve os melhores jogadores (limit <= 0 → 50; máximo 100).
-func (r *Reader) Ranking(ctx context.Context, limit int) ([]RankingEntry, error) {
-	rows, err := r.q.Ranking(ctx, dbgen.RankingParams{MinMatches: int32(r.minMatches), Lim: int32(clamp(limit, 50, 100))})
-	if err != nil {
-		return nil, err
+// RankingQuery descreve uma consulta de ranking. Period e Metric vazios valem
+// all e wins; Limit <= 0 vale 50 (máximo 100). ViewerID, quando informado,
+// preenche Me. MeOnly não traz Items, só Me.
+type RankingQuery struct {
+	Period   Period
+	Metric   Metric
+	Limit    int
+	ViewerID string
+	MeOnly   bool
+}
+
+// RankingResult é a resposta do ranking: o top, a linha de quem consulta e o
+// mínimo de partidas aplicado ao aproveitamento.
+type RankingResult struct {
+	Items      []RankingEntry `json:"items"`
+	Me         *RankingEntry  `json:"me"`
+	MinMatches int            `json:"minMatches"`
+}
+
+// PositionPair é a posição de um jogador por métrica (nil = não ranqueado).
+type PositionPair struct {
+	Wins    *int `json:"wins"`
+	WinRate *int `json:"winrate"`
+}
+
+// Positions é a posição de um jogador nos três períodos.
+type Positions struct {
+	All   PositionPair `json:"all"`
+	Month PositionPair `json:"month"`
+	Week  PositionPair `json:"week"`
+}
+
+func rankingEntry(pos, played, wins, losses int32, username, displayName string) RankingEntry {
+	return RankingEntry{Position: int(pos), Username: username, DisplayName: displayName,
+		MatchesPlayed: int(played), Wins: int(wins), Losses: int(losses), WinRate: winRate(int(wins), int(played))}
+}
+
+// Ranking devolve o ranking do período e métrica pedidos. Vitórias lista todo
+// mundo com ao menos uma partida no período; aproveitamento exige o mínimo
+// configurado. Só partidas finalizadas de contas ativas contam.
+func (r *Reader) Ranking(ctx context.Context, q RankingQuery) (RankingResult, error) {
+	if q.Period == "" {
+		q.Period = PeriodAll
 	}
-	out := make([]RankingEntry, len(rows))
-	for i, row := range rows {
-		out[i] = RankingEntry{Position: i + 1, Username: row.Username, DisplayName: row.DisplayName,
-			MatchesPlayed: int(row.MatchesPlayed), Wins: int(row.Wins), Losses: int(row.Losses),
-			WinRate: winRate(int(row.Wins), int(row.MatchesPlayed))}
+	if q.Metric == "" {
+		q.Metric = MetricWins
+	}
+	if q.Period != PeriodAll && q.Period != PeriodMonth && q.Period != PeriodWeek ||
+		q.Metric != MetricWins && q.Metric != MetricWinRate {
+		return RankingResult{}, ErrInvalidRankingQuery
+	}
+	var viewer *string
+	if q.ViewerID != "" {
+		viewer = &q.ViewerID
+	}
+	since := PeriodStart(q.Period, r.now())
+	lim := int32(clamp(q.Limit, 50, 100))
+	if q.MeOnly {
+		lim = 0
+	}
+	minMatches := int32(1)
+	if q.Metric == MetricWinRate {
+		minMatches = int32(r.minMatches)
+	}
+	rows, err := r.q.Ranking(ctx, dbgen.RankingParams{Lim: lim, Viewer: viewer, Since: since,
+		MinMatches: minMatches, ByWinrate: q.Metric == MetricWinRate})
+	if err != nil {
+		return RankingResult{}, err
+	}
+	res := RankingResult{Items: []RankingEntry{}, MinMatches: r.minMatches}
+	for _, g := range rows {
+		e := rankingEntry(g.Pos, g.MatchesPlayed, g.Wins, g.Losses, g.Username, g.DisplayName)
+		if viewer != nil && g.UserID == *viewer {
+			me := e
+			res.Me = &me
+		}
+		if g.Pos <= lim {
+			res.Items = append(res.Items, e)
+		}
+	}
+	return res, nil
+}
+
+// positions calcula a posição do jogador nos três períodos e duas métricas.
+func (r *Reader) positions(ctx context.Context, userID string) (Positions, error) {
+	var out Positions
+	periods := []struct {
+		period Period
+		dst    *PositionPair
+	}{{PeriodAll, &out.All}, {PeriodMonth, &out.Month}, {PeriodWeek, &out.Week}}
+	for _, p := range periods {
+		for _, m := range []Metric{MetricWins, MetricWinRate} {
+			res, err := r.Ranking(ctx, RankingQuery{Period: p.period, Metric: m, ViewerID: userID, MeOnly: true})
+			if err != nil {
+				return Positions{}, err
+			}
+			if res.Me == nil {
+				continue
+			}
+			pos := res.Me.Position
+			if m == MetricWins {
+				p.dst.Wins = &pos
+			} else {
+				p.dst.WinRate = &pos
+			}
+		}
 	}
 	return out, nil
 }
@@ -182,6 +283,9 @@ func (r *Reader) Profile(ctx context.Context, username string, viewerIsAdmin boo
 		return Profile{}, err
 	}
 	out.RecentMatches = recent.Items
+	if out.Positions, err = r.positions(ctx, u.ID); err != nil {
+		return Profile{}, err
+	}
 	partners, err := r.q.ListPartners(ctx, dbgen.ListPartnersParams{UserID: u.ID, Lim: partnersLimit})
 	if err != nil {
 		return Profile{}, err

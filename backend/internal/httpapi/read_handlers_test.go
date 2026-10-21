@@ -63,6 +63,29 @@ func TestReadRoutesRequireSession(t *testing.T) {
 	}
 }
 
+func TestRankingQueryValidation(t *testing.T) {
+	h := newHarness(t)
+	tb := h.table()
+	h.playMatch(tb, 1, -1)
+	ana := tb.clients[0]
+	expect(t, ana.get("/api/ranking?period=ano"), http.StatusBadRequest, "invalid_request")
+	expect(t, ana.get("/api/ranking?metric=pontos"), http.StatusBadRequest, "invalid_request")
+
+	var res struct {
+		Items      []struct{ Username string } `json:"items"`
+		Me         *struct{ Username string }  `json:"me"`
+		MinMatches *int                        `json:"minMatches"`
+	}
+	r := ana.get("/api/ranking")
+	r.decode(t, &res)
+	if r.status != 200 || len(res.Items) != 4 || res.Me == nil || res.Me.Username != "ana" || res.MinMatches == nil || *res.MinMatches != 1 {
+		t.Fatalf("ranking padrão = %d %s", r.status, r.body)
+	}
+	if r := ana.get("/api/ranking?period=week&metric=winrate&limit=2"); r.status != 200 {
+		t.Fatalf("ranking semanal = %d %s", r.status, r.body)
+	}
+}
+
 func TestRankingProfileAndHistory(t *testing.T) {
 	h := newHarness(t)
 	tb := h.table()

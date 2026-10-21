@@ -54,7 +54,7 @@ func newHarness(t *testing.T, mutate ...func(*httpapi.Deps)) *harness {
 		t.Fatal(err)
 	}
 	h.store = match.NewStore(pool, h.clock.Now)
-	deps := httpapi.Deps{Config: cfg, Auth: authSvc, Stats: stats.NewReader(pool, 1), Matches: h.store,
+	deps := httpapi.Deps{Config: cfg, Auth: authSvc, Stats: stats.NewReader(pool, 1, h.clock.Now), Matches: h.store,
 		Admin: admin.NewService(admin.Options{Pool: pool, Auth: authSvc, Now: h.clock.Now, Logger: logger}),
 		Pool:  pool, Logger: logger, Now: h.clock.Now}
 	for _, m := range mutate {

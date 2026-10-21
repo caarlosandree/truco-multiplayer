@@ -11,6 +11,7 @@ import (
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/engine"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/match"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/replay"
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/stats"
 )
 
 func (s *Server) registerReadRoutes() {
@@ -22,14 +23,16 @@ func (s *Server) registerReadRoutes() {
 	s.mux.Handle("GET /api/matches/{id}/replay", s.requireAuth(s.handleReplay))
 }
 
-func (s *Server) handleRanking(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	entries, err := s.deps.Stats.Ranking(r.Context(), limit)
+func (s *Server) handleRanking(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	res, err := s.deps.Stats.Ranking(r.Context(), stats.RankingQuery{
+		Period: stats.Period(q.Get("period")), Metric: stats.Metric(q.Get("metric")), Limit: limit, ViewerID: p.UserID})
 	if err != nil {
 		s.writeError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": entries})
+	writeJSON(w, http.StatusOK, res)
 }
 
 func (s *Server) handleDirectory(w http.ResponseWriter, r *http.Request, _ auth.Principal) {

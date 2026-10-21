@@ -133,7 +133,7 @@ func serve(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, logger *s
 	}
 	logger.Info("partidas retomadas", "count", len(recovered))
 	api := httpapi.New(httpapi.Deps{
-		Config: cfg, Auth: authSvc, Stats: stats.NewReader(pool, cfg.RankingMinMatches), Matches: store,
+		Config: cfg, Auth: authSvc, Stats: stats.NewReader(pool, cfg.RankingMinMatches, nil), Matches: store,
 		Admin: admin.NewService(admin.Options{Pool: pool, Auth: authSvc, Aborter: lob, Logger: logger}),
 		WS:    &ws.Handler{Auth: authSvc, Lobby: lob, Origin: cfg.AppOrigin, Limits: ws.DefaultLimits, Log: logger},
 		Pool:  pool, Logger: logger,

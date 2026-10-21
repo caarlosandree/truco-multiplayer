@@ -1,10 +1,27 @@
 -- name: Ranking :many
-SELECT u.username, u.display_name, p.matches_played, p.wins, p.losses
-FROM player_stats p
-JOIN users u ON u.id = p.user_id
-WHERE p.matches_played >= @min_matches::integer AND u.disabled_at IS NULL
-ORDER BY p.wins DESC, (p.wins::float8 / p.matches_played) DESC, p.matches_played DESC, u.username
-LIMIT @lim::integer;
+-- by_winrate: aproveitamento → vitórias → partidas → username; senão vitórias → aproveitamento → partidas → username.
+WITH agg AS (
+    SELECT u.id AS user_id, u.username, u.display_name,
+           count(*)::integer AS matches_played,
+           (count(*) FILTER (WHERE s.won))::integer AS wins
+    FROM match_player_stats s
+    JOIN matches m ON m.id = s.match_id AND m.status = 'finished'
+    JOIN users u ON u.id = s.user_id AND u.disabled_at IS NULL
+    WHERE sqlc.narg(since)::timestamptz IS NULL OR m.finished_at >= sqlc.narg(since)::timestamptz
+    GROUP BY u.id, u.username, u.display_name
+    HAVING count(*) >= @min_matches::integer
+), ranked AS (
+    SELECT agg.*, (agg.matches_played - agg.wins)::integer AS losses,
+           (row_number() OVER (ORDER BY
+               CASE WHEN @by_winrate::boolean THEN agg.wins::float8 / agg.matches_played ELSE agg.wins::float8 END DESC,
+               CASE WHEN @by_winrate::boolean THEN agg.wins::float8 ELSE agg.wins::float8 / agg.matches_played END DESC,
+               agg.matches_played DESC, agg.username))::integer AS pos
+    FROM agg
+)
+SELECT user_id, username, display_name, matches_played, wins, losses, pos
+FROM ranked
+WHERE pos <= @lim::integer OR user_id = sqlc.narg(viewer)::uuid
+ORDER BY pos;
 
 -- name: GetPlayerStats :one
 SELECT * FROM player_stats WHERE user_id = @user_id;

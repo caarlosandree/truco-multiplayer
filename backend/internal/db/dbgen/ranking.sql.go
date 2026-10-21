@@ -199,29 +199,57 @@ func (q *Queries) ListUserMatches(ctx context.Context, arg ListUserMatchesParams
 }
 
 const ranking = `-- name: Ranking :many
-SELECT u.username, u.display_name, p.matches_played, p.wins, p.losses
-FROM player_stats p
-JOIN users u ON u.id = p.user_id
-WHERE p.matches_played >= $1::integer AND u.disabled_at IS NULL
-ORDER BY p.wins DESC, (p.wins::float8 / p.matches_played) DESC, p.matches_played DESC, u.username
-LIMIT $2::integer
+WITH agg AS (
+    SELECT u.id AS user_id, u.username, u.display_name,
+           count(*)::integer AS matches_played,
+           (count(*) FILTER (WHERE s.won))::integer AS wins
+    FROM match_player_stats s
+    JOIN matches m ON m.id = s.match_id AND m.status = 'finished'
+    JOIN users u ON u.id = s.user_id AND u.disabled_at IS NULL
+    WHERE $3::timestamptz IS NULL OR m.finished_at >= $3::timestamptz
+    GROUP BY u.id, u.username, u.display_name
+    HAVING count(*) >= $4::integer
+), ranked AS (
+    SELECT agg.user_id, agg.username, agg.display_name, agg.matches_played, agg.wins, (agg.matches_played - agg.wins)::integer AS losses,
+           (row_number() OVER (ORDER BY
+               CASE WHEN $5::boolean THEN agg.wins::float8 / agg.matches_played ELSE agg.wins::float8 END DESC,
+               CASE WHEN $5::boolean THEN agg.wins::float8 ELSE agg.wins::float8 / agg.matches_played END DESC,
+               agg.matches_played DESC, agg.username))::integer AS pos
+    FROM agg
+)
+SELECT user_id, username, display_name, matches_played, wins, losses, pos
+FROM ranked
+WHERE pos <= $1::integer OR user_id = $2::uuid
+ORDER BY pos
 `
 
 type RankingParams struct {
-	MinMatches int32
 	Lim        int32
+	Viewer     *string
+	Since      *time.Time
+	MinMatches int32
+	ByWinrate  bool
 }
 
 type RankingRow struct {
+	UserID        string
 	Username      string
 	DisplayName   string
 	MatchesPlayed int32
 	Wins          int32
 	Losses        int32
+	Pos           int32
 }
 
+// by_winrate: aproveitamento → vitórias → partidas → username; senão vitórias → aproveitamento → partidas → username.
 func (q *Queries) Ranking(ctx context.Context, arg RankingParams) ([]RankingRow, error) {
-	rows, err := q.db.Query(ctx, ranking, arg.MinMatches, arg.Lim)
+	rows, err := q.db.Query(ctx, ranking,
+		arg.Lim,
+		arg.Viewer,
+		arg.Since,
+		arg.MinMatches,
+		arg.ByWinrate,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -230,11 +258,13 @@ func (q *Queries) Ranking(ctx context.Context, arg RankingParams) ([]RankingRow,
 	for rows.Next() {
 		var i RankingRow
 		if err := rows.Scan(
+			&i.UserID,
 			&i.Username,
 			&i.DisplayName,
 			&i.MatchesPlayed,
 			&i.Wins,
 			&i.Losses,
+			&i.Pos,
 		); err != nil {
 			return nil, err
 		}

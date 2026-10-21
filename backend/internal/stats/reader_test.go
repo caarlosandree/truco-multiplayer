@@ -107,42 +107,240 @@ func (w world) play(t *testing.T, seed uint64, complete bool) string {
 	return id
 }
 
+func (w world) reader(minMatches int) *stats.Reader {
+	return stats.NewReader(w.pool, minMatches, w.clock.Now)
+}
+
+func rank(t *testing.T, r *stats.Reader, q stats.RankingQuery) stats.RankingResult {
+	t.Helper()
+	res, err := r.Ranking(context.Background(), q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return res
+}
+
+func usernames(items []stats.RankingEntry) []string {
+	out := make([]string, len(items))
+	for i, e := range items {
+		out[i] = e.Username
+	}
+	return out
+}
+
 func TestRankingOrderAndMinimum(t *testing.T) {
 	w := newWorld(t)
 	ctx := context.Background()
 	w.play(t, 1, true)
 	w.play(t, 2, true)
-	entries, err := stats.NewReader(w.pool, 1).Ranking(ctx, 0)
-	if err != nil {
-		t.Fatal(err)
+	res := rank(t, w.reader(1), stats.RankingQuery{})
+	if len(res.Items) != 4 || res.MinMatches != 1 {
+		t.Fatalf("resultado = %+v", res)
 	}
-	if len(entries) != 4 {
-		t.Fatalf("%d entradas", len(entries))
-	}
-	for i, e := range entries {
+	for i, e := range res.Items {
 		if e.Position != i+1 || e.MatchesPlayed != 2 || e.Wins+e.Losses != 2 || e.WinRate != float64(e.Wins)/2 {
 			t.Fatalf("entrada %d = %+v", i, e)
 		}
 		if i > 0 {
-			prev := entries[i-1]
+			prev := res.Items[i-1]
 			if prev.Wins < e.Wins || (prev.Wins == e.Wins && prev.Username > e.Username) {
 				t.Fatalf("ordem errada: %+v antes de %+v", prev, e)
 			}
 		}
 	}
-	if entries, _ := stats.NewReader(w.pool, 3).Ranking(ctx, 0); len(entries) != 0 {
-		t.Fatalf("mínimo de partidas ignorado: %+v", entries)
+	if res := rank(t, w.reader(3), stats.RankingQuery{Metric: stats.MetricWinRate}); len(res.Items) != 0 {
+		t.Fatalf("mínimo de partidas ignorado: %+v", res.Items)
 	}
 	_, _ = w.pool.Exec(ctx, "UPDATE users SET disabled_at = now() WHERE username = 'ana'")
-	if entries, _ := stats.NewReader(w.pool, 1).Ranking(ctx, 0); len(entries) != 3 {
+	if res := rank(t, w.reader(1), stats.RankingQuery{}); len(res.Items) != 3 {
 		t.Fatal("conta desativada não aparece no ranking")
+	}
+}
+
+func TestRankingInvalidQuery(t *testing.T) {
+	w := newWorld(t)
+	for _, q := range []stats.RankingQuery{{Period: "ano"}, {Metric: "pontos"}} {
+		if _, err := w.reader(1).Ranking(context.Background(), q); !errors.Is(err, stats.ErrInvalidRankingQuery) {
+			t.Fatalf("%+v: err = %v", q, err)
+		}
+	}
+}
+
+func TestRankingWeekBoundary(t *testing.T) {
+	w := newWorld(t)
+	// Domingo 23:30 em Brasília (segunda 02:30 UTC) e segunda 00:00 em Brasília (03:00 UTC).
+	w.clock.Advance(time.Date(2026, 10, 19, 2, 29, 0, 0, time.UTC).Sub(w.clock.Now()))
+	w.play(t, 1, true)
+	w.clock.Advance(29 * time.Minute)
+	w.play(t, 2, true)
+	w.clock.Advance(time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC).Sub(w.clock.Now()))
+	r := w.reader(1)
+	week := rank(t, r, stats.RankingQuery{Period: stats.PeriodWeek})
+	month := rank(t, r, stats.RankingQuery{Period: stats.PeriodMonth})
+	all := rank(t, r, stats.RankingQuery{Period: stats.PeriodAll})
+	if len(week.Items) != 4 || week.Items[0].MatchesPlayed != 1 {
+		t.Fatalf("semana deveria contar só a partida de segunda: %+v", week.Items)
+	}
+	if month.Items[0].MatchesPlayed != 2 || all.Items[0].MatchesPlayed != 2 {
+		t.Fatalf("mês/geral deveriam contar as duas: %+v %+v", month.Items, all.Items)
+	}
+}
+
+func TestRankingWinsHasNoMinimumWinrateHas(t *testing.T) {
+	w := newWorld(t)
+	w.play(t, 1, true)
+	w.play(t, 2, true)
+	edu := replay.PlayerSeat{UserID: testdb.CreateUser(t, w.pool, "edu"), DisplayName: "edu"}
+	w.playWith(t, 3, [4]replay.PlayerSeat{w.players[0], w.players[1], w.players[2], edu})
+	r := w.reader(3)
+
+	wins := rank(t, r, stats.RankingQuery{Metric: stats.MetricWins})
+	if len(wins.Items) != 5 || wins.MinMatches != 3 {
+		t.Fatalf("wins = %+v", wins)
+	}
+	for i := 1; i < len(wins.Items); i++ {
+		a, b := wins.Items[i-1], wins.Items[i]
+		if !(a.Wins > b.Wins ||
+			a.Wins == b.Wins && (a.WinRate > b.WinRate ||
+				a.WinRate == b.WinRate && (a.MatchesPlayed > b.MatchesPlayed ||
+					a.MatchesPlayed == b.MatchesPlayed && a.Username < b.Username))) {
+			t.Fatalf("ordem de wins errada: %+v antes de %+v", a, b)
+		}
+	}
+	rate := rank(t, r, stats.RankingQuery{Metric: stats.MetricWinRate})
+	if len(rate.Items) != 3 || rate.MinMatches != 3 {
+		t.Fatalf("winrate deveria excluir quem tem menos de 3 partidas: %+v", usernames(rate.Items))
+	}
+	for _, e := range rate.Items {
+		if e.Username == "duda" || e.Username == "edu" {
+			t.Fatalf("%s não atinge o mínimo", e.Username)
+		}
+	}
+	for i := 1; i < len(rate.Items); i++ {
+		a, b := rate.Items[i-1], rate.Items[i]
+		if !(a.WinRate > b.WinRate ||
+			a.WinRate == b.WinRate && (a.Wins > b.Wins ||
+				a.Wins == b.Wins && (a.MatchesPlayed > b.MatchesPlayed ||
+					a.MatchesPlayed == b.MatchesPlayed && a.Username < b.Username))) {
+			t.Fatalf("ordem de winrate errada: %+v antes de %+v", a, b)
+		}
+	}
+}
+
+func TestRankingMeOutsideTop(t *testing.T) {
+	w := newWorld(t)
+	w.play(t, 1, true)
+	r := w.reader(1)
+	full := rank(t, r, stats.RankingQuery{})
+	fourth := full.Items[3]
+	var fourthID string
+	for _, p := range w.players {
+		if p.DisplayName == fourth.Username {
+			fourthID = p.UserID
+		}
+	}
+	res := rank(t, r, stats.RankingQuery{Limit: 2, ViewerID: fourthID})
+	if len(res.Items) != 2 || res.Me == nil || res.Me.Position != 4 || res.Me.Username != fourth.Username {
+		t.Fatalf("res = %+v me=%+v", res.Items, res.Me)
+	}
+	topID := ""
+	for _, p := range w.players {
+		if p.DisplayName == full.Items[0].Username {
+			topID = p.UserID
+		}
+	}
+	inTop := rank(t, r, stats.RankingQuery{Limit: 2, ViewerID: topID})
+	if inTop.Me == nil || len(inTop.Items) != 2 || inTop.Me.Position != 1 || inTop.Me.Username != full.Items[0].Username {
+		t.Fatalf("me deve vir preenchido mesmo dentro do top: %+v", inTop)
+	}
+	onlyMe := rank(t, r, stats.RankingQuery{ViewerID: fourthID, MeOnly: true})
+	if len(onlyMe.Items) != 0 || onlyMe.Me == nil || onlyMe.Me.Position != 4 {
+		t.Fatalf("MeOnly = %+v", onlyMe)
+	}
+	stranger := testdb.CreateUser(t, w.pool, "zeca")
+	if res := rank(t, r, stats.RankingQuery{ViewerID: stranger}); res.Me != nil {
+		t.Fatalf("viewer sem partidas: me = %+v", res.Me)
+	}
+}
+
+func TestRankingIgnoresAbandonedAndDisabled(t *testing.T) {
+	w := newWorld(t)
+	ctx := context.Background()
+	aborted := w.play(t, 7, false)
+	if err := match.AbandonWith(ctx, dbgen.New(w.pool), aborted, "abortada pelo administrador", replay.EndAborted, w.clock.Now()); err != nil {
+		t.Fatal(err)
+	}
+	r := w.reader(1)
+	for _, p := range []stats.Period{stats.PeriodAll, stats.PeriodMonth, stats.PeriodWeek} {
+		if res := rank(t, r, stats.RankingQuery{Period: p}); len(res.Items) != 0 {
+			t.Fatalf("%s: partida abortada contou: %+v", p, res.Items)
+		}
+	}
+	w.play(t, 1, true)
+	_, _ = w.pool.Exec(ctx, "UPDATE users SET disabled_at = now() WHERE username = 'ana'")
+	for _, p := range []stats.Period{stats.PeriodAll, stats.PeriodMonth, stats.PeriodWeek} {
+		res := rank(t, r, stats.RankingQuery{Period: p, ViewerID: w.players[0].UserID})
+		if len(res.Items) != 3 || res.Me != nil {
+			t.Fatalf("%s: desativado apareceu: %+v me=%+v", p, res.Items, res.Me)
+		}
+	}
+}
+
+func TestProfilePositions(t *testing.T) {
+	w := newWorld(t)
+	ctx := context.Background()
+	w.play(t, 1, true)
+	w.clock.Advance(30 * 24 * time.Hour)
+	r := w.reader(3)
+	p, err := r.Profile(ctx, "ana", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Positions.Week.WinRate != nil || p.Positions.Week.Wins != nil {
+		t.Fatalf("sem partidas na semana: %+v", p.Positions.Week)
+	}
+	if p.Positions.All.WinRate != nil {
+		t.Fatalf("1 partida < mínimo 3, aproveitamento deveria ser nulo: %+v", p.Positions.All)
+	}
+	all := rank(t, r, stats.RankingQuery{ViewerID: w.players[0].UserID})
+	if all.Me == nil || p.Positions.All.Wins == nil || *p.Positions.All.Wins != all.Me.Position {
+		t.Fatalf("posição geral = %+v, ranking = %+v", p.Positions.All, all.Me)
+	}
+	if p.Positions.Month.Wins != nil {
+		t.Fatalf("a partida é de um mês atrás: %+v", p.Positions.Month)
+	}
+}
+
+func TestProfilePositionsWithMinimumReached(t *testing.T) {
+	w := newWorld(t)
+	ctx := context.Background()
+	w.play(t, 1, true)
+	w.play(t, 2, true)
+	r := w.reader(2)
+	for i, pl := range w.players {
+		p, err := r.Profile(ctx, pl.DisplayName, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for name, c := range map[stats.Period]stats.PositionPair{stats.PeriodAll: p.Positions.All, stats.PeriodMonth: p.Positions.Month, stats.PeriodWeek: p.Positions.Week} {
+			for _, m := range []stats.Metric{stats.MetricWins, stats.MetricWinRate} {
+				me := rank(t, r, stats.RankingQuery{Period: name, Metric: m, ViewerID: pl.UserID}).Me
+				got := c.Wins
+				if m == stats.MetricWinRate {
+					got = c.WinRate
+				}
+				if me == nil || got == nil || *got != me.Position {
+					t.Fatalf("jogador %d %s/%s: posição %v, ranking %+v", i, name, m, got, me)
+				}
+			}
+		}
 	}
 }
 
 func TestProfile(t *testing.T) {
 	w := newWorld(t)
 	ctx := context.Background()
-	reader := stats.NewReader(w.pool, 1)
+	reader := w.reader(1)
 	p, err := reader.Profile(ctx, "ana", false)
 	if err != nil || p.Username != "ana" || p.Stats.MatchesPlayed != 0 || p.Stats.WinRate != 0 {
 		t.Fatalf("perfil sem partidas: %+v %v", p, err)
@@ -164,7 +362,7 @@ func TestHistoryPagination(t *testing.T) {
 	w.play(t, 5, true)
 	last := w.play(t, 6, true)
 	w.play(t, 7, false) // em andamento: fora do histórico
-	reader := stats.NewReader(w.pool, 1)
+	reader := w.reader(1)
 	page, err := reader.History(ctx, "bia", "", 2, false)
 	if err != nil {
 		t.Fatal(err)
@@ -200,7 +398,7 @@ func TestHistoryHasPlayersAndEndReason(t *testing.T) {
 	if err := match.AbandonWith(ctx, dbgen.New(w.pool), aborted, "abortada pelo administrador", replay.EndAborted, w.clock.Now()); err != nil {
 		t.Fatal(err)
 	}
-	page, err := stats.NewReader(w.pool, 1).History(ctx, "bia", "", 10, false)
+	page, err := w.reader(1).History(ctx, "bia", "", 10, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -244,7 +442,7 @@ func TestProfileRecentMatchesAndPartners(t *testing.T) {
 			ids = append(ids, w.playWith(t, uint64(10+i), other))
 		}
 	}
-	reader := stats.NewReader(w.pool, 1)
+	reader := w.reader(1)
 	p, err := reader.Profile(ctx, "ana", false)
 	if err != nil {
 		t.Fatal(err)
@@ -285,7 +483,7 @@ func TestDisabledProfileIsNotFoundForNonAdmin(t *testing.T) {
 	ctx := context.Background()
 	w.play(t, 3, true)
 	_, _ = w.pool.Exec(ctx, "UPDATE users SET disabled_at = now() WHERE username = 'duda'")
-	reader := stats.NewReader(w.pool, 1)
+	reader := w.reader(1)
 	if _, err := reader.Profile(ctx, "duda", false); !errors.Is(err, stats.ErrUserNotFound) {
 		t.Fatalf("Profile err = %v", err)
 	}
@@ -312,7 +510,7 @@ func TestDirectorySearchHidesEmailAndDisabled(t *testing.T) {
 	}
 	mk("fulano", "Fulana da Silva", true)
 	mk("anonimo", "Anônimo", false)
-	reader := stats.NewReader(w.pool, 1)
+	reader := w.reader(1)
 	page, err := reader.Directory(ctx, "an", "")
 	if err != nil {
 		t.Fatal(err)
@@ -350,7 +548,7 @@ func TestDirectoryPagination(t *testing.T) {
 		testdb.CreateUser(t, w.pool, fmt.Sprintf("u%02d", i))
 	}
 	_, _ = w.pool.Exec(ctx, "UPDATE users SET email_verified_at = now() WHERE email_verified_at IS NULL")
-	reader := stats.NewReader(w.pool, 1)
+	reader := w.reader(1)
 	p1, err := reader.Directory(ctx, "", "")
 	if err != nil || len(p1.Items) != 20 || p1.NextCursor == "" {
 		t.Fatalf("p1 = %d %q %v", len(p1.Items), p1.NextCursor, err)
