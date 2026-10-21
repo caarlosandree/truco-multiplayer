@@ -56,6 +56,8 @@ type inviteBook struct {
 	byInvitee map[string]map[string]*invite // convidado → convites
 	tokens    map[string]string             // token → convite pendente
 	mailed    map[string]map[string]bool    // sala → convidado → já recebeu e-mail
+	mailsBy   *mailQuota                    // e-mails de convite por quem convida (inviteMailsPerInviter/h)
+	mailsTo   *mailQuota                    // e-mails de convite por convidado (inviteMailsPerInvitee/dia)
 	moves     map[string]inviteMove         // convidado → aceite à espera de sair da sala atual
 	accepting map[string]acceptance         // convidado → entrada (Join) em andamento
 	seated    map[string]string             // usuário → sala em que o assento foi confirmado (Seated)
@@ -68,6 +70,7 @@ type inviteBook struct {
 func newInviteBook() inviteBook {
 	return inviteBook{invites: map[string]*invite{}, byRoom: map[string]map[string]*invite{},
 		byInvitee: map[string]map[string]*invite{}, tokens: map[string]string{}, mailed: map[string]map[string]bool{},
+		mailsBy: newMailQuota(inviteMailsPerInviter, time.Hour), mailsTo: newMailQuota(inviteMailsPerInvitee, 24*time.Hour),
 		moves: map[string]inviteMove{}, accepting: map[string]acceptance{}, seated: map[string]string{}, revoked: map[string]uint64{}}
 }
 
@@ -362,12 +365,18 @@ func (l *Lobby) inviteLocked(m *member, p protocol.InvitePayload, who Invitee, l
 	if online := l.clients[who.ID]; online != nil {
 		online.client.Send(l.receivedMsgLocked(inv, e))
 	} else if !l.mailed[roomID][who.ID] {
-		if l.mailed[roomID] == nil {
-			l.mailed[roomID] = map[string]bool{}
+		if now := l.opt.Clock.Now(); l.mailsBy.allows(m.info.ID, now) && l.mailsTo.allows(who.ID, now) {
+			if l.mailed[roomID] == nil {
+				l.mailed[roomID] = map[string]bool{}
+			}
+			l.mailed[roomID][who.ID] = true
+			l.mailsBy.record(m.info.ID, now)
+			l.mailsTo.record(who.ID, now)
+			inv.emailed = true
+			l.opt.People.MailInvite(who.ID, m.info.DisplayName, e.summary.Room.Name, token) // não bloqueia
+		} else {
+			l.opt.Log.Info("teto de e-mail de convite atingido; convite só no app", "inviter_id", m.info.ID, "invitee_id", who.ID)
 		}
-		l.mailed[roomID][who.ID] = true
-		inv.emailed = true
-		l.opt.People.MailInvite(who.ID, m.info.DisplayName, e.summary.Room.Name, token) // não bloqueia
 	}
 	l.broadcastRoomInvitesLocked(roomID)
 	l.opt.Log.Info("convite criado", "invite_id", id, "room_id", roomID, "inviter_id", m.info.ID, "invitee_id", who.ID,

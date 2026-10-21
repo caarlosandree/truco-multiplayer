@@ -3,6 +3,7 @@ package lobby_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -636,5 +637,48 @@ func TestDisconnectDuringMoveKeepsInvite(t *testing.T) {
 				t.Fatalf("iteração %d: reenvio = %+v", i, got)
 			}
 		}
+	}
+}
+
+func TestInviteMailCapPerInviter(t *testing.T) {
+	users := []lobby.Invitee{{ID: "u0", Username: "ana", DisplayName: "Ana"}}
+	for i := 1; i <= 11; i++ {
+		users = append(users, lobby.Invitee{ID: fmt.Sprintf("x%d", i), Username: fmt.Sprintf("colega%d", i), DisplayName: fmt.Sprintf("Colega %d", i)})
+	}
+	people := newPeople(users...)
+	l := newLobbyWith(t, 6, people)
+	ana := connect(l, "u0", "Ana")
+	dispatch(l, ana, protocol.TypeCreateRoom, protocol.CreateRoomPayload{Visibility: protocol.VisibilityPrivate})
+	roomState(t, ana)
+	for i := 1; i <= 11; i++ {
+		dispatch(l, ana, protocol.TypeInvite, protocol.InvitePayload{Username: fmt.Sprintf("colega%d", i)})
+	}
+	list := waitInvites(t, ana, func(l []protocol.RoomInvite) bool { return len(l) == 11 })
+	if n := len(people.mails()); n != 10 {
+		t.Fatalf("e-mails = %d, queria 10 (teto por quem convida)", n)
+	}
+	last, ok := stateOf(list, "colega11")
+	if !ok || last.State != protocol.InvitePending || last.Emailed {
+		t.Fatalf("convite além do teto deve valer só no app: %+v", last)
+	}
+}
+
+func TestInviteMailCapPerInvitee(t *testing.T) {
+	s := newScene(t)
+	waitSeats(t, s.edu, s.roomID, 1)
+	s.invite(s.ana, "fabi", nil) // sala de Ana
+	waitInvites(t, s.ana, func(l []protocol.RoomInvite) bool { i, ok := stateOf(l, "fabi"); return ok && i.Emailed })
+	for _, c := range []*fakeClient{s.bia, s.caio, s.duda} { // três salas novas convidam a mesma pessoa offline
+		dispatch(s.l, c, protocol.TypeCreateRoom, protocol.CreateRoomPayload{Visibility: protocol.VisibilityPrivate})
+		roomState(t, c)
+		s.invite(c, "fabi", nil)
+		waitInvites(t, c, func(l []protocol.RoomInvite) bool { _, ok := stateOf(l, "fabi"); return ok })
+	}
+	if n := len(s.people.mails()); n != 3 {
+		t.Fatalf("e-mails = %d, queria 3 (teto por convidado)", n)
+	}
+	list := waitInvites(t, s.duda, func(l []protocol.RoomInvite) bool { _, ok := stateOf(l, "fabi"); return ok })
+	if i, _ := stateOf(list, "fabi"); i.Emailed || i.State != protocol.InvitePending {
+		t.Fatalf("quarto convite deve valer só no app: %+v", i)
 	}
 }
