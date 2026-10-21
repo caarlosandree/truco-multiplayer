@@ -9,7 +9,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-tipos%20gerados-3178C6?logo=typescript&logoColor=white)](frontend/src/protocol)
 [![Cobertura](https://img.shields.io/badge/cobertura-98.9%25-brightgreen)](#-testes)
 [![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-yellow.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/status-contas%20e%20persist%C3%AAncia-blue)](#-status-e-roadmap)
+[![Status](https://img.shields.io/badge/status-frontend%20jog%C3%A1vel-blue)](#-status-e-roadmap)
 
 </div>
 
@@ -62,7 +62,7 @@ O **Truco Multiplayer** é uma implementação completa do Truco paulista (com r
 | Motor de regras | Go puro (somente biblioteca padrão) |
 | Servidor | Go `net/http` + [`coder/websocket`](https://github.com/coder/websocket) + `log/slog` *(planejado)* |
 | Persistência | PostgreSQL 18 + pgx + sqlc + goose |
-| Frontend | Vue 3 (Composition API, `<script setup>`), TypeScript, Pinia, TailwindCSS *(planejado)* |
+| Frontend | Vue 3 (Composition API, `<script setup>`), TypeScript, Pinia, Vue Router, TailwindCSS v4, Vite |
 | Tipos compartilhados | [`tygo`](https://github.com/gzuidhof/tygo) (Go → TypeScript) |
 
 ---
@@ -76,13 +76,14 @@ O projeto foi decomposto em quatro sub-projetos, cada um com spec, plano e imple
 | 1 | **Engine de regras + protocolo** | Baralho, força, distribuição, queima, rodadas, apostas, pontuação, projeção anti-cheat, mensagens WebSocket, tipos TS | ✅ **Concluído** |
 | 2 | **Contas e persistência** | Cadastro e login (usuário, e-mail e senha), sessão em cookie `HttpOnly`, recuperação de senha, histórico, ranking, replay | ✅ **Concluído** |
 | 3 | **Servidor de salas** | Lobby ao vivo, salas públicas e privadas, ator por sala, WebSocket, timers, W.O., reconexão e retomada após restart | ✅ **Concluído** |
-| 4 | **Frontend** | Mesa em Vue 3, alternância entre baralho francês e espanhol, stores Pinia sincronizadas com o servidor | 🗓️ Planejado |
+| 4 | **Frontend jogável (Spec 4a)** | Contas, lobby, sala de espera e mesa em Vue 3 + Pinia, baralho francês/espanhol, sinais, W.O., sons, teclado e acessibilidade, teste e2e com quatro navegadores | ✅ **Concluído** |
+| 4b | **Histórico, ranking, replay e admin** | Telas de histórico de partidas, ranking, replay e painel de administração | 🗓️ Planejado |
 
-> O servidor já joga partidas completas por WebSocket (lobby, salas, timers, W.O. e retomada após restart). Falta a interface (Spec 4).
+> O servidor joga partidas completas por WebSocket (lobby, salas, timers, W.O. e retomada após restart) e o frontend da Spec 4a é jogável de ponta a ponta. Falta a Spec 4b (histórico, ranking, replay e painel admin).
 
 ### Decisões já tomadas para as próximas etapas
 
-- **Interface (Spec 4):** as páginas de verificação de e-mail e de redefinição de senha fazem o `POST` dos tokens recebidos por e-mail.
+- **Interface (Spec 4a):** as páginas de verificação de e-mail e de redefinição de senha fazem o `POST` dos tokens recebidos por e-mail.
 
 ---
 
@@ -484,7 +485,8 @@ truco-multiplayer/
 - [Docker](https://docs.docker.com/get-docker/) (Postgres local e testes de integração)
 - `gcc` (para o `sqlc`)
 - `make`
-- *(opcional)* Node.js, para validar os tipos TypeScript gerados
+- Node.js 24 e [pnpm](https://pnpm.io/) (frontend e e2e)
+- Google Chrome (só para `make e2e`)
 
 ### Clonar e testar
 
@@ -502,6 +504,47 @@ make dev-db                 # Postgres 18 no Docker
 make run                    # aplica migrations e sobe em :8080
 cd backend && go run ./cmd/server promote-admin ana@empresa.com.br
 ```
+
+### Rodando o frontend
+
+Desenvolvimento (precisa do Docker só para o Postgres):
+
+```bash
+make dev-db                                   # Postgres 18
+APP_BASE_URL=http://localhost:5173 make run   # backend em :8080 (os links de e-mail apontam para o Vite)
+make web-install                              # pnpm install --frozen-lockfile
+make web-dev                                  # Vite em http://localhost:5173 (proxy para :8080)
+```
+
+Se a porta 5432 estiver ocupada, suba o banco com `POSTGRES_PORT=5433 make dev-db` e ajuste a `DATABASE_URL` do `.env` para a mesma porta.
+
+Produção: `make web-build` gera `frontend/dist`; o backend serve esse diretório com `STATIC_DIR=frontend/dist`.
+
+Testes:
+
+| Comando | O que faz |
+|---|---|
+| `make web-test` | `typecheck` + `lint` + testes unitários (Vitest) do frontend |
+| `make e2e` | Sobe um Postgres isolado (projeto compose `truco-e2e`, porta 55432) e o backend servindo o build em `:8090`, e roda o Playwright com **quatro navegadores jogando uma partida** e retomando após reload. Requer Docker, Go, Node 24, pnpm e o **Google Chrome do sistema** (o Playwright usa `channel: 'chrome'`, não baixa navegador). Leva cerca de 6 minutos |
+
+### Acabamento visual
+
+A direção visual é **"Lousa e tentos"**: o placar é a lousa do bar, com tentos riscados a giz ao lado do feltro verde; o resto da interface é quieto (Atkinson Hyperlegible Next, sem gradientes decorativos). Kalam, o laranja e o movimento de giz aparecem só no placar e no pedido de truco; vermelho é só perigo. A mesa é sempre escura, o tema claro/escuro troca apenas o cromo. Detalhes, tokens, contrastes medidos e movimento: [`docs/superpowers/specs/2026-10-20-truco-frontend-design-brief.md`](docs/superpowers/specs/2026-10-20-truco-frontend-design-brief.md).
+
+A revisão final (auditoria visual de todas as telas, claro/escuro, 1440×900, 1366×768, 375×812 e 375×667 na mesa) ajustou:
+
+- **Mão de 11 em 375×812:** os botões "Jogar" e "Correr" ficam lado a lado em qualquer largura; empilhados, o painel (mão do parceiro + botões) comprimia o centro da mesa e a placa "Você" cobria a legenda da vira.
+- **Sem outras regressões:** contas, lobby (vazio/cheio, criar sala, código), sala de espera, mesa (minha vez, vez de outro, vaza com coberta, truco, resposta, Mão de 11, Mão de Ferro, corte, queima), sinais, banner de W.O. e fim de partida passaram na auditoria; `detect.mjs` do impeccable não apontou padrões ruins em `src/components` e `src/views`.
+- **Acessibilidade (teclado):** cadastro → login → lobby → criar sala → "Estou pronto" só com teclado; foco preso e devolvido ao gatilho nos modais; `1`–`3`, `C`, `T`, `A`/`R`/`U` e `Esc` na mesa; `prefers-reduced-motion` zera as durações; tema escuro conferido.
+- **Limite conhecido:** em celulares retrato com painel alto (corte e queima), o centro da mesa rola numa região própria; em janelas 768–1023 px baixas a mesa também rola.
+
+### Créditos de assets
+
+Só entram assets com licença livre (domínio público, CC0 ou OFL), todos servidos localmente (CSP sem recursos externos):
+
+- Cartas: [`frontend/src/assets/cards/frances/LICENSES.md`](frontend/src/assets/cards/frances/LICENSES.md) e [`frontend/src/assets/cards/espanhol/LICENSES.md`](frontend/src/assets/cards/espanhol/LICENSES.md)
+- Sons: [`frontend/src/assets/sfx/LICENSES.md`](frontend/src/assets/sfx/LICENSES.md)
+- Fontes (Atkinson Hyperlegible Next e Kalam): [`frontend/src/assets/fonts/LICENSES.md`](frontend/src/assets/fonts/LICENSES.md)
 
 ### Comandos disponíveis
 
@@ -661,6 +704,8 @@ O desenho de cada etapa fica versionado no repositório:
 - **Plano de implementação do engine:** [`docs/superpowers/plans/2026-10-14-truco-engine.md`](docs/superpowers/plans/2026-10-14-truco-engine.md)
 - **Spec 2 – Contas e persistência:** [`docs/superpowers/specs/2026-10-14-truco-contas-persistencia-design.md`](docs/superpowers/specs/2026-10-14-truco-contas-persistencia-design.md)
 - **Plano de implementação da Spec 2:** [`docs/superpowers/plans/2026-10-14-truco-contas-persistencia.md`](docs/superpowers/plans/2026-10-14-truco-contas-persistencia.md)
+- **Spec 3 – Servidor de salas:** [`docs/superpowers/specs/2026-10-14-truco-salas-websocket-design.md`](docs/superpowers/specs/2026-10-14-truco-salas-websocket-design.md) e plano [`docs/superpowers/plans/2026-10-14-truco-salas-websocket.md`](docs/superpowers/plans/2026-10-14-truco-salas-websocket.md)
+- **Spec 4a – Frontend jogável:** [`docs/superpowers/specs/2026-10-15-truco-frontend-jogavel-design.md`](docs/superpowers/specs/2026-10-15-truco-frontend-jogavel-design.md), plano [`docs/superpowers/plans/2026-10-15-truco-frontend-jogavel.md`](docs/superpowers/plans/2026-10-15-truco-frontend-jogavel.md) e design brief [`docs/superpowers/specs/2026-10-20-truco-frontend-design-brief.md`](docs/superpowers/specs/2026-10-20-truco-frontend-design-brief.md)
 
 ---
 
