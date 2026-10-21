@@ -121,7 +121,7 @@ it('clicar no jogador abre o perfil', async () => {
   const { w, router } = await abrir()
   const push = vi.spyOn(router, 'push')
   await w.find('a[href="/jogadores/ana"]').trigger('click')
-  expect(push).toHaveBeenCalledWith('/jogadores/ana')
+  expect(push).toHaveBeenCalledWith({ name: 'jogador', params: { username: 'ana' } })
 })
 
 it('teclado nas abas: setas, Home e End carregam a métrica certa e movem o foco', async () => {

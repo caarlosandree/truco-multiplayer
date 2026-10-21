@@ -23,7 +23,7 @@ const alone = computed(() => presence.loaded && presence.list.every((e) => e.use
 
 const isMe = (e: PresenceEntry) => e.userId === meId.value
 const canInviteTo = (e: PresenceEntry) => room.canInvite && !isMe(e) && !seatedIds.value.has(e.userId)
-const profileTo = (e: PresenceEntry) => `/jogadores/${encodeURIComponent(e.username)}`
+const profileTo = (e: PresenceEntry) => ({ name: 'jogador', params: { username: e.username } })
 
 /** Ponto vazado, em anel grosso ou cheio por status: o formato difere sem depender da cor (o texto ao lado já diz o status). */
 const DOT: Record<string, string> = {

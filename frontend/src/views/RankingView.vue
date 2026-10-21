@@ -65,7 +65,7 @@ function teclas(e: KeyboardEvent) {
   irParaAba(alvo.id)
 }
 
-const perfil = (username: string) => `/jogadores/${encodeURIComponent(username)}`
+const perfil = (username: string) => ({ name: 'jogador', params: { username } })
 
 onMounted(() => carregar(ranking.period, ranking.metric))
 </script>

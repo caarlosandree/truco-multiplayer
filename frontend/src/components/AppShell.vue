@@ -58,14 +58,15 @@ function reload() {
       </nav>
       <IndicadorConexao />
       <RouterLink
-        to="/perfil"
+        v-if="session.user"
+        :to="{ name: 'jogador', params: { username: session.user.username } }"
         class="inline-flex h-11 items-center gap-2 rounded-botao-2 pr-3 pl-1 font-bold hover:bg-surface-2"
       >
         <span
           class="textura-lousa grid size-9 place-items-center rounded-placa border border-line text-sm text-giz"
           aria-hidden="true"
-        >{{ session.user?.displayName.charAt(0).toUpperCase() }}</span>
-        <span class="max-w-40 truncate">{{ session.user?.displayName }}</span>
+        >{{ session.user.displayName.charAt(0).toUpperCase() }}</span>
+        <span class="max-w-40 truncate">{{ session.user.displayName }}</span>
       </RouterLink>
     </header>
     <div
