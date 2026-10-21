@@ -9,7 +9,7 @@ import { aplicarEvento, anuncioDoEvento, type Cena } from '@/game/cena'
 import { useGameStore } from '@/stores/game'
 import { useRoomStore } from '@/stores/room'
 import { makeState } from '@/test/fixtures'
-import { reactive } from 'vue'
+import { defineComponent, inject, onMounted, reactive, type Ref } from 'vue'
 
 const play = vi.fn()
 vi.mock('@/audio/install', () => ({ sfx: () => ({ play }) }))
@@ -25,7 +25,13 @@ beforeEach(() => {
     yourSeat: 1,
   })
 })
-afterEach(() => setSender(null))
+const offsetHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')
+afterEach(() => {
+  setSender(null)
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+  if (offsetHeight) Object.defineProperty(HTMLElement.prototype, 'offsetHeight', offsetHeight)
+})
 
 it('posiciona assentos a partir do meu e marca ausente', () => {
   useGameStore().onState(makeState({ seat: 1, turn: 1 }, [1]))
@@ -155,15 +161,90 @@ it('Mesa toca "sua vez" quando a vez chega e define --toast-offset só no celula
   expect(document.documentElement.style.getPropertyValue('--toast-offset')).toBe('')
 })
 
-it('no celular a Mesa define --toast-offset com a altura de mão + painel e remove ao sair', () => {
+it('no celular a Mesa define --toast-offset (mão + painel); no desktop largo reserva a coluna do painel; limpa ao sair', () => {
   useGameStore().onState(makeState({ seat: 1, turn: 1 }, [1]))
-  vi.stubGlobal('matchMedia', (q: string) => ({ matches: q.includes('max-width: 767px'), addEventListener() {}, removeEventListener() {} }))
-  const desc = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')
+  const q = { celular: true, largo: true }
+  vi.stubGlobal('matchMedia', (m: string) => ({
+    matches: m.includes('max-width: 767px') ? q.celular : m.includes('min-width: 1024px') ? q.largo : false,
+    addEventListener() {},
+    removeEventListener() {},
+  }))
   Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, get: () => 100 })
+  const raiz = document.documentElement.style
+  q.celular = true
+  q.largo = false
+  const celular = mount(Mesa, { global: { plugins: [pinia] } })
+  expect(raiz.getPropertyValue('--toast-offset')).toBe('200px')
+  expect(raiz.getPropertyValue('--toast-right')).toBe('')
+  celular.unmount()
+  expect(raiz.getPropertyValue('--toast-offset')).toBe('')
+  q.celular = false
+  q.largo = true
+  const desktop = mount(Mesa, { global: { plugins: [pinia] } })
+  expect(raiz.getPropertyValue('--toast-offset')).toBe('')
+  expect(raiz.getPropertyValue('--toast-right')).toContain('20rem')
+  desktop.unmount()
+  expect(raiz.getPropertyValue('--toast-right')).toBe('')
+})
+
+it('em awaiting_raise_response quem age vem de pendingSeats, não do turno', () => {
+  const resposta = { phase: 'awaiting_raise_response', turn: 1, votingTeam: 0 }
+  // eu (assento 1) só espero a dupla 0 responder
+  useGameStore().onState(makeState({ seat: 1, ...resposta }, [0, 2]))
   const w = mount(Mesa, { global: { plugins: [pinia] } })
-  expect(document.documentElement.style.getPropertyValue('--toast-offset')).toBe('200px')
+  expect(w.find('[data-vez-de]').text()).toBe('Aguardando Ana e Caio')
+  expect(w.find('[data-posicao="bottom"]').attributes('data-vez')).toBeUndefined()
+  expect(w.find('[data-posicao="left"]').attributes('data-vez')).toBeDefined()
+  expect(w.find('[data-posicao="top"]').attributes('data-vez')).toBeUndefined()
+  expect(w.find('[data-vez-de]').text()).not.toContain('Bia')
   w.unmount()
-  expect(document.documentElement.style.getPropertyValue('--toast-offset')).toBe('')
-  if (desc) Object.defineProperty(HTMLElement.prototype, 'offsetHeight', desc)
-  vi.unstubAllGlobals()
+})
+
+it('em awaiting_raise_response, se sou eu quem responde o painel diz "Sua vez" e meu assento fica ativo', () => {
+  useGameStore().onState(makeState({ seat: 1, phase: 'awaiting_raise_response', turn: 0, votingTeam: 1 }, [1, 3]))
+  const w = mount(Mesa, { global: { plugins: [pinia] } })
+  expect(w.find('[data-vez-de]').text()).toBe('Sua vez.')
+  expect(w.find('[data-posicao="bottom"]').attributes('data-vez')).toBeDefined()
+  expect(w.find('[data-posicao="bottom"]').text()).toContain('Sua vez')
+  expect(w.find('[data-posicao="right"]').attributes('data-vez')).toBeUndefined()
+  w.unmount()
+})
+
+it('o meu nome fica só para leitores de tela e a vira tem rótulo e legenda', () => {
+  useGameStore().onState(makeState({ seat: 1, turn: 1, vira: 23, manilha: 11 }, [1]))
+  const w = mount(Mesa, { global: { plugins: [pinia] } })
+  const eu = w.find('[data-posicao="bottom"]')
+  expect(eu.findAll('.sr-only').map((e) => e.text()).join(' ')).toContain('Bia (você)')
+  expect(eu.text()).toContain('Você')
+  expect(w.text()).toContain('vira · manilha')
+  expect(w.findAll('img').some((i) => (i.attributes('alt') ?? '').startsWith('Vira: '))).toBe(true)
+  w.unmount()
+})
+
+const Coberta = defineComponent({
+  setup() {
+    const c = inject<Ref<boolean>>('coberta')
+    onMounted(() => {
+      if (c) c.value = true
+    })
+    return { c }
+  },
+  template: '<p data-coberta>{{ c }}</p>',
+})
+
+it('"coberta" só desarma quando a minha jogada é aceita', async () => {
+  const send = vi.fn().mockResolvedValue(undefined)
+  setSender(send)
+  const game = useGameStore()
+  game.onState(makeState({ seat: 1, turn: 1 }, [1]))
+  const w = mount(Mesa, { global: { plugins: [pinia] }, slots: { painel: Coberta } })
+  await flushPromises()
+  await w.findAll('[data-mao] button')[0]!.trigger('click')
+  expect(send).toHaveBeenCalledWith({ type: 'play_card', payload: { slot: 0, covered: true } })
+  await flushPromises()
+  expect(w.find('[data-coberta]').text()).toBe('true') // servidor ainda não confirmou
+  game.onEvents([{ kind: 'card_played', seat: 1 }])
+  await flushPromises()
+  expect(w.find('[data-coberta]').text()).toBe('false')
+  w.unmount()
 })

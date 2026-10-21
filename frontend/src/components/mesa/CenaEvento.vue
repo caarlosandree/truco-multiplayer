@@ -40,7 +40,9 @@ const anuncio = computed<Anuncio | null>(() => {
 const distribuicao = computed(() => {
   if (ev.value?.kind !== 'cards_dealt' || !view.value) return []
   const { dealer, seat } = view.value
-  // 12 cartas, uma a uma, a partir de quem fica depois do pé
+  // 12 cartas, uma a uma, a partir de quem fica depois do pé. O evento cards_dealt não traz a ordem; esta é a
+  // do servidor (backend/internal/engine/deal.go, dealRemaining: Next(dealer), Next(...) em volta da mesa).
+  // Na mão normal o corte já entregou duas cartas, então é uma aproximação visual, não o registro exato.
   return Array.from({ length: 12 }, (_, i) => ({
     i,
     pos: relativePosition((dealer + 1 + i) % 4, seat),
@@ -57,14 +59,14 @@ const punido = computed(() => ev.value?.kind === 'raise_punished')
 
 <template>
   <div
-    class="pointer-events-none absolute inset-0 z-(--z-anuncio) overflow-hidden [container-type:size]"
+    class="pointer-events-none absolute inset-0 overflow-hidden [container-type:size]"
     aria-hidden="true"
     data-cena
   >
     <Transition name="mesa-escurece">
       <div
         v-if="anuncio?.escurece"
-        class="absolute inset-0 bg-lousa/70"
+        class="absolute inset-0 bg-lousa/55"
       />
     </Transition>
 
@@ -95,7 +97,7 @@ const punido = computed(() => ev.value?.kind === 'raise_punished')
       />
     </div>
 
-    <div class="absolute inset-0 grid place-items-center">
+    <div class="absolute inset-0 z-(--z-anuncio) grid place-items-center">
       <Transition name="mesa-anuncio">
         <p
           v-if="anuncio"

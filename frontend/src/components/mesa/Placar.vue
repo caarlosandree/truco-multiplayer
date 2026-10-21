@@ -23,7 +23,7 @@ const tipo = computed(() => (v.value?.handKind && v.value.handKind !== 'normal' 
     v-if="v"
     data-placar
     aria-label="Placar"
-    class="textura-lousa flex flex-wrap items-center justify-center gap-x-4 gap-y-1 border-b-2 border-felt-deep px-3 py-2 text-giz md:gap-x-8 md:px-6"
+    class="textura-lousa relative z-(--z-painel) flex flex-wrap items-center justify-center gap-x-4 gap-y-1 border-b-2 border-felt-deep px-3 py-2 text-giz md:gap-x-8 md:px-6"
   >
     <div
       class="flex items-center gap-2 md:gap-3"

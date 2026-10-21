@@ -19,8 +19,10 @@ const presence = computed(() => room.room?.seats[props.seat] ?? null)
 const isMe = computed(() => props.seat === game.view?.seat)
 const ally = computed(() => game.myTeam !== null && teamOf(props.seat) === game.myTeam)
 const deadline = computed(() => game.deadlines[props.seat])
-// quem age agora: a vez de jogar ou a resposta pendente (voto, corte, queima…)
-const active = computed(() => game.view?.turn === props.seat || game.pendingSeats.includes(props.seat))
+// quem age agora: os assentos pendentes (jogada, voto, corte, queima…); sem pendentes, a vez do turno
+const active = computed(() =>
+  game.pendingSeats.length > 0 ? game.pendingSeats.includes(props.seat) : game.view?.turn === props.seat,
+)
 const away = computed(() => presence.value !== null && (!presence.value.connected || presence.value.absent))
 const estado = computed(() => {
   if (!presence.value) return null
@@ -72,14 +74,22 @@ const balao = computed(() => {
     <div class="relative mb-1.5 max-w-full">
       <!-- só a placa esmaece quando a pessoa cai; o texto de estado fica em opacidade total -->
       <div
-        class="textura-lousa rounded-placa px-3 py-1.5 text-center inset-ring-1 inset-ring-line/70"
-        :class="[away ? 'opacity-(--assento-ausente-opacidade)' : '', props.position === 'bottom' ? 'min-w-36' : 'min-w-24 max-md:min-w-0']"
+        class="rounded-placa px-3 py-1.5 text-center inset-ring-1 inset-ring-line/70"
+        :class="[
+          active ? 'bg-giz text-lousa' : 'textura-lousa',
+          away ? 'opacity-(--assento-ausente-opacidade)' : '',
+          props.position === 'bottom' ? 'min-w-24' : 'min-w-24 max-md:min-w-0',
+        ]"
       >
         <p class="truncate text-sm font-bold">
-          <span class="sr-only">{{ ally ? 'Nós: ' : 'Eles: ' }}</span>{{ nome }}<span
-            v-if="isMe"
-            class="font-normal text-giz-muted"
-          > (você)</span>
+          <span class="sr-only">{{ ally ? 'Nós: ' : 'Eles: ' }}</span>
+          <!-- eu: a mão faz as vezes de placa, então o nome só vai para leitores de tela -->
+          <template v-if="isMe">
+            <span class="sr-only">{{ nome }} (você)</span><span aria-hidden="true">Você</span>
+          </template>
+          <template v-else>
+            {{ nome }}
+          </template>
         </p>
       </div>
       <!-- vez: contorno tracejado, mais fino que o foco (que é sólido) -->
@@ -156,7 +166,7 @@ const balao = computed(() => {
       />
       <span aria-hidden="true">{{ ally ? 'Nós' : 'Eles' }}</span>
       <strong
-        v-if="isMe && game.canPlay"
+        v-if="isMe && active"
         class="text-giz"
       >· Sua vez</strong>
     </p>

@@ -34,9 +34,9 @@ const others = computed(() => {
 
 // celular: os três adversários numa faixa em cima; desktop: parceiro em cima, laterais ao lado do centro
 const SLOT: Record<Exclude<RelativePosition, 'bottom'>, string> = {
-  left: 'col-start-1 row-start-1 md:row-start-2 md:self-center md:justify-self-start',
+  left: 'col-start-1 row-start-1 md:row-start-2 md:self-center md:justify-self-center',
   top: 'col-start-2 row-start-1',
-  right: 'col-start-3 row-start-1 md:row-start-2 md:self-center md:justify-self-end',
+  right: 'col-start-3 row-start-1 md:row-start-2 md:self-center md:justify-self-center',
 }
 
 const nameOf = (seat: Seat) => game.view?.players.find((p) => p.seat === seat)?.name ?? `Lugar ${seat + 1}`
@@ -51,12 +51,27 @@ watch(
     clicada.value = null
   },
 )
+// "coberta" só desarma quando a minha jogada é aceita (evento da minha carta ou mão que encolheu)
+function jogou() {
+  covered.value = false
+}
+watch(
+  () => game.scene.key,
+  () => {
+    const e = game.scene.event
+    if (e?.kind === 'card_played' && e.seat === game.view?.seat) jogou()
+  },
+)
+watch(
+  () => game.view?.myHand.length ?? 0,
+  (n, o) => {
+    if (n < o) jogou()
+  },
+)
 async function play(slot: number) {
   const antes = game.latest
   clicada.value = slot
-  const coberta = covered.value
-  covered.value = false
-  await game.playCard(slot, coberta)
+  await game.playCard(slot, covered.value)
   clearTimeout(soltar)
   soltar = setTimeout(() => {
     if (game.latest === antes) clicada.value = null
@@ -73,8 +88,13 @@ watch(
     if (texto) fala.value = texto
   },
 )
+// quem age agora vem de pendingSeats (voto, corte, queima, jogada); sem pendentes, cai para a vez do turno
+const euAjo = computed(() => {
+  const seat = game.view?.seat
+  return seat !== undefined && game.pendingSeats.includes(seat)
+})
 watch(
-  () => game.isMyTurn && game.canPlay,
+  euAjo,
   (vez) => {
     if (!vez) return
     fala.value = 'Sua vez.'
@@ -85,9 +105,12 @@ watch(
 const vezDe = computed(() => {
   const v = game.view
   if (!v) return ''
-  const quem = v.turn === undefined ? null : nameOf(v.turn)
-  if (game.canPlay) return 'Sua vez. Clique numa carta.'
-  return quem ? `Vez de ${quem}` : 'Aguardando…'
+  if (euAjo.value) return game.canPlay ? 'Sua vez. Clique numa carta.' : 'Sua vez.'
+  const seats = game.pendingSeats.length > 0 ? game.pendingSeats : v.turn === undefined ? [] : [v.turn]
+  const nomes = seats.map(nameOf)
+  if (nomes.length === 0) return 'Aguardando…'
+  if (nomes.length === 1) return `Vez de ${nomes[0]}`
+  return `Aguardando ${nomes.slice(0, -1).join(', ')} e ${nomes[nomes.length - 1]}`
 })
 
 // celular: toasts sobem acima da mão e do painel (a região lê --toast-offset)
@@ -95,11 +118,15 @@ const base = ref<HTMLElement | null>(null)
 const painel = ref<HTMLElement | null>(null)
 let observer: ResizeObserver | undefined
 function medir() {
-  const celular = typeof matchMedia === 'function' && matchMedia('(max-width: 767px)').matches
+  const mq = (q: string) => typeof matchMedia === 'function' && matchMedia(q).matches
+  const celular = mq('(max-width: 767px)')
   const h = (base.value?.offsetHeight ?? 0) + (painel.value?.offsetHeight ?? 0)
   const raiz = document.documentElement.style
   if (celular && h > 0) raiz.setProperty('--toast-offset', `${h}px`)
   else raiz.removeProperty('--toast-offset')
+  // desktop largo: os toasts ficam sobre o feltro, não sobre a coluna do painel (20rem + gutter)
+  if (mq('(min-width: 1024px)')) raiz.setProperty('--toast-right', 'calc(20rem + 1.5rem)')
+  else raiz.removeProperty('--toast-right')
 }
 onMounted(() => {
   medir()
@@ -115,6 +142,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', medir)
   clearTimeout(soltar)
   document.documentElement.style.removeProperty('--toast-offset')
+  document.documentElement.style.removeProperty('--toast-right')
 })
 </script>
 
@@ -133,11 +161,11 @@ onBeforeUnmount(() => {
       class="relative flex min-w-0 flex-1 flex-col overflow-hidden"
     >
       <Placar />
-      <div class="relative grid flex-1 grid-cols-3 grid-rows-[auto_1fr] content-start gap-x-2 gap-y-3 px-2 pt-4 md:grid-cols-[1fr_auto_1fr] md:gap-x-4 md:px-6 md:pt-6">
+      <div class="relative mx-auto grid w-full max-w-[60rem] flex-1 grid-cols-3 grid-rows-[auto_1fr] content-start gap-x-2 gap-y-3 px-2 pt-7 md:grid-cols-[1fr_auto_1fr] md:gap-x-4 md:px-6 md:pt-6">
         <!-- o oval da mesa, igual ao da sala de espera: só decoração, atrás dos lugares -->
         <div
           aria-hidden="true"
-          class="pointer-events-none absolute inset-x-12 inset-y-3 rounded-[50%] border-4 border-felt-deep bg-felt/60 max-md:hidden"
+          class="pointer-events-none absolute inset-x-4 inset-y-3 rounded-[50%] border-4 border-felt-deep bg-felt/60 max-md:hidden"
         />
         <AssentoMesa
           v-for="o in others"
@@ -176,7 +204,7 @@ onBeforeUnmount(() => {
       <slot name="aviso" />
       <slot name="painel">
         <p
-          class="rounded-painel bg-(--painel-bg) px-4 py-3 text-sm text-(--painel-dica)"
+          class="rounded-painel bg-(--painel-bg) px-4 py-3 text-base font-bold text-giz"
           data-vez-de
         >
           {{ vezDe }}

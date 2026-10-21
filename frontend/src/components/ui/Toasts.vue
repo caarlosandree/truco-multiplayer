@@ -10,7 +10,7 @@ const erros = computed(() => visiveis.value.filter((t) => t.kind === 'error'))
 </script>
 
 <template>
-  <div class="pointer-events-none fixed inset-x-0 bottom-[var(--toast-offset,0px)] z-(--z-toast) flex flex-col items-stretch gap-2 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:inset-x-auto md:right-6 md:bottom-6 md:w-96 md:p-0">
+  <div class="pointer-events-none fixed inset-x-0 bottom-[var(--toast-offset,0px)] z-(--z-toast) flex flex-col items-stretch gap-2 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:inset-x-auto md:right-[var(--toast-right,1.5rem)] md:bottom-6 md:w-96 md:p-0">
     <TransitionGroup
       tag="div"
       name="toast"

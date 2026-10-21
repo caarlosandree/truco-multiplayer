@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { rankLabel } from '@/game/cards'
+import { cardLabel, rankLabel } from '@/game/cards'
 import { useCena } from '@/game/cena'
 import { useGameStore } from '@/stores/game'
 import { usePrefsStore } from '@/stores/prefs'
@@ -41,8 +41,8 @@ const marcas = computed<{ marca: Marca; texto: string }[]>(() => {
     v-if="v"
     class="flex flex-col items-center gap-2 md:gap-3"
   >
-    <div class="flex items-center justify-center gap-3 md:gap-8">
-      <div class="flex w-16 flex-col items-center gap-1 md:w-24">
+    <div class="flex items-center justify-center gap-3 md:gap-5">
+      <div class="flex w-16 flex-col items-center gap-1 md:w-28">
         <div
           v-if="vira !== undefined"
           :key="vira"
@@ -51,6 +51,7 @@ const marcas = computed<{ marca: Marca; texto: string }[]>(() => {
         >
           <Carta
             :card="vira"
+            :label="`Vira: ${cardLabel(vira, prefs.deck)}`"
             size="sm"
             :class="revelando ? 'mesa-vira__face' : ''"
           />
@@ -64,9 +65,9 @@ const marcas = computed<{ marca: Marca; texto: string }[]>(() => {
         </div>
         <p
           v-if="manilha !== undefined"
-          class="text-center text-sm leading-tight"
+          class="text-center text-sm leading-tight md:whitespace-nowrap"
         >
-          <span class="text-giz-muted">manilha</span>
+          <span class="text-giz-muted">vira · manilha</span>
           <strong
             class="relative ml-1 font-display text-valor"
           >{{ rankLabel(manilha, prefs.deck) }}<svg
@@ -85,9 +86,28 @@ const marcas = computed<{ marca: Marca; texto: string }[]>(() => {
         </p>
       </div>
       <Vaza />
-      <div class="w-16 text-xs leading-snug text-giz-muted md:w-24">
-        <p>monte {{ v.deckCount }}</p>
-        <p>descarte {{ v.discardCount }}</p>
+      <div class="flex w-16 flex-col items-center gap-1 text-xs leading-snug text-giz-muted md:w-28">
+        <span
+          class="relative block h-8 w-6"
+          aria-hidden="true"
+        >
+          <Carta
+            hidden
+            size="xs"
+            decorative
+            class="absolute top-0 left-0 max-md:w-5"
+          />
+          <Carta
+            hidden
+            size="xs"
+            decorative
+            class="absolute top-0.5 left-0.5 max-md:w-5"
+          />
+        </span>
+        <p>
+          monte {{ v.deckCount }}<br>
+          descarte {{ v.discardCount }}
+        </p>
       </div>
     </div>
     <ol
