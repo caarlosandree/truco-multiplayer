@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { authApi, type RegisterInput, type User } from '@/api/auth'
-import { ApiError } from '@/api/http'
+import { ApiError, serverNow } from '@/api/http'
 import type { WsStatus } from '@/ws/client'
 
 let resumeHandler: (() => void) | null = null
@@ -77,6 +77,10 @@ export const useSessionStore = defineStore('session', {
     },
     resumeConnection() {
       resumeHandler?.()
+    },
+    /** Relógio do servidor (epoch ms), para componentes que não importam `@/api/http`. */
+    serverNow(): number {
+      return serverNow()
     },
   },
 })

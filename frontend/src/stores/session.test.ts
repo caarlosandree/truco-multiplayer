@@ -44,3 +44,8 @@ it('resumeConnection delega ao handler injetado e é no-op sem ele', () => {
   s.resumeConnection()
   expect(handler).toHaveBeenCalledOnce()
 })
+
+it('serverNow devolve um relógio em epoch ms', () => {
+  const t = useSessionStore().serverNow()
+  expect(Math.abs(t - Date.now())).toBeLessThan(60_000)
+})

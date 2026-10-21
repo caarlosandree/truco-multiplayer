@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useLobbyStore } from '@/stores/lobby'
 import { useRoomStore } from '@/stores/room'
 import { useSessionStore } from '@/stores/session'
+import Mesa from '@/components/mesa/Mesa.vue'
 import SalaEspera from '@/components/sala/SalaEspera.vue'
 
 const router = useRouter()
@@ -25,13 +26,7 @@ watch(
 <template>
   <template v-if="room.room">
     <SalaEspera v-if="!room.isPlaying" />
-    <p
-      v-else
-      class="p-8"
-      role="status"
-    >
-      Partida em andamento…
-    </p>
+    <Mesa v-else />
   </template>
   <p
     v-else
