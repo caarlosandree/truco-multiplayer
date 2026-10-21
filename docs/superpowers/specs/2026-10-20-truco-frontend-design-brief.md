@@ -18,7 +18,7 @@ O placar é a lousa do bar: tentos riscados a giz em grupos de cinco, ao lado do
 
 ## 2. Tokens
 
-Três camadas em `styles.css`. Componentes usam só a camada 2 (utilidades do Tailwind) e a 3 (`bg-(--botao-pri-bg)`); nunca primitivos nem hex.
+Três camadas em `styles.css`. Componentes usam só a camada 2 (utilidades do Tailwind) e a 3 (`bg-(--botao-pri-bg)`); nunca primitivos nem hex. **Exceção deliberada:** tokens de componente com valor fixo nos dois temas apontam direto para primitivos ou valores crus — `--modal-scrim` (`rgb(14 19 18 / .6)`), `--tento-nos`/`--tento-eles` (giz amarelo/rosa da lousa), `--prazo-alerta` (giz vermelho) e `--botao-*-bg-hover/-active` do laranja (mistura com `white`/`black`). Isso só vale dentro da camada 3, nunca num componente `.vue`.
 
 ### 2.1 Primitivos (`--p-*`)
 
@@ -59,7 +59,7 @@ Três camadas em `styles.css`. Componentes usam só a camada 2 (utilidades do Ta
 
 ### 2.3 Componente (`--botao-*`, `--campo-*` …)
 
-Declarados também em `:root, [data-tema]`. Estados comuns: **hover** 120 ms; **active** desloca `--botao-pressao-y` (1 px) para baixo e usa a cor `-active`; **focus** é o anel global (§6.1); **disabled** usa `opacity: var(--botao-desabilitado-opacidade)` (0,45), `cursor: not-allowed` e atributo `disabled`; **carregando** mantém a largura, troca o rótulo por "…" + `aria-busy="true"`.
+Declarados também em `:root, [data-tema]`. Estados comuns: **hover** `--dur-rapido` (150 ms); **active** desloca `--botao-pressao-y` (1 px) para baixo e usa a cor `-active`; **focus** é o anel global (§6.1); **disabled** usa `opacity: var(--botao-desabilitado-opacidade)` (0,45), `cursor: not-allowed` e atributo `disabled`; **carregando** mantém a largura, troca o rótulo por "…" + `aria-busy="true"`.
 
 | Componente | Tokens | Decisão |
 |---|---|---|
@@ -71,7 +71,7 @@ Declarados também em `:root, [data-tema]`. Estados comuns: **hover** 120 ms; **
 | Campo | `--campo-*`, `rounded-campo`, 44 px | fundo `surface`, borda 2 px `line`; erro: borda `danger` + texto `danger` 14 px abaixo, ligado por `aria-describedby`. Rótulo visível acima, 14 px 700 |
 | Modal | `--modal-*`, `rounded-modal`, `shadow-modal`, `max-w-(--modal-largura)` 448 px | título Atkinson 20 px 700 (não Kalam); scrim `--modal-scrim`; ações à direita, primária por último |
 | Toast | `--toast-info-*`, `--toast-erro-*`, `rounded-toast`, `shadow-toast` | info = invertido (`ink` com texto `surface`); erro = `danger`/`on-danger`; topo-centro, abaixo do cabeçalho, até 3 empilhados, 5 s |
-| Assento (mesa) | `--assento-*`, `rounded-placa` | placa de lousa com nome em giz 14 px 700; marca de dupla = traço de 3×40 px abaixo (nós contínuo, eles pontilhado); vez = contorno 2 px **tracejado** giz, afastado 3 px; ausente = opacidade 0,5 + ícone + texto "desconectado"/"ausente" |
+| Assento (mesa) | `--assento-*`, `rounded-placa` | placa de lousa com nome em giz 14 px 700; marca de dupla = traço de 3×40 px abaixo (nós contínuo, eles pontilhado); vez = contorno 2 px **tracejado** giz, afastado 3 px; ausente = opacidade `--assento-ausente-opacidade` (0,5) **só na placa do nome e na marca de dupla**; o ícone e o texto de estado "desconectado"/"ausente" (giz-muted 14 px, 5,03:1 no feltro) ficam fora do elemento esmaecido, em opacidade total |
 | Carta | `rounded-card` 6 px, `shadow-card`; `--carta-largura-mao/-mesa/-vira` 84/68/48 px | mão: erguida `--carta-ergue-y` (−12 px) + `shadow-carta-erguida` no hover/seleção; nunca gira em movimento |
 | Placar/tento | `--placar-bg`, `--tento-nos/-eles`, `--tento-traco` 3 px, `--valor-borda`, `rounded-valor` | ver §3 e §5 |
 | Prazo (anel) | `--prazo-traco` 3 px, `--prazo-trilho`, `--prazo-cor`, `--prazo-alerta` | anel SVG em volta da placa; últimos 5 s em `--prazo-alerta` + segundos em texto |
@@ -188,7 +188,7 @@ Cada cena cabe no orçamento de `EVENT_DURATION_MS` (`frontend/src/game/director
 | `vote_cast` | 400 | balão do voto no assento (só se o voto é visível) | 150 `ease-quique` + 250 parado |
 | `raise_resolved` | 700 | "Aceito!" ou "Correu!" a giz; valor da mão é apagado e reescrito | escrita 300 `ease-giz` + apaga 150 `ease-sai` + reescreve 250 `ease-giz` |
 | `raise_punished` | 1200 | placa de lousa com borda `danger`: "Pedido proibido — derrota" | entrada 200 `ease-padrao` + 1000 parado (sem tremer) |
-| `hand_ended` | 800 | tentos novos riscam um a um na lousa; número reescreve | janela de 600 dividida pelos N tentos (cada risco 600/N, mín. 60, `ease-giz`) + número 200 = 800 |
+| `hand_ended` | 800 | tentos novos riscam um a um na lousa; número reescreve | N tentos em sequência, cada risco `min(400, max(40, floor(600/N)))` ms (o 400 é `--dur-tento`) (`ease-giz`), + número 200 ms. Como N ≤ 12, `floor(600/N)` ≥ 50: N × risco ≤ 600 e o total ≤ 800 (N = 12: 12 × 50 + 200 = 800; N = 1: 400 + 200 = 600) |
 | `game_over` | 0 | nada; o modal vem com `match_ended` | — |
 | `forfeited` | 0 | nada; idem | — |
 
@@ -199,7 +199,7 @@ Atraso > 3 s ou aba oculta: o diretor descarta a fila; os componentes mostram o 
 | Interação | Movimento |
 |---|---|
 | Botão pressionado | `translateY(1px)` + cor `-active`, `--dur-instante` |
-| Hover de botão/linha | cor, 120 ms `ease-padrao` |
+| Hover de botão/linha | cor, `--dur-rapido` (150 ms) `ease-padrao` |
 | Carta da mão (hover/seleção) | ergue −12 px + sombra, `--dur-rapido` `ease-desliza` |
 | Toast | entra 200 ms (desce 8 px + opacidade) `ease-desliza`; sai 150 ms `ease-sai` |
 | Modal | scrim 200 ms; caixa 200 ms opacidade + escala 0,98→1 `ease-padrao`; sai 150 ms |

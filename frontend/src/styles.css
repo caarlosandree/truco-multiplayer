@@ -247,6 +247,7 @@
   --assento-placa-bg: var(--s-lousa);
   --assento-placa-fg: var(--s-giz);
   --assento-vez: var(--s-giz);
+  /* esmaece só a placa e a marca de dupla; o texto de estado ("desconectado") fica em opacidade total */
   --assento-ausente-opacidade: 0.5;
 
   /* carta */
