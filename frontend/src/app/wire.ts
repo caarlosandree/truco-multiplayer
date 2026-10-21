@@ -53,7 +53,10 @@ function start(): void {
   const c = new WsClient({
     url: wsUrl(location),
     onMessage: dispatch,
-    onStatus: (s) => session.setConnection(s),
+    onStatus: (s) => {
+      if (s === 'open') useLobbyStore().markStale() // hello recebido; o snapshot desta conexão vem depois
+      session.setConnection(s)
+    },
     onVersionMismatch: () => {
       session.versionMismatch = true
     },

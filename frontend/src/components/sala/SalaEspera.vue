@@ -138,13 +138,18 @@ const resumo = computed(() => {
             />
           </li>
           <li class="col-span-2 row-start-2 flex items-center justify-center text-center md:col-span-1 md:col-start-2">
-            <p
-              class="max-w-56 text-base text-giz"
-              role="status"
-            >
-              {{ resumo }}
-              <span class="mt-1 block text-sm text-giz-muted">A partida começa quando os 4 estiverem prontos.</span>
-            </p>
+            <div class="max-w-56">
+              <p
+                class="font-display text-valor"
+                role="status"
+                aria-live="polite"
+              >
+                {{ resumo }}
+              </p>
+              <p class="mt-1 text-sm text-giz-muted">
+                A partida começa quando os 4 estiverem prontos.
+              </p>
+            </div>
           </li>
         </ul>
       </div>

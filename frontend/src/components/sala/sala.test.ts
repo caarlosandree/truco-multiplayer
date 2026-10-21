@@ -6,6 +6,7 @@ import { createAppRouter } from '@/router'
 import { authApi } from '@/api/auth'
 import SalaEspera from './SalaEspera.vue'
 import SalaView from '@/views/SalaView.vue'
+import { useLobbyStore } from '@/stores/lobby'
 import { useRoomStore } from '@/stores/room'
 import { useSessionStore } from '@/stores/session'
 import { useToastsStore } from '@/stores/toasts'
@@ -86,6 +87,13 @@ it('duplas relativas a mim: lugares 0/2 são "nós" e 1/3 "eles", com texto para
   expect(w.find('[data-assento="1"]').text()).toContain('Lugar 2, nós')
 })
 
+it('pronto ganha carimbo de giz só em quem está pronto', () => {
+  useRoomStore().onRoomState(base)
+  const w = mountEspera()
+  expect(w.find('[data-assento="1"] [data-pronto]').exists()).toBe(true)
+  expect(w.find('[data-assento="0"] [data-pronto]').exists()).toBe(false)
+})
+
 it('quem não é host não vê remover; sala pública não mostra código nem copiar', () => {
   useRoomStore().onRoomState({ ...base, visibility: 'public', yourSeat: 1 })
   const w = mountEspera()
@@ -116,7 +124,7 @@ it('erro do servidor ao sentar vira toast traduzido', async () => {
   await w.find('[data-acao="sentar"]').trigger('click')
   await flushPromises()
   expect(useToastsStore().items).toHaveLength(1)
-  expect(useToastsStore().items[0]?.kind).toBe('error')
+  expect(useToastsStore().items[0]).toMatchObject({ kind: 'error', text: 'Esse lugar já está ocupado.' })
 })
 
 it('sair da sala envia leave_room', async () => {
@@ -138,27 +146,30 @@ describe('SalaView', () => {
     return router
   }
 
-  it('/sala sem sala volta ao lobby depois do hello e da folga', async () => {
+  it('/sala sem sala: só volta ao lobby depois do hello E do lobby_snapshot', async () => {
     const router = await mountView()
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     const session = useSessionStore()
-    await vi.advanceTimersByTimeAsync(3000)
-    expect(router.currentRoute.value.name).toBe('sala') // antes do hello não redireciona
+    const lobby = useLobbyStore()
+    await new Promise((r) => setTimeout(r, 30))
+    expect(router.currentRoute.value.name).toBe('sala') // antes do hello
     session.setConnection('open')
-    await vi.advanceTimersByTimeAsync(900)
-    expect(router.currentRoute.value.name).toBe('sala')
-    await vi.advanceTimersByTimeAsync(200)
-    vi.useRealTimers() // a view do lobby é import dinâmico: espera em tempo real
+    await new Promise((r) => setTimeout(r, 30))
+    expect(router.currentRoute.value.name).toBe('sala') // hello sem snapshot: ainda pode vir room_state
+    lobby.onSnapshot({ rooms: [] })
     await vi.waitFor(() => expect(router.currentRoute.value.name).toBe('lobby'))
   })
 
-  it('room_state dentro da folga cancela o redirecionamento', async () => {
+  it('room_state em vez de snapshot não redireciona; novo hello invalida o snapshot antigo', async () => {
     const router = await mountView()
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const lobby = useLobbyStore()
+    lobby.markStale()
     useSessionStore().setConnection('open')
-    await vi.advanceTimersByTimeAsync(500)
     useRoomStore().onRoomState(base)
-    await vi.advanceTimersByTimeAsync(2000)
+    lobby.onSnapshot({ rooms: [] }) // com sala, o snapshot não tira ninguém daqui
+    await new Promise((r) => setTimeout(r, 30))
     expect(router.currentRoute.value.name).toBe('sala')
+    expect(lobby.loaded).toBe(true)
+    lobby.markStale()
+    expect(lobby.loaded).toBe(false)
   })
 })

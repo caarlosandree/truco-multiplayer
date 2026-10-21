@@ -21,11 +21,11 @@ const emit = defineEmits<{ take: []; kick: [] }>()
   >
     <template v-if="props.info">
       <!-- só a placa esmaece quando a pessoa cai; o texto de estado fica em opacidade total -->
-      <div class="rounded-placa bg-felt">
+      <div class="relative rounded-placa bg-felt">
         <div
           class="textura-lousa flex min-h-14 flex-col justify-center rounded-placa px-3 py-2 text-center"
           :class="[
-            props.isMe ? 'inset-ring-2 inset-ring-giz/70' : 'inset-ring-1 inset-ring-line/70',
+            props.info.ready ? 'inset-ring-3 inset-ring-giz' : 'inset-ring-1 inset-ring-line/70',
             props.info.connected ? '' : 'opacity-(--assento-ausente-opacidade)',
           ]"
         >
@@ -49,6 +49,43 @@ const emit = defineEmits<{ take: []; kick: [] }>()
             >(você)</span>
           </p>
         </div>
+        <!-- carimbo de giz: pronto se lê de relance (anel cheio + visto), além do texto abaixo -->
+        <span
+          v-if="props.info.ready"
+          data-pronto
+          aria-hidden="true"
+          class="absolute -top-2.5 -left-2.5 grid size-7 place-items-center rounded-full bg-giz text-lousa"
+        >
+          <svg
+            viewBox="0 0 16 16"
+            class="size-4"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="3"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          ><path d="M3 8.5l3.2 3L13 4.5" /></svg>
+        </span>
+        <button
+          v-if="props.canKick"
+          type="button"
+          data-acao="remover"
+          class="group absolute -top-3.5 -right-3.5 grid size-11 place-items-center rounded-full active:translate-y-(--botao-pressao-y)"
+          :aria-label="`Remover ${props.info.displayName}`"
+          @click="emit('kick')"
+        >
+          <span class="grid size-6 place-items-center rounded-full bg-lousa-2 text-giz inset-ring-1 inset-ring-line group-hover:bg-danger group-hover:text-on-danger">
+            <svg
+              viewBox="0 0 16 16"
+              class="size-3"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              aria-hidden="true"
+            ><path d="M4 4l8 8M12 4l-8 8" /></svg>
+          </span>
+        </button>
       </div>
       <p class="flex min-h-5 flex-wrap items-center justify-center gap-x-3 gap-y-0.5 text-sm text-giz-muted">
         <span class="inline-flex items-center gap-1.5">
@@ -102,16 +139,5 @@ const emit = defineEmits<{ take: []; kick: [] }>()
       />
       <span aria-hidden="true">{{ props.ally ? 'Nós' : 'Eles' }}</span>
     </p>
-
-    <button
-      v-if="props.canKick && props.info"
-      type="button"
-      data-acao="remover"
-      class="mx-auto inline-flex h-11 min-w-11 items-center justify-center rounded-botao-2 px-3 text-sm font-bold text-giz hover:bg-giz/10 active:translate-y-(--botao-pressao-y)"
-      :aria-label="`Remover ${props.info.displayName}`"
-      @click="emit('kick')"
-    >
-      Remover
-    </button>
   </div>
 </template>

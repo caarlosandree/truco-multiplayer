@@ -26,6 +26,10 @@ export const useLobbyStore = defineStore('lobby', {
     },
   },
   actions: {
+    /** Novo hello: o snapshot anterior é velho; `loaded` volta a valer só depois do próximo lobby_snapshot. */
+    markStale() {
+      this.loaded = false
+    },
     onSnapshot(p: LobbySnapshotPayload) {
       this.rooms = Object.fromEntries(p.rooms.map((r) => [r.id, r]))
       this.loaded = true
