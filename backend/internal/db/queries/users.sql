@@ -3,6 +3,10 @@ INSERT INTO users (username, email, display_name, password_hash, created_at, upd
 VALUES (@username, @email, @display_name, @password_hash, @now, @now)
 RETURNING *;
 
+-- name: GetUserByIDForUpdate :one
+-- Trava a linha: a checagem "alvo é admin" não pode ficar velha até a escrita.
+SELECT * FROM users WHERE id = @id FOR UPDATE;
+
 -- name: GetUserByID :one
 SELECT * FROM users WHERE id = @id;
 

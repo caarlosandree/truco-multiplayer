@@ -15,17 +15,17 @@ var (
 )
 
 func (s *Server) registerAuthRoutes() {
-	s.mux.HandleFunc("POST /api/auth/register", s.handleRegister)
-	s.mux.HandleFunc("POST /api/auth/verify-email", s.handleVerifyEmail)
-	s.mux.HandleFunc("POST /api/auth/resend-verification", s.handleResendVerification)
-	s.mux.HandleFunc("POST /api/auth/login", s.handleLogin)
-	s.mux.HandleFunc("POST /api/auth/logout", s.handleLogout)
-	s.mux.Handle("POST /api/auth/logout-all", s.requireAuth(s.handleLogoutAll))
-	s.mux.HandleFunc("POST /api/auth/password/forgot", s.handleForgotPassword)
-	s.mux.HandleFunc("POST /api/auth/password/reset", s.handleResetPassword)
-	s.mux.Handle("GET /api/me", s.requireAuth(s.handleMe))
-	s.mux.Handle("PATCH /api/me", s.requireAuth(s.handleUpdateMe))
-	s.mux.Handle("POST /api/me/password", s.requireAuth(s.handleChangePassword))
+	s.handle("POST /api/auth/register", http.HandlerFunc(s.handleRegister))
+	s.handle("POST /api/auth/verify-email", http.HandlerFunc(s.handleVerifyEmail))
+	s.handle("POST /api/auth/resend-verification", http.HandlerFunc(s.handleResendVerification))
+	s.handle("POST /api/auth/login", http.HandlerFunc(s.handleLogin))
+	s.handle("POST /api/auth/logout", http.HandlerFunc(s.handleLogout))
+	s.handle("POST /api/auth/logout-all", s.requireAuth(s.handleLogoutAll))
+	s.handle("POST /api/auth/password/forgot", http.HandlerFunc(s.handleForgotPassword))
+	s.handle("POST /api/auth/password/reset", http.HandlerFunc(s.handleResetPassword))
+	s.handle("GET /api/me", s.requireAuth(s.handleMe))
+	s.handle("PATCH /api/me", s.requireAuth(s.handleUpdateMe))
+	s.handle("POST /api/me/password", s.requireAuth(s.handleChangePassword))
 }
 
 type registerRequest struct {

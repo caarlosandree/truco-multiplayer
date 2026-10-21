@@ -87,6 +87,8 @@ func classify(err error) *httpError {
 		return invalidField("domain", "domínio inválido")
 	case errors.Is(err, admin.ErrSelfAction):
 		return conflict("Você não pode aplicar esta ação à sua própria conta.")
+	case errors.Is(err, admin.ErrTargetIsAdmin):
+		return &httpError{status: 403, code: "target_is_admin", message: "Não é possível aplicar esta ação a outro administrador."}
 	case errors.Is(err, admin.ErrLastAdmin):
 		return conflict("É preciso manter ao menos um administrador ativo.")
 	case errors.Is(err, admin.ErrLastDomain):

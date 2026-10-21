@@ -1,6 +1,8 @@
 // Comando server sobe a API do Truco e oferece tarefas administrativas.
 //
-// Uso: server [serve|migrate|promote-admin <email|username>|recompute-stats]
+// Uso: server [serve|migrate|promote-admin <email|username>|demote-admin <email|username>|recompute-stats]
+//
+// O CLI é o único caminho para criar ou remover administradores: nenhuma rota HTTP altera is_admin.
 package main
 
 import (
@@ -52,12 +54,15 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdout 
 		command, args = args[0], args[1:]
 	}
 	switch command {
-	case "serve", "migrate", "promote-admin", "recompute-stats":
+	case "serve", "migrate", "promote-admin", "demote-admin", "recompute-stats":
 	default:
-		return fmt.Errorf("subcomando desconhecido %q (use serve, migrate, promote-admin ou recompute-stats)", command)
+		return fmt.Errorf("subcomando desconhecido %q (use serve, migrate, promote-admin, demote-admin ou recompute-stats)", command)
 	}
 	if command == "promote-admin" && len(args) != 1 {
 		return errors.New("uso: server promote-admin <email|username>")
+	}
+	if command == "demote-admin" && len(args) != 1 {
+		return errors.New("uso: server demote-admin <email|username>")
 	}
 	cfg, err := config.Load(getenv)
 	if err != nil {
@@ -78,6 +83,17 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdout 
 			return fmt.Errorf("promover %q: %w", args[0], err)
 		}
 		fmt.Fprintf(stdout, "%s agora é administrador\n", args[0])
+		return nil
+	case "demote-admin":
+		err := admin.DemoteAdmin(ctx, pool, args[0], time.Now())
+		if errors.Is(err, admin.ErrNotAdmin) {
+			fmt.Fprintf(stdout, "%s não é administrador\n", args[0])
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("rebaixar %q: %w", args[0], err)
+		}
+		fmt.Fprintf(stdout, "%s não é mais administrador\n", args[0])
 		return nil
 	case "recompute-stats":
 		skipped, err := match.NewStore(pool, nil).RecomputeStats(ctx)

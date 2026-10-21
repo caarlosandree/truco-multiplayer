@@ -253,6 +253,47 @@ func (q *Queries) ListInProgressMatchIDs(ctx context.Context) ([]string, error) 
 	return items, nil
 }
 
+const listInProgressMatches = `-- name: ListInProgressMatches :many
+SELECT id, created_at FROM matches
+WHERE status = 'in_progress'
+  AND ($1::timestamptz IS NULL
+       OR (created_at, id) > ($1::timestamptz, $2::uuid))
+ORDER BY created_at, id
+LIMIT $3::integer
+`
+
+type ListInProgressMatchesParams struct {
+	CursorCreatedAt *time.Time
+	CursorID        *string
+	Lim             int32
+}
+
+type ListInProgressMatchesRow struct {
+	ID        string
+	CreatedAt time.Time
+}
+
+// Mais antigas primeiro; cursor por (created_at, id).
+func (q *Queries) ListInProgressMatches(ctx context.Context, arg ListInProgressMatchesParams) ([]ListInProgressMatchesRow, error) {
+	rows, err := q.db.Query(ctx, listInProgressMatches, arg.CursorCreatedAt, arg.CursorID, arg.Lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListInProgressMatchesRow
+	for rows.Next() {
+		var i ListInProgressMatchesRow
+		if err := rows.Scan(&i.ID, &i.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMatchActions = `-- name: ListMatchActions :many
 SELECT ply, action, source FROM match_actions WHERE match_id = $1 ORDER BY ply
 `

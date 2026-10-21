@@ -8,16 +8,16 @@ import (
 )
 
 func (s *Server) registerAdminRoutes() {
-	s.mux.Handle("GET /api/admin/users", s.requireAdmin(s.handleAdminListUsers))
-	s.mux.Handle("POST /api/admin/users/{id}/disable", s.requireAdmin(s.userAction(s.deps.Admin.DisableUser)))
-	s.mux.Handle("POST /api/admin/users/{id}/enable", s.requireAdmin(s.userAction(s.deps.Admin.EnableUser)))
-	s.mux.Handle("POST /api/admin/users/{id}/force-password-reset", s.requireAdmin(s.userAction(s.deps.Admin.ForcePasswordReset)))
-	s.mux.Handle("PUT /api/admin/users/{id}/admin", s.requireAdmin(s.handleAdminSetAdmin))
-	s.mux.Handle("GET /api/admin/email-domains", s.requireAdmin(s.handleAdminListDomains))
-	s.mux.Handle("POST /api/admin/email-domains", s.requireAdmin(s.handleAdminAddDomain))
-	s.mux.Handle("DELETE /api/admin/email-domains/{domain}", s.requireAdmin(s.handleAdminRemoveDomain))
-	s.mux.Handle("POST /api/admin/matches/{id}/abort", s.requireAdmin(s.handleAdminAbortMatch))
-	s.mux.Handle("GET /api/admin/audit", s.requireAdmin(s.handleAdminAudit))
+	s.handle("GET /api/admin/users", s.requireAdmin(s.handleAdminListUsers))
+	s.handle("POST /api/admin/users/{id}/disable", s.requireAdmin(s.userAction(s.deps.Admin.DisableUser)))
+	s.handle("POST /api/admin/users/{id}/enable", s.requireAdmin(s.userAction(s.deps.Admin.EnableUser)))
+	s.handle("POST /api/admin/users/{id}/force-password-reset", s.requireAdmin(s.userAction(s.deps.Admin.ForcePasswordReset)))
+	s.handle("GET /api/admin/email-domains", s.requireAdmin(s.handleAdminListDomains))
+	s.handle("POST /api/admin/email-domains", s.requireAdmin(s.handleAdminAddDomain))
+	s.handle("DELETE /api/admin/email-domains/{domain}", s.requireAdmin(s.handleAdminRemoveDomain))
+	s.handle("GET /api/admin/matches", s.requireAdmin(s.handleAdminListMatches))
+	s.handle("POST /api/admin/matches/{id}/abort", s.requireAdmin(s.handleAdminAbortMatch))
+	s.handle("GET /api/admin/audit", s.requireAdmin(s.handleAdminAudit))
 }
 
 func noContent(s *Server, w http.ResponseWriter, r *http.Request, err error) {
@@ -41,23 +41,6 @@ func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request, _ 
 		return
 	}
 	writeJSON(w, http.StatusOK, page)
-}
-
-type setAdminRequest struct {
-	IsAdmin *bool `json:"isAdmin"`
-}
-
-func (s *Server) handleAdminSetAdmin(w http.ResponseWriter, r *http.Request, p auth.Principal) {
-	var req setAdminRequest
-	if err := decodeJSON(w, r, &req); err != nil {
-		s.writeError(w, r, err)
-		return
-	}
-	if req.IsAdmin == nil {
-		s.writeError(w, r, errInvalidJSON)
-		return
-	}
-	noContent(s, w, r, s.deps.Admin.SetAdmin(r.Context(), p, r.PathValue("id"), *req.IsAdmin))
 }
 
 func (s *Server) handleAdminListDomains(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
@@ -101,6 +84,20 @@ func (s *Server) handleAdminAbortMatch(w http.ResponseWriter, r *http.Request, p
 
 func (s *Server) handleAdminAudit(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
 	page, err := s.deps.Admin.ListAudit(r.Context(), r.URL.Query().Get("cursor"))
+	if err != nil {
+		s.writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, page)
+}
+
+// handleAdminListMatches lista as partidas em andamento; só o status in_progress existe.
+func (s *Server) handleAdminListMatches(w http.ResponseWriter, r *http.Request, _ auth.Principal) {
+	if st := r.URL.Query().Get("status"); st != "" && st != "in_progress" {
+		s.writeError(w, r, &httpError{status: 400, code: "invalid_request", message: "Status inválido; use in_progress."})
+		return
+	}
+	page, err := s.deps.Admin.ListInProgressMatches(r.Context(), r.URL.Query().Get("cursor"))
 	if err != nil {
 		s.writeError(w, r, err)
 		return

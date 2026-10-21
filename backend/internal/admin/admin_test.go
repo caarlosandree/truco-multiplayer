@@ -57,7 +57,9 @@ func newEnv(t *testing.T) env {
 	}
 	e.svc = admin.NewService(admin.Options{Pool: pool, Auth: e.auth, Aborter: e.aborter, Now: clock.Now, Logger: logger})
 	adminID := testdb.CreateUser(t, pool, "chefe")
-	_, _ = pool.Exec(context.Background(), "UPDATE users SET is_admin = true WHERE id = $1", adminID)
+	if _, err := pool.Exec(context.Background(), "UPDATE users SET is_admin = true WHERE id = $1", adminID); err != nil {
+		t.Fatal(err)
+	}
 	e.actor = auth.Principal{UserID: adminID, Username: "chefe", IsAdmin: true}
 	return e
 }
@@ -65,14 +67,18 @@ func newEnv(t *testing.T) env {
 func (e env) auditCount(t *testing.T, action string) int {
 	t.Helper()
 	var n int
-	_ = e.pool.QueryRow(context.Background(), "SELECT count(*) FROM audit_log WHERE action = $1", action).Scan(&n)
+	if err := e.pool.QueryRow(context.Background(), "SELECT count(*) FROM audit_log WHERE action = $1", action).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
 	return n
 }
 
 func (e env) sessionCount(t *testing.T, userID string) int {
 	t.Helper()
 	var n int
-	_ = e.pool.QueryRow(context.Background(), "SELECT count(*) FROM sessions WHERE user_id = $1", userID).Scan(&n)
+	if err := e.pool.QueryRow(context.Background(), "SELECT count(*) FROM sessions WHERE user_id = $1", userID).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
 	return n
 }
 
@@ -118,7 +124,9 @@ func TestForcePasswordReset(t *testing.T) {
 		t.Fatal(err)
 	}
 	var must bool
-	_ = e.pool.QueryRow(ctx, "SELECT must_reset_password FROM users WHERE id = $1", target).Scan(&must)
+	if err := e.pool.QueryRow(ctx, "SELECT must_reset_password FROM users WHERE id = $1", target).Scan(&must); err != nil {
+		t.Fatal(err)
+	}
 	msg, sent := e.mail.LastTo("ana@empresa.com")
 	if !must || e.sessionCount(t, target) != 0 || !sent || msg.Subject != "Você precisa redefinir sua senha do Truco" || e.auditCount(t, "user.force_password_reset") != 1 {
 		t.Fatalf("must=%v sessões=%d e-mail=%v", must, e.sessionCount(t, target), msg.Subject)
@@ -148,7 +156,9 @@ func TestForcePasswordResetIgnoresPostCommitSendFailure(t *testing.T) {
 				t.Fatalf("falha pós-commit no envio não pode virar erro: %v", err)
 			}
 			var must bool
-			_ = e.pool.QueryRow(ctx, "SELECT must_reset_password FROM users WHERE id = $1", target).Scan(&must)
+			if err := e.pool.QueryRow(ctx, "SELECT must_reset_password FROM users WHERE id = $1", target).Scan(&must); err != nil {
+				t.Fatal(err)
+			}
 			if !must || e.sessionCount(t, target) != 0 || e.auditCount(t, "user.force_password_reset") != 1 {
 				t.Fatalf("estado não aplicado: must=%v sessões=%d", must, e.sessionCount(t, target))
 			}
@@ -156,24 +166,164 @@ func TestForcePasswordResetIgnoresPostCommitSendFailure(t *testing.T) {
 	}
 }
 
-func TestSetAdminProtectsLastAdmin(t *testing.T) {
+func TestDemoteAdminKeepsLastAdmin(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
-	if err := e.svc.SetAdmin(ctx, e.actor, e.actor.UserID, false); !errors.Is(err, admin.ErrLastAdmin) {
-		t.Fatalf("remover o último admin: %v", err)
+	now := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
+	if err := admin.DemoteAdmin(ctx, e.pool, "chefe", now); !errors.Is(err, admin.ErrLastAdmin) {
+		t.Fatalf("rebaixar o último admin: %v", err)
 	}
-	if e.auditCount(t, "user.set_admin") != 0 {
+	if e.auditCount(t, "user.demote_admin") != 0 {
 		t.Fatal("ação recusada não pode ser auditada")
 	}
 	other := testdb.CreateUser(t, e.pool, "bia")
-	if err := e.svc.SetAdmin(ctx, e.actor, other, true); err != nil {
+	if _, err := e.pool.Exec(ctx, "UPDATE users SET is_admin = true WHERE id = $1", other); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.svc.SetAdmin(ctx, e.actor, e.actor.UserID, false); err != nil {
+	if err := admin.DemoteAdmin(ctx, e.pool, "chefe@empresa.com", now); err != nil {
 		t.Fatalf("com dois admins, pode sair: %v", err)
 	}
-	if e.auditCount(t, "user.set_admin") != 2 {
-		t.Fatal("auditoria ausente")
+	var isAdmin bool
+	var via string
+	if err := e.pool.QueryRow(ctx, "SELECT is_admin FROM users WHERE id = $1", e.actor.UserID).Scan(&isAdmin); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.pool.QueryRow(ctx, "SELECT details->>'via' FROM audit_log WHERE action = 'user.demote_admin'").Scan(&via); err != nil {
+		t.Fatal(err)
+	}
+	if isAdmin || via != "cli" {
+		t.Fatalf("isAdmin=%v via=%q", isAdmin, via)
+	}
+	if err := admin.DemoteAdmin(ctx, e.pool, "chefe", now); !errors.Is(err, admin.ErrNotAdmin) {
+		t.Fatalf("já não é admin: %v", err)
+	}
+	if e.auditCount(t, "user.demote_admin") != 1 {
+		t.Fatal("no-op não pode auditar")
+	}
+	if err := admin.DemoteAdmin(ctx, e.pool, "inexistente", now); !errors.Is(err, admin.ErrNotFound) {
+		t.Fatalf("inexistente: %v", err)
+	}
+}
+
+func TestPromoteAdminAudits(t *testing.T) {
+	e := newEnv(t)
+	testdb.CreateUser(t, e.pool, "bia")
+	if err := admin.PromoteAdmin(context.Background(), e.pool, "bia", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if e.auditCount(t, "user.promote_admin") != 1 {
+		t.Fatal("promoção deve auditar")
+	}
+}
+
+type recordingDropper struct {
+	mu  sync.Mutex
+	ids []string
+	// disabledAtDrop guarda, a cada DropUser, se a conta já constava como desativada no banco,
+	// provando que a chamada ocorreu depois do commit.
+	disabledAtDrop []bool
+	pool           *pgxpool.Pool
+	t              *testing.T
+}
+
+func (r *recordingDropper) DropUser(id string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.ids = append(r.ids, id)
+	var disabled bool
+	if err := r.pool.QueryRow(context.Background(), "SELECT disabled_at IS NOT NULL FROM users WHERE id = $1", id).Scan(&disabled); err != nil {
+		r.t.Error(err)
+	}
+	r.disabledAtDrop = append(r.disabledAtDrop, disabled)
+}
+
+func TestDisableDropsConnection(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	d := &recordingDropper{pool: e.pool, t: t}
+	e.svc = admin.NewService(admin.Options{Pool: e.pool, Auth: e.auth, Dropper: d, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	target := testdb.CreateUser(t, e.pool, "ana")
+	if err := e.svc.DisableUser(ctx, e.actor, target); err != nil {
+		t.Fatal(err)
+	}
+	if len(d.ids) != 1 || d.ids[0] != target || !d.disabledAtDrop[0] {
+		t.Fatalf("drop = %v commit-antes=%v", d.ids, d.disabledAtDrop)
+	}
+	// Alvo admin: recusado e nunca derrubado.
+	adm := testdb.CreateUser(t, e.pool, "bia")
+	if _, err := e.pool.Exec(ctx, "UPDATE users SET is_admin = true WHERE id = $1", adm); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.svc.DisableUser(ctx, e.actor, adm); !errors.Is(err, admin.ErrTargetIsAdmin) {
+		t.Fatalf("alvo admin: %v", err)
+	}
+	if len(d.ids) != 1 {
+		t.Fatalf("admin não pode ser derrubado: %v", d.ids)
+	}
+}
+
+func TestAdminActionsRefuseAdminTarget(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	adm := testdb.CreateUser(t, e.pool, "bia")
+	if _, err := e.pool.Exec(ctx, "UPDATE users SET is_admin = true WHERE id = $1", adm); err != nil {
+		t.Fatal(err)
+	}
+	for name, fn := range map[string]func() error{
+		"disable": func() error { return e.svc.DisableUser(ctx, e.actor, adm) },
+		"enable":  func() error { return e.svc.EnableUser(ctx, e.actor, adm) },
+		"force":   func() error { return e.svc.ForcePasswordReset(ctx, e.actor, adm) },
+	} {
+		if err := fn(); !errors.Is(err, admin.ErrTargetIsAdmin) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	var n int
+	if err := e.pool.QueryRow(ctx, "SELECT count(*) FROM audit_log").Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("auditoria = %d", n)
+	}
+}
+
+func TestListInProgressMatches(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	store := match.NewStore(e.pool, nil)
+	var seats [4]replay.PlayerSeat
+	for i, n := range []string{"ana1", "ana2", "ana3", "ana4"} {
+		seats[i] = replay.PlayerSeat{UserID: testdb.CreateUser(t, e.pool, n), DisplayName: n}
+	}
+	id, err := store.Create(ctx, 1, 0, seats)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Partidas encerradas ou abandonadas ficam fora da lista.
+	var others [4]replay.PlayerSeat
+	for i, n := range []string{"bia1", "bia2", "bia3", "bia4"} {
+		others[i] = replay.PlayerSeat{UserID: testdb.CreateUser(t, e.pool, n), DisplayName: n}
+	}
+	closed, err := store.Create(ctx, 2, 0, others)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.pool.Exec(ctx, "UPDATE matches SET status = 'abandoned', end_reason = 'abandoned', finished_at = now() WHERE id = $1", closed); err != nil {
+		t.Fatal(err)
+	}
+	finished, err := store.Create(ctx, 3, 0, others)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.pool.Exec(ctx, "UPDATE matches SET status = 'finished', end_reason = 'game_over', winner_team = 0, score_a = 12, score_b = 3, finished_at = now() WHERE id = $1", finished); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.ListInProgressMatches(ctx, "%%%"); err == nil {
+		t.Fatal("cursor inválido deve falhar")
+	}
+	page, err := e.svc.ListInProgressMatches(ctx, "")
+	if err != nil || len(page.Items) != 1 || page.Items[0].ID != id || len(page.Items[0].Players) != 4 || page.NextCursor != "" {
+		t.Fatalf("page = %+v err=%v", page, err)
 	}
 }
 
@@ -275,7 +425,9 @@ func TestPromoteAdmin(t *testing.T) {
 		t.Fatal(err)
 	}
 	var isAdmin bool
-	_ = e.pool.QueryRow(ctx, "SELECT is_admin FROM users WHERE id = $1", id).Scan(&isAdmin)
+	if err := e.pool.QueryRow(ctx, "SELECT is_admin FROM users WHERE id = $1", id).Scan(&isAdmin); err != nil {
+		t.Fatal(err)
+	}
 	if !isAdmin || e.auditCount(t, "user.promote_admin") != 1 {
 		t.Fatal("promoção não aplicada ou não auditada")
 	}

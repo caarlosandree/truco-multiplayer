@@ -54,3 +54,12 @@ UPDATE matches
 SET status = 'abandoned', finished_at = @now::timestamptz, abandon_reason = @reason::text,
     end_reason = @end_reason::text
 WHERE id = @id AND status = 'in_progress';
+
+-- name: ListInProgressMatches :many
+-- Mais antigas primeiro; cursor por (created_at, id).
+SELECT id, created_at FROM matches
+WHERE status = 'in_progress'
+  AND (sqlc.narg(cursor_created_at)::timestamptz IS NULL
+       OR (created_at, id) > (sqlc.narg(cursor_created_at)::timestamptz, sqlc.narg(cursor_id)::uuid))
+ORDER BY created_at, id
+LIMIT @lim::integer;

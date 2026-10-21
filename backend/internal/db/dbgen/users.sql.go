@@ -115,6 +115,30 @@ func (q *Queries) GetUserByID(ctx context.Context, id string) (User, error) {
 	return i, err
 }
 
+const getUserByIDForUpdate = `-- name: GetUserByIDForUpdate :one
+SELECT id, username, email, display_name, password_hash, is_admin, email_verified_at, disabled_at, must_reset_password, created_at, updated_at FROM users WHERE id = $1 FOR UPDATE
+`
+
+// Trava a linha: a checagem "alvo é admin" não pode ficar velha até a escrita.
+func (q *Queries) GetUserByIDForUpdate(ctx context.Context, id string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByIDForUpdate, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.DisplayName,
+		&i.PasswordHash,
+		&i.IsAdmin,
+		&i.EmailVerifiedAt,
+		&i.DisabledAt,
+		&i.MustResetPassword,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getUserByUsername = `-- name: GetUserByUsername :one
 SELECT id, username, email, display_name, password_hash, is_admin, email_verified_at, disabled_at, must_reset_password, created_at, updated_at FROM users WHERE username = $1
 `

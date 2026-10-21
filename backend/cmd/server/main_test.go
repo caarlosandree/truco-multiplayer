@@ -64,9 +64,30 @@ func TestMigratePromoteAndRecompute(t *testing.T) {
 		t.Fatal(err)
 	}
 	var isAdmin bool
-	_ = pool.QueryRow(ctx, "SELECT is_admin FROM users WHERE username = 'ana'").Scan(&isAdmin)
+	if err := pool.QueryRow(ctx, "SELECT is_admin FROM users WHERE username = 'ana'").Scan(&isAdmin); err != nil {
+		t.Fatal(err)
+	}
 	if !isAdmin {
 		t.Fatal("promote-admin não promoveu")
+	}
+	out.Reset()
+	if err := run(ctx, []string{"demote-admin", "ana"}, env, &out); err == nil || !strings.Contains(err.Error(), "ao menos um administrador") {
+		t.Fatalf("rebaixar o único admin: %v", err)
+	}
+	if err := run(ctx, []string{"demote-admin"}, env, &out); err == nil || !strings.Contains(err.Error(), "uso:") {
+		t.Fatalf("sem argumento: %v", err)
+	}
+	testdb.CreateUser(t, pool, "bia")
+	if err := run(ctx, []string{"promote-admin", "bia"}, env, &out); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if err := run(ctx, []string{"demote-admin", "ana"}, env, &out); err != nil || !strings.Contains(out.String(), "ana não é mais administrador") {
+		t.Fatalf("demote: %v %q", err, out.String())
+	}
+	out.Reset()
+	if err := run(ctx, []string{"demote-admin", "ana"}, env, &out); err != nil || !strings.Contains(out.String(), "ana não é administrador") {
+		t.Fatalf("demote de quem não é admin: %v %q", err, out.String())
 	}
 	out.Reset()
 	if err := run(ctx, []string{"recompute-stats"}, env, &out); err != nil || !strings.Contains(out.String(), "partidas puladas: 0") {

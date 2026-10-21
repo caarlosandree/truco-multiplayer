@@ -33,6 +33,7 @@ type Server struct {
 	deps          Deps
 	log           *slog.Logger
 	mux           *http.ServeMux
+	patterns      []string // padrões registrados, para os testes de varredura do roteador
 	handler       http.Handler
 	static        http.Handler // build do frontend; nil sem STATIC_DIR
 	loginIP       *ratelimit.Limiter
@@ -62,17 +63,23 @@ func New(d Deps) *Server {
 	s.registerAuthRoutes()
 	s.registerReadRoutes()
 	s.registerAdminRoutes()
-	s.mux.HandleFunc("GET /healthz", s.handleHealth)
+	s.handle("GET /healthz", http.HandlerFunc(s.handleHealth))
 	if d.WS != nil {
-		s.mux.Handle("GET /ws", d.WS)
+		s.handle("GET /ws", d.WS)
 	}
 	if d.Config.StaticDir != "" {
 		s.static = spaHandler(d.Config.StaticDir)
 	}
 	// Um único padrão "/" evita o conflito do ServeMux entre "GET /" (SPA) e "/api/" (404 JSON).
-	s.mux.HandleFunc("/", s.handleFallback)
+	s.handle("/", http.HandlerFunc(s.handleFallback))
 	s.handler = s.requestID(s.recoverer(s.accessLog(securityHeaders(s.session(s.originCheck(s.mux))))))
 	return s
+}
+
+// handle registra a rota e guarda o padrão (usado por Patterns nos testes).
+func (s *Server) handle(pattern string, h http.Handler) {
+	s.patterns = append(s.patterns, pattern)
+	s.mux.Handle(pattern, h)
 }
 
 func (s *Server) Handler() http.Handler { return s.handler }

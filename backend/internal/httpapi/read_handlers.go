@@ -15,12 +15,12 @@ import (
 )
 
 func (s *Server) registerReadRoutes() {
-	s.mux.Handle("GET /api/ranking", s.requireAuth(s.handleRanking))
-	s.mux.Handle("GET /api/users", s.requireAuth(s.handleDirectory))
-	s.mux.Handle("GET /api/users/{username}", s.requireAuth(s.handleProfile))
-	s.mux.Handle("GET /api/matches", s.requireAuth(s.handleHistory))
-	s.mux.Handle("GET /api/matches/{id}", s.requireAuth(s.handleMatch))
-	s.mux.Handle("GET /api/matches/{id}/replay", s.requireAuth(s.handleReplay))
+	s.handle("GET /api/ranking", s.requireAuth(s.handleRanking))
+	s.handle("GET /api/users", s.requireAuth(s.handleDirectory))
+	s.handle("GET /api/users/{username}", s.requireAuth(s.handleProfile))
+	s.handle("GET /api/matches", s.requireAuth(s.handleHistory))
+	s.handle("GET /api/matches/{id}", s.requireAuth(s.handleMatch))
+	s.handle("GET /api/matches/{id}/replay", s.requireAuth(s.handleReplay))
 }
 
 func (s *Server) handleRanking(w http.ResponseWriter, r *http.Request, p auth.Principal) {

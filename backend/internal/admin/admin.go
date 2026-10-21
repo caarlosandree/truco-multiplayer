@@ -26,13 +26,26 @@ type MatchAborter interface {
 	Abort(ctx context.Context, matchID string) error
 }
 
+// SessionDropper derruba as conexões em tempo real de um usuário recém-desativado (o Lobby implementa).
+type SessionDropper interface {
+	DropUser(userID string)
+}
+
+type NoopDropper struct{}
+
+func (NoopDropper) DropUser(string) {}
+
 type NoopAborter struct{}
 
 func (NoopAborter) Abort(context.Context, string) error { return nil }
 
 var (
-	ErrNotFound      = errors.New("admin: não encontrado")
-	ErrSelfAction    = errors.New("admin: não é possível aplicar esta ação a si mesmo")
+	ErrNotFound   = errors.New("admin: não encontrado")
+	ErrSelfAction = errors.New("admin: não é possível aplicar esta ação a si mesmo")
+	// ErrTargetIsAdmin: admin não age sobre outro admin; a regra mora no serviço, não no handler.
+	ErrTargetIsAdmin = errors.New("admin: não é possível aplicar esta ação a outro administrador")
+	// ErrNotAdmin: DemoteAdmin sobre quem não é administrador (nada é alterado nem auditado).
+	ErrNotAdmin      = errors.New("admin: o usuário não é administrador")
 	ErrLastAdmin     = errors.New("admin: é preciso manter ao menos um administrador ativo")
 	ErrLastDomain    = errors.New("admin: é preciso manter ao menos um domínio permitido")
 	ErrInvalidDomain = errors.New("admin: domínio inválido")
@@ -46,6 +59,7 @@ type Options struct {
 	Pool    *pgxpool.Pool
 	Auth    *auth.Service
 	Aborter MatchAborter
+	Dropper SessionDropper
 	Now     func() time.Time
 	Logger  *slog.Logger
 }
@@ -55,14 +69,18 @@ type Service struct {
 	q       *dbgen.Queries
 	auth    *auth.Service
 	aborter MatchAborter
+	dropper SessionDropper
 	now     func() time.Time
 	log     *slog.Logger
 }
 
 func NewService(o Options) *Service {
-	s := &Service{pool: o.Pool, q: dbgen.New(o.Pool), auth: o.Auth, aborter: o.Aborter, now: o.Now, log: o.Logger}
+	s := &Service{pool: o.Pool, q: dbgen.New(o.Pool), auth: o.Auth, aborter: o.Aborter, dropper: o.Dropper, now: o.Now, log: o.Logger}
 	if s.aborter == nil {
 		s.aborter = NoopAborter{}
+	}
+	if s.dropper == nil {
+		s.dropper = NoopDropper{}
 	}
 	if s.now == nil {
 		s.now = time.Now
@@ -113,20 +131,44 @@ func requireRow(n int64, err error) error {
 	return nil
 }
 
+// refuseAdminTarget lê o alvo dentro da transação e recusa se for admin, antes de qualquer escrita.
+func refuseAdminTarget(ctx context.Context, q *dbgen.Queries, userID string) error {
+	target, err := q.GetUserByIDForUpdate(ctx, userID)
+	if err != nil {
+		return notFound(err)
+	}
+	if target.IsAdmin {
+		return ErrTargetIsAdmin
+	}
+	return nil
+}
+
 func (s *Service) DisableUser(ctx context.Context, actor auth.Principal, userID string) error {
 	if userID == actor.UserID {
 		return ErrSelfAction
 	}
-	return s.audited(ctx, actor, "user.disable", "user", userID, nil, func(q *dbgen.Queries, now time.Time) error {
+	err := s.audited(ctx, actor, "user.disable", "user", userID, nil, func(q *dbgen.Queries, now time.Time) error {
+		if err := refuseAdminTarget(ctx, q, userID); err != nil {
+			return err
+		}
 		if err := requireRow(q.SetUserDisabled(ctx, dbgen.SetUserDisabledParams{DisabledAt: &now, Now: now, ID: userID})); err != nil {
 			return err
 		}
 		return q.DeleteUserSessions(ctx, userID)
 	})
+	if err != nil {
+		return err
+	}
+	// Só depois do commit: a conexão cai com a conta já desativada de fato.
+	s.dropper.DropUser(userID)
+	return nil
 }
 
 func (s *Service) EnableUser(ctx context.Context, actor auth.Principal, userID string) error {
 	return s.audited(ctx, actor, "user.enable", "user", userID, nil, func(q *dbgen.Queries, now time.Time) error {
+		if err := refuseAdminTarget(ctx, q, userID); err != nil {
+			return err
+		}
 		return requireRow(q.SetUserDisabled(ctx, dbgen.SetUserDisabledParams{DisabledAt: nil, Now: now, ID: userID}))
 	})
 }
@@ -135,6 +177,9 @@ func (s *Service) EnableUser(ctx context.Context, actor auth.Principal, userID s
 // transação. Falhas no envio do link, depois do commit, são apenas registradas em log.
 func (s *Service) ForcePasswordReset(ctx context.Context, actor auth.Principal, userID string) error {
 	err := s.audited(ctx, actor, "user.force_password_reset", "user", userID, nil, func(q *dbgen.Queries, now time.Time) error {
+		if err := refuseAdminTarget(ctx, q, userID); err != nil {
+			return err
+		}
 		if err := requireRow(q.SetMustResetPassword(ctx, dbgen.SetMustResetPasswordParams{Now: now, ID: userID})); err != nil {
 			return err
 		}
@@ -149,31 +194,6 @@ func (s *Service) ForcePasswordReset(ctx context.Context, actor auth.Principal, 
 		s.log.ErrorContext(ctx, "falha ao enviar o link de redefinição forçada", "user_id", userID, "err", err)
 	}
 	return nil
-}
-
-func (s *Service) SetAdmin(ctx context.Context, actor auth.Principal, userID string, isAdmin bool) error {
-	details := map[string]any{"isAdmin": isAdmin}
-	return s.audited(ctx, actor, "user.set_admin", "user", userID, details, func(q *dbgen.Queries, now time.Time) error {
-		if err := q.LockAdmins(ctx); err != nil {
-			return err
-		}
-		if !isAdmin {
-			target, err := q.GetUserByID(ctx, userID)
-			if err != nil {
-				return notFound(err)
-			}
-			if target.IsAdmin && target.DisabledAt == nil {
-				count, err := q.CountActiveAdmins(ctx)
-				if err != nil {
-					return err
-				}
-				if count <= 1 {
-					return ErrLastAdmin
-				}
-			}
-		}
-		return requireRow(q.SetUserAdmin(ctx, dbgen.SetUserAdminParams{IsAdmin: isAdmin, Now: now, ID: userID}))
-	})
 }
 
 type Domain struct {
@@ -244,6 +264,58 @@ func (s *Service) AbortMatch(ctx context.Context, actor auth.Principal, matchID,
 		s.log.ErrorContext(ctx, "falha ao encerrar a sala da partida abortada", "match_id", matchID, "err", err)
 	}
 	return nil
+}
+
+// LiveMatch é uma partida em andamento, sem placar ao vivo.
+type LiveMatch struct {
+	ID        string                `json:"id"`
+	CreatedAt time.Time             `json:"createdAt"`
+	Players   []match.PlayerSummary `json:"players"`
+}
+
+type MatchPage struct {
+	Items      []LiveMatch `json:"items"`
+	NextCursor string      `json:"nextCursor,omitempty"`
+}
+
+// ListInProgressMatches lista as partidas em andamento, da mais antiga para a mais nova.
+func (s *Service) ListInProgressMatches(ctx context.Context, cursor string) (MatchPage, error) {
+	at, id, err := pagination.Decode(cursor)
+	if err != nil {
+		return MatchPage{}, err
+	}
+	rows, err := s.q.ListInProgressMatches(ctx, dbgen.ListInProgressMatchesParams{CursorCreatedAt: at, CursorID: id, Lim: pageSize + 1})
+	if err != nil {
+		return MatchPage{}, err
+	}
+	page := MatchPage{Items: []LiveMatch{}}
+	ids := make([]string, 0, len(rows))
+	for i, r := range rows {
+		if i == pageSize {
+			last := page.Items[pageSize-1]
+			page.NextCursor = pagination.Encode(last.CreatedAt, last.ID)
+			break
+		}
+		page.Items = append(page.Items, LiveMatch{ID: r.ID, CreatedAt: r.CreatedAt, Players: []match.PlayerSummary{}})
+		ids = append(ids, r.ID)
+	}
+	if len(ids) == 0 {
+		return page, nil
+	}
+	players, err := s.q.ListPlayersForMatches(ctx, ids)
+	if err != nil {
+		return MatchPage{}, err
+	}
+	byID := make(map[string]*LiveMatch, len(page.Items))
+	for i := range page.Items {
+		byID[page.Items[i].ID] = &page.Items[i]
+	}
+	for _, p := range players {
+		if m := byID[p.MatchID]; m != nil {
+			m.Players = append(m.Players, match.PlayerSummary{Seat: int(p.Seat), Username: p.Username, DisplayName: p.DisplayName})
+		}
+	}
+	return page, nil
 }
 
 type UserSummary struct {
@@ -327,9 +399,8 @@ func (s *Service) ListAudit(ctx context.Context, cursor string) (AuditPage, erro
 	return page, nil
 }
 
-// PromoteAdmin é usado pelo subcomando `server promote-admin <email|username>` para criar o primeiro admin.
-func PromoteAdmin(ctx context.Context, pool *pgxpool.Pool, login string, now time.Time) error {
-	q := dbgen.New(pool)
+// lookupByLogin resolve e-mail ou username (normalizado) para o usuário.
+func lookupByLogin(ctx context.Context, q *dbgen.Queries, login string) (dbgen.User, error) {
 	login = strings.ToLower(strings.TrimSpace(login))
 	var user dbgen.User
 	var err error
@@ -339,7 +410,19 @@ func PromoteAdmin(ctx context.Context, pool *pgxpool.Pool, login string, now tim
 		user, err = q.GetUserByUsername(ctx, login)
 	}
 	if err != nil {
-		return notFound(err)
+		return dbgen.User{}, notFound(err)
+	}
+	return user, nil
+}
+
+// PromoteAdmin é usado pelo subcomando `server promote-admin <email|username>`; é o único caminho
+// para criar um admin (nenhuma rota HTTP altera is_admin). A FK de audit_log.actor_id exige um
+// usuário, então o ator da auditoria é o próprio alvo, marcado com details {"via":"cli"}.
+func PromoteAdmin(ctx context.Context, pool *pgxpool.Pool, login string, now time.Time) error {
+	q := dbgen.New(pool)
+	user, err := lookupByLogin(ctx, q, login)
+	if err != nil {
+		return err
 	}
 	return db.WithTx(ctx, pool, func(tx pgx.Tx) error {
 		qt := q.WithTx(tx)
@@ -347,5 +430,42 @@ func PromoteAdmin(ctx context.Context, pool *pgxpool.Pool, login string, now tim
 			return err
 		}
 		return writeAudit(ctx, qt, user.ID, "user.promote_admin", "user", user.ID, map[string]any{"via": "cli"}, now)
+	})
+}
+
+// DemoteAdmin é usado por `server demote-admin <email|username>`. Recusa (ErrLastAdmin) rebaixar o
+// último admin ativo. Auditoria: ator = o próprio alvo (FK de audit_log.actor_id), details {"via":"cli"}.
+func DemoteAdmin(ctx context.Context, pool *pgxpool.Pool, login string, now time.Time) error {
+	q := dbgen.New(pool)
+	user, err := lookupByLogin(ctx, q, login)
+	if err != nil {
+		return err
+	}
+	return db.WithTx(ctx, pool, func(tx pgx.Tx) error {
+		qt := q.WithTx(tx)
+		if err := qt.LockAdmins(ctx); err != nil {
+			return err
+		}
+		// Relê já com o lock: o estado pode ter mudado desde a leitura acima.
+		target, err := qt.GetUserByID(ctx, user.ID)
+		if err != nil {
+			return notFound(err)
+		}
+		if !target.IsAdmin {
+			return ErrNotAdmin
+		}
+		if target.DisabledAt == nil {
+			count, err := qt.CountActiveAdmins(ctx)
+			if err != nil {
+				return err
+			}
+			if count <= 1 {
+				return ErrLastAdmin
+			}
+		}
+		if _, err := qt.SetUserAdmin(ctx, dbgen.SetUserAdminParams{IsAdmin: false, Now: now, ID: user.ID}); err != nil {
+			return err
+		}
+		return writeAudit(ctx, qt, user.ID, "user.demote_admin", "user", user.ID, map[string]any{"via": "cli"}, now)
 	})
 }
