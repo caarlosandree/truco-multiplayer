@@ -201,7 +201,12 @@ A 4b mexe em ranking, histórico, perfil, presença, diretório e admin de usuá
 
 - Ranking (todos os períodos e métricas), perfil (posição e estatísticas) e "parceiros frequentes": só partidas `ranked=true` e só usuários `kind='human'`.
 - Histórico: inclui partidas `ranked=false`, com marca "com bots"; bots aparecem pelo nome com selo e **sem link de perfil**.
-- Perfil direto de bot (`/jogadores/bot_seu_ze`, `GET /api/users/{username}`): **404**, mesma regra de usuário desabilitado.
+- Perfil direto de bot (`/jogadores/bot_seu_ze`, `GET /api/users/{username}`): **404**, mesma resposta de usuário desabilitado — mas **também para admin** (hoje `stats/reader.go` `user()` deixa admin ver desabilitado; para bot não há exceção). O mesmo vale para `?user=` do histórico.
+- Histórico (`ListUserMatches`/`ListPlayersForMatches`, `HistoryItem`/`MatchPlayer` em `stats/reader.go`): ganham `ranked` na partida e `bot` no jogador, para `LinhaPartida.vue` marcar "com bots" e o selo.
+- Filtros explícitos (não depender de `email_verified_at IS NOT NULL` excluir bots por acaso): ranking e posições (`ranking.sql`), `ListPartners`, `SearchDirectory`, `SearchUsers` (admin), `ActiveUserByUsername` (convites) e login (`auth/flows.go`) filtram `kind='human'`; ranking e parceiros também `ranked`.
+- **Índice do lobby é um-usuário-uma-sala** (`lobby.go`, inclusive no restore): bots **não entram nesse índice** — o mesmo bot pode estar em várias mesas. A sala sabe que o assento é bot pelo `seatState`, não pelo índice.
+- **Restore:** `NewRestored` hoje põe todos os assentos `connected=false`; assento de bot volta como bot ativo (nunca ausente), e o cálculo de "todos ausentes" (`allAbsentAt`) considera só assentos humanos.
+- `dbgen`: `Email`/`PasswordHash` viram anuláveis no modelo gerado (regen do sqlc); código que lê usuário humano trata o tipo novo.
 - Presença, diretório, convites e admin de usuários: ignoram `kind='bot'`.
 - Migrações: 4b = 0004 (`end_reason`), esta = 0005 (se a 4b tiver criado mais migrações, esta usa o próximo número livre).
 - Login (e qualquer fluxo de autenticação da 4b) recusa `kind='bot'`.
