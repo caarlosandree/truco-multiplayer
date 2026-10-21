@@ -37,6 +37,8 @@ const ERRORS: Record<string, string> = {
   invitee_already_here: 'Essa pessoa já está nesta sala.',
   cannot_invite_self: 'Você não pode convidar a si mesmo.',
   user_not_found: 'Usuário não encontrado.',
+  // Painel admin
+  target_is_admin: 'Não é possível agir sobre uma conta de administrador.',
   // Regras do engine
   invalid_phase: 'Essa ação não vale nesta fase.',
   not_your_turn: 'Não é a sua vez.',

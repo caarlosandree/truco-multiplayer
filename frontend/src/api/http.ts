@@ -14,7 +14,7 @@ export class ApiError extends Error {
   }
 }
 
-type Method = 'GET' | 'POST' | 'PATCH'
+type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE'
 
 const MAX_SAMPLES = 5
 let clockSamples: number[] = []

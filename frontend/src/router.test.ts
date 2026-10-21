@@ -60,3 +60,19 @@ it('convite por e-mail deslogado vai para /entrar preservando a volta', async ()
   expect(router.currentRoute.value.name).toBe('entrar')
   expect(router.currentRoute.value.query.volta).toBe('/entrar-convite/abc')
 })
+
+describe('rotas do painel admin', () => {
+  it('não-admin em /admin/usuarios vai para o lobby', async () => {
+    vi.spyOn(authApi, 'me').mockResolvedValue(ana)
+    const router = createAppRouter(createMemoryHistory())
+    await router.push('/admin/usuarios')
+    expect(router.currentRoute.value.name).toBe('lobby')
+  })
+
+  it('admin entra e /admin redireciona para usuários', async () => {
+    vi.spyOn(authApi, 'me').mockResolvedValue({ ...ana, isAdmin: true })
+    const router = createAppRouter(createMemoryHistory())
+    await router.push('/admin')
+    expect(router.currentRoute.value.name).toBe('admin-usuarios')
+  })
+})

@@ -33,6 +33,18 @@ export function createAppRouter(history: RouterHistory = createWebHistory()): Ro
       { path: '/ranking', name: 'ranking', component: () => import('./views/RankingView.vue') },
       { path: '/jogadores/:username', name: 'jogador', component: () => import('./views/JogadorView.vue') },
       { path: '/jogadores/:username/partidas', name: 'jogador-partidas', component: () => import('./views/PartidasView.vue') },
+      {
+        path: '/admin',
+        component: () => import('./views/admin/AdminLayout.vue'),
+        meta: { admin: true },
+        children: [
+          { path: '', redirect: { name: 'admin-usuarios' } },
+          { path: 'usuarios', name: 'admin-usuarios', component: () => import('./views/admin/AdminUsuariosView.vue') },
+          { path: 'dominios', name: 'admin-dominios', component: () => import('./views/admin/AdminDominiosView.vue') },
+          { path: 'partidas', name: 'admin-partidas', component: () => import('./views/admin/AdminPartidasView.vue') },
+          { path: 'auditoria', name: 'admin-auditoria', component: () => import('./views/admin/AdminAuditoriaView.vue') },
+        ],
+      },
       { path: '/perfil', name: 'perfil', component: () => import('./views/PerfilView.vue') },
       { path: '/:pathMatch(.*)*', redirect: '/' },
     ],
@@ -52,6 +64,8 @@ export function createAppRouter(history: RouterHistory = createWebHistory()): Ro
       const volta = to.name === 'convite' ? `/sala/${normalizeCode(String(to.params.codigo))}` : to.fullPath
       return { name: 'entrar', query: { volta } }
     }
+    // a proteção real está no servidor; aqui só evitamos mostrar o painel a quem não é admin
+    if (to.meta.admin && !session.user?.isAdmin) return { name: 'lobby' }
     if (to.meta.guestOnly && session.isLoggedIn) return sanitizeReturnTo(to.query.volta)
   })
 

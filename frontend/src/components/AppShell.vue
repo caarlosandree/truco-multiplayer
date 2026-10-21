@@ -46,7 +46,7 @@ function reload() {
       </RouterLink>
       <nav
         aria-label="Principal"
-        class="ml-auto"
+        class="ml-auto flex items-center"
       >
         <RouterLink
           to="/ranking"
@@ -54,6 +54,14 @@ function reload() {
           active-class="underline decoration-2 underline-offset-8"
         >
           Ranking
+        </RouterLink>
+        <RouterLink
+          v-if="session.user?.isAdmin"
+          to="/admin"
+          class="inline-flex h-11 items-center rounded-botao-2 px-3 font-bold hover:bg-surface-2"
+          active-class="underline decoration-2 underline-offset-8"
+        >
+          Admin
         </RouterLink>
       </nav>
       <IndicadorConexao />
@@ -66,7 +74,10 @@ function reload() {
           class="textura-lousa grid size-9 place-items-center rounded-placa border border-line text-sm text-giz"
           aria-hidden="true"
         >{{ session.user.displayName.charAt(0).toUpperCase() }}</span>
-        <span class="max-w-40 truncate">{{ session.user.displayName }}</span>
+        <span
+          class="max-w-40 truncate"
+          :class="session.user.isAdmin ? 'max-sm:sr-only' : ''"
+        >{{ session.user.displayName }}</span>
       </RouterLink>
     </header>
     <div
