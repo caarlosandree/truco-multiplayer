@@ -39,6 +39,10 @@ export function setGameSoundPlayer(fn: (ev: Event) => void): void {
 // Um diretor por instância da store (chave: o objeto $state, estável e único por Pinia); fora do state, não reativo.
 const directors = new WeakMap<object, Director>()
 
+function sameHand(a: PlayerView['myHand'], b: PlayerView['myHand']): boolean {
+  return a.length === b.length && a.every((h, i) => h.slot === b[i]?.slot && h.card === b[i]?.card && h.hidden === b[i]?.hidden)
+}
+
 function prefersReducedMotion(): boolean {
   return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 }
@@ -77,11 +81,21 @@ export const useGameStore = defineStore('game', {
     euAjo(): boolean {
       return this.mySeat !== null && this.pendingSeats.includes(this.mySeat)
     },
+    /**
+     * A mesa (`view`, que anda no ritmo das cenas) já mostra a minha mão do estado mais recente. No começo de uma
+     * mão a fila de cenas segura a mão anterior por até MAX_LAG_MS; liberar ações antes disso deixaria clicar numa
+     * carta antiga e mandar o slot dela para a mão nova (ex.: Mão de Ferro, cartas viradas).
+     */
+    viewInSync(): boolean {
+      const v = this.view
+      const l = this.latestView
+      return v !== null && l !== null && v.handNumber === l.handNumber && sameHand(v.myHand, l.myHand)
+    },
     amPending(): boolean {
       return this.mySeat !== null && (this.latest?.pendingSeats ?? []).includes(this.mySeat)
     },
     canPlay(): boolean {
-      return this.phase === 'playing' && this.isMyTurn
+      return this.phase === 'playing' && this.isMyTurn && this.viewInSync
     },
     canCover(): boolean {
       return this.canPlay && this.latestView?.handKind !== 'iron'
@@ -100,20 +114,20 @@ export const useGameStore = defineStore('game', {
     },
     mustRespondRaise(): boolean {
       const v = this.latestView
-      return !!v && v.phase === 'awaiting_raise_response' && v.votingTeam === this.myTeam && this.amPending
+      return !!v && v.phase === 'awaiting_raise_response' && v.votingTeam === this.myTeam && this.amPending && this.viewInSync
     },
     canRaiseBack(): boolean {
       const to = this.latestView?.pending?.toStake
       return this.mustRespondRaise && to !== undefined && nextStake(to) !== null
     },
     mustDecideEleven(): boolean {
-      return this.phase === 'eleven_decision' && this.amPending
+      return this.phase === 'eleven_decision' && this.amPending && this.viewInSync
     },
     mustBurn(): boolean {
-      return this.phase === 'burn_fours' && this.amPending
+      return this.phase === 'burn_fours' && this.amPending && this.viewInSync
     },
     mustChooseCut(): boolean {
-      return (this.phase === 'cut_choice' || this.phase === 'dealer_choice') && this.amPending && (this.latestView?.cutOffer?.length ?? 0) > 0
+      return (this.phase === 'cut_choice' || this.phase === 'dealer_choice') && this.amPending && this.viewInSync && (this.latestView?.cutOffer?.length ?? 0) > 0
     },
     fourSlots(): number[] {
       return (this.latestView?.myHand ?? []).filter((h) => h.card !== undefined && cardFromId(h.card).rank === 4).map((h) => h.slot)

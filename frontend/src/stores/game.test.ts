@@ -81,6 +81,37 @@ it('fases de corte, queima e mão de 11', () => {
   expect(g.mustDecideEleven).toBe(true)
 })
 
+it('enquanto a mesa ainda mostra a mão anterior, nenhuma ação da mão nova é liberada', () => {
+  const g = useGameStore()
+  // mão 14 terminou com cartas na mão (alguém correu); a 15 é Mão de Ferro, já na minha vez
+  g.onState(makeState({ handNumber: 14, phase: 'hand_end', turn: undefined }, []))
+  g.onEvents([{ kind: 'hand_started', seat: 3 }, { kind: 'cards_dealt' }, { kind: 'vira_revealed' }])
+  const oculta = [0, 1, 2].map((slot) => ({ slot, hidden: true }))
+  g.onState(makeState({ handNumber: 15, handKind: 'iron', score: [11, 11], myHand: oculta }))
+  expect(g.view?.handNumber).toBe(14)
+  expect([g.amPending, g.canPlay, g.canRaise]).toEqual([true, false, false])
+  vi.runAllTimers()
+  expect(g.view?.handNumber).toBe(15)
+  expect(g.canPlay).toBe(true)
+
+  // Mão de 11: a decisão espera a mesa mostrar a minha mão nova
+  g.onState(makeState({ handNumber: 15, phase: 'hand_end', turn: undefined }, []))
+  g.onEvents([{ kind: 'hand_started', seat: 0 }, { kind: 'cards_dealt' }])
+  g.onState(makeState({ handNumber: 16, phase: 'eleven_decision', handKind: 'eleven', score: [11, 5], myHand: [{ slot: 0, card: 7, hidden: false }] }))
+  expect(g.mustDecideEleven).toBe(false)
+  vi.runAllTimers()
+  expect(g.mustDecideEleven).toBe(true)
+})
+
+it('dentro da mesma mão, a fila de cenas não trava a vez (a minha mão não mudou)', () => {
+  const g = useGameStore()
+  g.onState(makeState({ turn: 3 }, [3]))
+  g.onEvents([{ kind: 'card_played', seat: 3, card: 20 }])
+  g.onState(makeState({ table: [{ seat: 3, card: 20, covered: false }] }))
+  expect(g.view?.turn).toBe(3)
+  expect(g.canPlay).toBe(true)
+})
+
 it('envia ações de jogo com os payloads do protocolo', async () => {
   const send = vi.fn().mockResolvedValue(undefined)
   setSender(send)
