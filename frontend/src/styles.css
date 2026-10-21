@@ -1,1 +1,343 @@
+/*
+ * Tokens da direção visual C — "Lousa e tentos".
+ * Fonte da verdade: docs/superpowers/specs/2026-10-20-truco-frontend-design-brief.md
+ *
+ * Três camadas:
+ *   1. primitivos  (--p-*)       valores crus da paleta; nunca usados direto em componente;
+ *   2. semânticos  (--color-*, --font-*, --radius-*, --shadow-*, --ease-*, --dur-*) expostos ao Tailwind;
+ *   3. componente  (--botao-*, --campo-*, --modal-*, ...) usados como `bg-(--botao-pri-bg)` etc.
+ *
+ * Tema: o sistema decide (color-scheme: light dark). Cores que mudam com o tema usam light-dark(),
+ * então qualquer subárvore com `data-tema="escuro"` (a mesa, o placar, o painel de ação) ou
+ * `data-tema="claro"` resolve as mesmas utilidades no outro tema sem CSS extra.
+ * As fontes (Kalam e Atkinson Hyperlegible Next) são importadas em main.ts via @fontsource.
+ */
 @import 'tailwindcss';
+
+/* ---------- 1. Primitivos ---------- */
+:root {
+  /* feltro e lousa — iguais nos dois temas */
+  --p-feltro-500: #2b5e46;
+  --p-feltro-700: #1f4734;
+  --p-lousa-950: #121817;
+  --p-lousa-900: #141a19;
+  --p-lousa-800: #1c2422;
+  --p-lousa-700: #26302d;
+  --p-lousa-500: #6a7a73;
+
+  /* giz */
+  --p-giz-100: #edebe3;
+  --p-giz-300: #cdd5d1;
+  --p-giz-amarelo: #f5d76e;
+  --p-giz-rosa: #f2a0b5;
+  --p-giz-rosa-200: #f7b8c8;
+  --p-giz-vermelho: #ff8f80;
+  --p-laranja-400: #ff9a52;
+  --p-laranja-950: #2a1405;
+  --p-vermelho-950: #2a0c08;
+
+  /* cromo claro — "azulejo": cinza-esverdeado frio, mesmo matiz do feltro */
+  --p-azulejo-50: #f2f5f3;
+  --p-azulejo-100: #e2e9e5;
+  --p-azulejo-500: #6f7f78;
+  --p-azulejo-700: #4a5752;
+
+  /* variantes escuras das cores de giz, para texto sobre o cromo claro */
+  --p-ocre-700: #7a5600;
+  --p-framboesa-700: #a12f58;
+  --p-laranja-700: #a3420a;
+  --p-vermelho-700: #b3261e;
+  --p-branco: #ffffff;
+
+  /* texturas (data: é permitido por img-src) */
+  --p-ruido-feltro: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .2 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  --p-po-de-giz: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .05 0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ---------- 2. Semânticos ----------
+ * Declarados em `:root, [data-tema]` para que cada subárvore com tema fixo recalcule os valores
+ * (o Lightning CSS do build converte light-dark() em variáveis-interruptor resolvidas no elemento
+ * que declara; por isso a declaração se repete no escopo). */
+:root,
+[data-tema] {
+  /* mesa — fixos nos dois temas */
+  --s-felt: var(--p-feltro-500);
+  --s-felt-deep: var(--p-feltro-700);
+  --s-lousa: var(--p-lousa-900);
+  --s-lousa-2: var(--p-lousa-800);
+  --s-giz: var(--p-giz-100);
+  --s-giz-muted: var(--p-giz-300);
+
+  /* cromo — mudam com o tema */
+  --s-surface: light-dark(var(--p-azulejo-50), var(--p-lousa-950));
+  --s-surface-2: light-dark(var(--p-azulejo-100), var(--p-lousa-800));
+  --s-ink: light-dark(var(--p-lousa-900), var(--p-giz-100));
+  --s-ink-muted: light-dark(var(--p-azulejo-700), var(--p-giz-300));
+  --s-line: light-dark(var(--p-azulejo-500), var(--p-lousa-500));
+  --s-focus: light-dark(var(--p-lousa-900), var(--p-giz-100));
+
+  /* aposta (truco): preenchimento fixo; texto laranja só via accent-ink */
+  --s-accent: var(--p-laranja-400);
+  --s-on-accent: var(--p-laranja-950);
+  --s-accent-ink: light-dark(var(--p-laranja-700), var(--p-laranja-400));
+
+  --s-danger: light-dark(var(--p-vermelho-700), var(--p-giz-vermelho));
+  --s-on-danger: light-dark(var(--p-branco), var(--p-vermelho-950));
+
+  /* duplas relativas (UI do ponto de vista de quem joga) */
+  --s-nos: light-dark(var(--p-ocre-700), var(--p-giz-amarelo));
+  --s-eles: light-dark(var(--p-framboesa-700), var(--p-giz-rosa-200));
+  /* duplas absolutas (time 0 = assentos 0/2; time 1 = assentos 1/3): só para quem não está sentado */
+  --s-team-0: light-dark(var(--p-ocre-700), var(--p-giz-amarelo));
+  --s-team-1: light-dark(var(--p-framboesa-700), var(--p-giz-rosa-200));
+}
+
+/* Exposição ao Tailwind: `inline` faz a utilidade apontar direto para --s-*, que é recalculado
+ * por escopo. `static` mantém as variáveis --color-* no :root mesmo sem uso (nomes exigidos pela T13). */
+@theme inline static {
+  /* reseta a paleta padrão: só existem as cores desta direção */
+  --color-*: initial;
+
+  --color-felt: var(--s-felt);
+  --color-felt-deep: var(--s-felt-deep);
+  --color-lousa: var(--s-lousa);
+  --color-lousa-2: var(--s-lousa-2);
+  --color-giz: var(--s-giz);
+  --color-giz-muted: var(--s-giz-muted);
+  --color-surface: var(--s-surface);
+  --color-surface-2: var(--s-surface-2);
+  --color-ink: var(--s-ink);
+  --color-ink-muted: var(--s-ink-muted);
+  --color-line: var(--s-line);
+  --color-focus: var(--s-focus);
+  --color-accent: var(--s-accent);
+  --color-on-accent: var(--s-on-accent);
+  --color-accent-ink: var(--s-accent-ink);
+  --color-danger: var(--s-danger);
+  --color-on-danger: var(--s-on-danger);
+  --color-nos: var(--s-nos);
+  --color-eles: var(--s-eles);
+  --color-team-0: var(--s-team-0);
+  --color-team-1: var(--s-team-1);
+}
+
+@theme {
+  --font-display: 'Kalam', 'Comic Neue', 'Segoe Print', cursive;
+  --font-body: 'Atkinson Hyperlegible Next', 'Atkinson Hyperlegible', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-body);
+
+  /* tipografia de exceção (Kalam); o resto usa a escala padrão do Tailwind */
+  --text-placar: 2.5rem;
+  --text-placar--line-height: 1;
+  --text-anuncio: 4.5rem;
+  --text-anuncio--line-height: 1;
+  --text-anuncio-sm: 3rem;
+  --text-anuncio-sm--line-height: 1;
+  --text-valor: 1.25rem;
+  --text-valor--line-height: 1.2;
+
+  /* raios: cartas retas; peças de giz com cantos irregulares, "recortadas à mão" */
+  --radius-card: 6px;
+  --radius-carta-mini: 4px;
+  --radius-botao: 14px 8px 12px 9px;
+  --radius-botao-2: 12px 9px 14px 8px;
+  --radius-aposta: 9px 14px 8px 12px;
+  --radius-campo: 10px 7px 9px 8px;
+  --radius-painel: 16px 10px 14px 12px;
+  --radius-modal: 18px 12px 16px 14px;
+  --radius-toast: 12px 9px 13px 8px;
+  --radius-placa: 10px 6px 9px 7px;
+  --radius-valor: 18px 10px 16px 12px;
+
+  /* sombras curtas */
+  --shadow-card: 0 1px 0 rgb(0 0 0 / 0.25), 0 4px 8px rgb(0 0 0 / 0.4);
+  --shadow-carta-erguida: 0 2px 0 rgb(0 0 0 / 0.2), 0 10px 16px rgb(0 0 0 / 0.45);
+  --shadow-modal: 0 12px 32px rgb(0 0 0 / 0.35);
+  --shadow-toast: 0 6px 16px rgb(0 0 0 / 0.25);
+
+  /* movimento */
+  --ease-giz: cubic-bezier(0.37, 0, 0.63, 1);
+  --ease-desliza: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-sai: cubic-bezier(0.55, 0, 1, 0.45);
+  --ease-padrao: cubic-bezier(0.2, 0, 0, 1);
+  --ease-quique: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* durações e camadas não viram utilidades; use como `duration-(--dur-medio)` e `z-(--z-modal)` */
+:root {
+  color-scheme: light dark;
+
+  --dur-instante: 80ms;
+  --dur-rapido: 150ms;
+  --dur-medio: 250ms;
+  --dur-carta: 300ms;
+  --dur-tento: 400ms;
+  --dur-truco: 600ms;
+
+  --z-mesa: 0;
+  --z-carta: 10;
+  --z-carta-voo: 20;
+  --z-balao: 30;
+  --z-anuncio: 40;
+  --z-painel: 50;
+  --z-banner: 60;
+  --z-cabecalho: 70;
+  --z-modal: 100;
+  --z-toast: 110;
+
+  --textura-feltro: radial-gradient(ellipse 110% 85% at 50% 50%, rgb(0 0 0 / 0) 55%, rgb(0 0 0 / 0.35)), var(--p-ruido-feltro);
+  --textura-lousa: var(--p-po-de-giz);
+}
+
+/* subárvores com tema fixo: a mesa é sempre escura; usado também na prévia */
+[data-tema='escuro'] {
+  color-scheme: dark;
+}
+[data-tema='claro'] {
+  color-scheme: light;
+}
+
+/* ---------- 3. Componente (também por escopo, pelo mesmo motivo) ---------- */
+:root,
+[data-tema] {
+  /* botão */
+  --botao-altura: 2.75rem;
+  --botao-pri-bg: var(--s-ink);
+  --botao-pri-fg: var(--s-surface);
+  --botao-pri-bg-hover: color-mix(in oklab, var(--s-ink) 86%, var(--s-surface));
+  --botao-pri-bg-active: color-mix(in oklab, var(--s-ink) 76%, var(--s-surface));
+  --botao-sec-bg: transparent;
+  --botao-sec-fg: var(--s-ink);
+  --botao-sec-borda: color-mix(in oklab, var(--s-ink) 55%, transparent);
+  --botao-sec-bg-hover: color-mix(in oklab, var(--s-ink) 8%, transparent);
+  --botao-sec-bg-active: color-mix(in oklab, var(--s-ink) 14%, transparent);
+  --botao-aposta-bg: var(--s-accent);
+  --botao-aposta-fg: var(--s-on-accent);
+  --botao-aposta-bg-hover: color-mix(in oklab, var(--s-accent) 88%, white);
+  --botao-aposta-bg-active: color-mix(in oklab, var(--s-accent) 88%, black);
+  --botao-perigo-bg: var(--s-danger);
+  --botao-perigo-fg: var(--s-on-danger);
+  --botao-perigo-bg-hover: color-mix(in oklab, var(--s-danger) 88%, var(--s-ink));
+  --botao-perigo-bg-active: color-mix(in oklab, var(--s-danger) 78%, var(--s-ink));
+  --botao-fantasma-bg-hover: var(--s-surface-2);
+  --botao-desabilitado-opacidade: 0.45;
+  --botao-pressao-y: 1px;
+
+  /* campo */
+  --campo-altura: 2.75rem;
+  --campo-bg: var(--s-surface);
+  --campo-fg: var(--s-ink);
+  --campo-borda: var(--s-line);
+  --campo-borda-erro: var(--s-danger);
+  --campo-placeholder: var(--s-ink-muted);
+
+  /* modal */
+  --modal-bg: var(--s-surface);
+  --modal-fg: var(--s-ink);
+  --modal-scrim: rgb(14 19 18 / 0.6);
+  --modal-largura: 28rem;
+
+  /* toast */
+  --toast-info-bg: var(--s-ink);
+  --toast-info-fg: var(--s-surface);
+  --toast-erro-bg: var(--s-danger);
+  --toast-erro-fg: var(--s-on-danger);
+
+  /* assento (sobre o feltro) */
+  --assento-placa-bg: var(--s-lousa);
+  --assento-placa-fg: var(--s-giz);
+  --assento-vez: var(--s-giz);
+  --assento-ausente-opacidade: 0.5;
+
+  /* carta */
+  --carta-largura-mao: 5.25rem;
+  --carta-largura-mesa: 4.25rem;
+  --carta-largura-vira: 3rem;
+  --carta-ergue-y: -12px;
+
+  /* placar e tentos */
+  --placar-bg: var(--s-lousa);
+  --tento-nos: var(--p-giz-amarelo);
+  --tento-eles: var(--p-giz-rosa);
+  --tento-traco: 3px;
+  --valor-borda: color-mix(in oklab, var(--s-giz) 60%, transparent);
+
+  /* prazo */
+  --prazo-traco: 3px;
+  --prazo-trilho: color-mix(in oklab, var(--s-giz) 22%, transparent);
+  --prazo-cor: var(--s-giz);
+  --prazo-alerta: var(--p-giz-vermelho);
+
+  /* painel de ação e balão */
+  --painel-bg: var(--s-lousa-2);
+  --painel-fg: var(--s-giz);
+  --painel-dica: var(--s-giz-muted);
+  --balao-bg: var(--s-lousa);
+  --balao-fg: var(--s-giz);
+}
+
+/* ---------- utilidades de textura ---------- */
+@utility textura-feltro {
+  background-color: var(--s-felt);
+  background-image: var(--textura-feltro);
+}
+@utility textura-lousa {
+  background-color: var(--s-lousa);
+  background-image: var(--textura-lousa);
+}
+
+/* ---------- base ---------- */
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background-color: var(--s-surface);
+    color: var(--s-ink);
+    font-family: var(--font-body);
+    font-size: 1rem;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  :focus-visible {
+    outline: 3px solid var(--s-focus);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background-color: color-mix(in oklab, var(--s-accent) 45%, transparent);
+  }
+  button,
+  [role='button'] {
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+}
+
+/* sem movimento: durações caem a zero; o giz aparece pronto, nada sacode */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-instante: 0ms;
+    --dur-rapido: 0ms;
+    --dur-medio: 0ms;
+    --dur-carta: 50ms;
+    --dur-tento: 0ms;
+    --dur-truco: 0ms;
+    --carta-ergue-y: -4px;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

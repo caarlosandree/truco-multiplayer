@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
+import './assets/fonts/fonts.css'
 import './styles.css'
 import { installSfx } from './audio/install'
 
