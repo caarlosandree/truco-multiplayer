@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/bot"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/clock"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/engine"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/protocol"
@@ -41,6 +42,14 @@ type Room struct {
 	pauseUntil time.Time                 // fim da pausa entre mãos
 	offered    *engine.Team              // dupla contra a qual o W.O. está disponível
 
+	// Bots (spec §4.3, §5.1, §5.4).
+	startedWithBots   bool                    // alguma cadeira era de bot no início: a partida nunca conta
+	everBotControlled [4]bool                 // só para o aviso no log, uma vez por assento
+	seatEvents        [4][]engine.Event       // eventos já filtrados por assento, na partida inteira
+	signalsSeen       []bot.SignalSeen        // sinais vistos na mesa
+	botReqs           map[engine.Seat]*botReq // pedidos de decisão de bot da janela corrente
+	botSeq            uint64
+
 	timer clock.Timer
 	gen   uint64
 }
@@ -49,7 +58,7 @@ func New(o Options) *Room {
 	if o.Log == nil {
 		o.Log = slog.New(slog.DiscardHandler)
 	}
-	return &Room{opt: o, ctx: context.Background(), status: protocol.RoomWaiting}
+	return &Room{opt: o, ctx: context.Background(), status: protocol.RoomWaiting, botReqs: map[engine.Seat]*botReq{}}
 }
 
 func (r *Room) Closed() bool { return r.closed }
@@ -88,6 +97,8 @@ func (r *Room) Handle(ctx context.Context, m Msg) {
 		if m.gen != r.gen {
 			return // disparo de um timer já substituído
 		}
+	case botDecided:
+		r.botResult(m)
 	case Wake:
 	}
 	r.settle()

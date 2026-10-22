@@ -25,9 +25,11 @@ func (r *Room) settle() {
 				r.abandonAllAbsent()
 				return
 			}
-			if r.runDue(now) {
+			r.pruneBotReqs()
+			if r.runBotDue(now) || r.runDue(now) {
 				continue
 			}
+			r.driveBots(now)
 		}
 		r.offerForfeit(now)
 		r.reschedule(now)
@@ -64,7 +66,7 @@ func (r *Room) runDue(now time.Time) bool {
 			delete(r.deadlines, s)
 			continue
 		}
-		r.opt.Log.Warn("timeout aplicado", "match_id", r.matchID, "seat", s, "action", a.Kind)
+		r.opt.Log.Warn("timeout aplicado", "match_id", r.matchID, "seat", s, "action", a.Kind, "bot", r.botControlled(s))
 		err := r.apply(a, replay.SourceTimeout)
 		switch {
 		case errors.Is(err, errPersist):
@@ -77,7 +79,7 @@ func (r *Room) runDue(now time.Time) bool {
 			delete(r.deadlines, s)
 			return false
 		}
-		if st := r.seats[s]; st != nil && r.status == protocol.RoomPlaying {
+		if st := r.seats[s]; st != nil && !st.bot && r.status == protocol.RoomPlaying { // bot não acumula timeout
 			st.timeouts++
 		}
 		return true
@@ -123,6 +125,11 @@ func (r *Room) wakeups(consider func(time.Time)) {
 		}
 		for _, d := range r.deadlines {
 			consider(d)
+		}
+		for _, req := range r.botReqs {
+			if req.decision != nil {
+				consider(req.readyAt)
+			}
 		}
 		for _, st := range r.seats {
 			if st != nil && !st.absentSince.IsZero() {

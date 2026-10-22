@@ -3,6 +3,7 @@ package room
 import (
 	"time"
 
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/bot"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/engine"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/protocol"
 )
@@ -23,5 +24,6 @@ func (r *Room) signal(seat engine.Seat, msg protocol.ClientMessage) {
 		return
 	}
 	st.lastSignal = now
+	r.signalsSeen = append(r.signalsSeen, bot.SignalSeen{Seat: seat, Signal: bot.Signal(p.ID), HandNumber: r.game.HandNumber})
 	r.broadcast(protocol.SignalBroadcast(seat, p.ID))
 }

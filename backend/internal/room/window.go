@@ -10,7 +10,10 @@ import (
 // absentAfterTimeouts timeouts seguidos tornam um jogador conectado ausente.
 const absentAfterTimeouts = 3
 
-func (st *seatState) isAbsent() bool { return !st.connected || st.timeouts >= absentAfterTimeouts }
+// isAbsent: bot nunca fica ausente.
+func (st *seatState) isAbsent() bool {
+	return !st.bot && (!st.connected || st.timeouts >= absentAfterTimeouts)
+}
 
 // pendingSeats são os assentos com decisão pendente no estado.
 func pendingSeats(g engine.GameState) []engine.Seat {

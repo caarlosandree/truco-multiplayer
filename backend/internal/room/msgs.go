@@ -1,6 +1,7 @@
 package room
 
 import (
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/bot"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/engine"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/protocol"
 )
@@ -51,6 +52,14 @@ type Wake struct{}
 
 type tick struct{ gen uint64 }
 
+// botDecided é o resultado do cálculo de um bot, carimbado com a janela e a geração do pedido.
+type botDecided struct {
+	gen    uint64
+	window string
+	seat   engine.Seat
+	d      bot.Decision
+}
+
 func (Join) roomMsg()         {}
 func (Vacate) roomMsg()       {}
 func (Command) roomMsg()      {}
@@ -60,3 +69,4 @@ func (Abort) roomMsg()        {}
 func (Stop) roomMsg()         {}
 func (Wake) roomMsg()         {}
 func (tick) roomMsg()         {}
+func (botDecided) roomMsg()   {}

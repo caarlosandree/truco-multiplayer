@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/bot"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/clock"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/engine"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/protocol"
@@ -61,6 +62,12 @@ type Timing struct {
 // BotIdentity é a conta de um bot (linha de users com kind='bot') que a sala pode sentar.
 type BotIdentity struct{ UserID, DisplayName string }
 
+// Thinker calcula a decisão de um bot fora do ator: nunca bloqueia e chama done uma única vez, de qualquer
+// goroutine. done pode entregar uma Decision vazia (fallback que falhou); a sala valida o resultado.
+type Thinker interface {
+	Think(in bot.Input, deadline time.Time, done func(bot.Decision))
+}
+
 type Options struct {
 	ID       string
 	Code     string
@@ -74,5 +81,8 @@ type Options struct {
 	Rand     io.Reader // seed e dealer de cada partida (crypto/rand em produção)
 	Log      *slog.Logger
 	Bots     []BotIdentity // roster: a sala escolhe os de menor índice ainda não sentados nela
-	Post     func(Msg)     // entrega mensagens (disparos de timer) na caixa de entrada do ator
+	Post     func(Msg)     // entrega mensagens (disparos de timer, resultados de bot) na caixa de entrada do ator
+
+	Thinker  Thinker              // nil: os bots não calculam e valem os prazos (rede de segurança)
+	BotDelay func() time.Duration // pausa de "pensar" de cada decisão de bot; nil = sem pausa
 }

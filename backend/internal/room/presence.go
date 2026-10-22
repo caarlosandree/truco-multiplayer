@@ -129,19 +129,27 @@ func (r *Room) claimForfeit(seat engine.Seat, seq int64) {
 	}
 }
 
-// allAbsentAt é quando a partida deve ser abandonada por estarem todos ausentes.
+// allAbsentAt é quando a partida deve ser abandonada por estarem todos os humanos ausentes.
 func (r *Room) allAbsentAt() (time.Time, bool) {
 	if r.status != protocol.RoomPlaying {
 		return time.Time{}, false
 	}
 	var latest time.Time
+	humans := 0
 	for _, st := range r.seats {
-		if st == nil || st.absentSince.IsZero() {
+		if st == nil || st.bot { // só humanos contam: bot nunca fica ausente
+			continue
+		}
+		if st.absentSince.IsZero() {
 			return time.Time{}, false
 		}
+		humans++
 		if st.absentSince.After(latest) {
 			latest = st.absentSince
 		}
+	}
+	if humans == 0 {
+		return time.Time{}, false
 	}
 	return latest.Add(r.opt.Timing.AbsenceBudget), true
 }

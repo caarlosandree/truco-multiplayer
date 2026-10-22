@@ -28,6 +28,8 @@ type Restored struct {
 	Players [4]replay.PlayerSeat
 	State   engine.GameState
 	NextPly int
+	Events  [4][]engine.Event // eventos visíveis a cada assento, reprocessados das ações gravadas
+	Bots    [4]bool           // cadeiras de bot
 }
 
 // NewRestored recria a sala de uma partida em andamento: em jogo, todos desconectados
@@ -37,8 +39,15 @@ func NewRestored(o Options, rs Restored) *Room {
 	now := r.now()
 	r.status, r.matchID, r.game, r.nextPly = protocol.RoomPlaying, rs.MatchID, rs.State, rs.NextPly
 	for s, p := range rs.Players {
+		if isBot := rs.Bots[s] || p.Bot; isBot {
+			r.seats[s] = &seatState{userID: p.UserID, name: p.DisplayName, connected: true, ready: true, bot: true}
+			r.startedWithBots = true
+			continue
+		}
 		r.seats[s] = &seatState{userID: p.UserID, name: p.DisplayName, disconnectedAt: now}
 	}
+	r.host = r.firstHuman()
+	r.seatEvents = rs.Events
 	r.syncWindow(now)
 	return r
 }
@@ -82,8 +91,10 @@ func (r *Room) startMatch() {
 		return
 	}
 	r.status, r.matchID, r.game, r.nextPly = protocol.RoomPlaying, id, engine.NewGame(enginePlayers, seed, dealer), 0
+	r.resetBotState()
 	for _, st := range r.seats {
 		st.timeouts, st.absentSince, st.absentTotal = 0, time.Time{}, 0
+		r.startedWithBots = r.startedWithBots || st.bot
 	}
 	r.opt.Log.Info("partida iniciada", "match_id", id)
 	r.publish()
@@ -116,7 +127,7 @@ func (r *Room) apply(a engine.Action, src replay.Source) error {
 	cancel()
 	if errors.Is(err, ErrMatchClosed) {
 		r.opt.Log.Warn("partida encerrada fora da sala", "match_id", r.matchID)
-		r.endMatch(protocol.EndAborted, nil)
+		r.endMatch(protocol.EndAborted, nil, false)
 		return errMatchGone
 	}
 	if errors.Is(err, ErrLogDiverged) {
@@ -149,7 +160,7 @@ func (r *Room) abandonDiverged() {
 	if err != nil && !errors.Is(err, ErrMatchClosed) {
 		r.opt.Log.Error("falha ao abandonar partida divergente", "match_id", r.matchID, "err", err)
 	}
-	r.endMatch(protocol.EndAborted, nil)
+	r.endMatch(protocol.EndAborted, nil, false)
 }
 
 func (r *Room) stateFor(seat engine.Seat) protocol.ServerMessage {
@@ -158,10 +169,14 @@ func (r *Room) stateFor(seat engine.Seat) protocol.ServerMessage {
 
 func (r *Room) broadcastGame(evs []engine.Event) {
 	for s, st := range r.seats {
-		if st == nil || st.bot {
+		if st == nil {
 			continue
 		}
 		seat := engine.Seat(s)
+		r.seatEvents[s] = append(r.seatEvents[s], engine.FilterEvents(evs, seat)...) // memória de cada assento (os bots só sabem isto)
+		if st.bot {
+			continue
+		}
 		if msg, ok := protocol.EventsMessage(evs, seat); ok {
 			r.opt.Out.Send(st.userID, msg)
 		}
@@ -179,9 +194,11 @@ func (r *Room) broadcastState() {
 
 // finish grava o resultado. Falha de Finish não trava a sala: o Recover conclui no próximo boot.
 func (r *Room) finish(last engine.Action) {
+	// Conta no ranking só se nenhuma cadeira nasceu de bot e, ao fim, ou foi W.O. ou nenhum humano estava com
+	// um bot no controle (spec §6.2). Decidido aqui, antes de o estado da sala voltar à espera.
+	ranked := !r.startedWithBots && (last.Kind == engine.ActSysForfeit || !r.anyHumanBotControlled())
 	ctx, cancel := r.storeCtx()
-	// ranked fixo em true até a T10 calcular.
-	if err := r.opt.Store.Finish(ctx, r.matchID, true); err != nil {
+	if err := r.opt.Store.Finish(ctx, r.matchID, ranked); err != nil {
 		r.opt.Log.Error("falha ao finalizar a partida; o Recover conclui no próximo boot", "match_id", r.matchID, "err", err)
 	}
 	cancel()
@@ -189,12 +206,12 @@ func (r *Room) finish(last engine.Action) {
 	if last.Kind == engine.ActSysForfeit {
 		reason = protocol.EndForfeit
 	}
-	r.endMatch(reason, r.game.Winner)
+	r.endMatch(reason, r.game.Winner, ranked)
 }
 
-func (r *Room) endMatch(reason protocol.EndReason, winner *engine.Team) {
-	r.opt.Log.Info("partida encerrada", "match_id", r.matchID, "reason", reason)
-	r.broadcast(protocol.MatchEnded(reason, winner, r.game.Score, false))
+func (r *Room) endMatch(reason protocol.EndReason, winner *engine.Team, ranked bool) {
+	r.opt.Log.Info("partida encerrada", "match_id", r.matchID, "reason", reason, "ranked", ranked)
+	r.broadcast(protocol.MatchEnded(reason, winner, r.game.Score, ranked))
 	r.resetToWaiting()
 }
 
@@ -203,6 +220,7 @@ func (r *Room) resetToWaiting() {
 	now := r.now()
 	r.status, r.matchID, r.game, r.nextPly = protocol.RoomWaiting, "", engine.GameState{}, 0
 	r.window, r.deadlines, r.pauseUntil, r.offered = "", nil, time.Time{}, nil
+	r.resetBotState()
 	for _, st := range r.seats {
 		if st == nil {
 			continue
@@ -221,7 +239,7 @@ func (r *Room) abort(m Abort) {
 		return
 	}
 	r.opt.Log.Info("partida abortada", "match_id", r.matchID, "reason", reason)
-	r.endMatch(protocol.EndAborted, nil)
+	r.endMatch(protocol.EndAborted, nil, false)
 }
 
 func (r *Room) playerAction(seat engine.Seat, msg protocol.ClientMessage) {
@@ -247,4 +265,10 @@ func (r *Room) playerAction(seat engine.Seat, msg protocol.ClientMessage) {
 	default:
 		r.opt.Out.Send(user, protocol.ErrorMessage(err, msg.Seq))
 	}
+}
+
+// resetBotState esquece a memória dos bots da partida anterior (eventos, sinais, pedidos em voo).
+func (r *Room) resetBotState() {
+	r.seatEvents, r.signalsSeen, r.botReqs = [4][]engine.Event{}, nil, map[engine.Seat]*botReq{}
+	r.everBotControlled, r.startedWithBots = [4]bool{}, false
 }

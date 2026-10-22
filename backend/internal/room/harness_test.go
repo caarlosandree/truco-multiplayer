@@ -37,6 +37,7 @@ type fakeStore struct {
 	records    map[string]*replay.Record
 	order      []string
 	abandoned  map[string]string
+	ranked     map[string]bool // ranked recebido por Finish, por partida
 	failCreate error
 	failAppend error
 	failFinish error
@@ -44,7 +45,7 @@ type fakeStore struct {
 }
 
 func newFakeStore() *fakeStore {
-	return &fakeStore{records: map[string]*replay.Record{}, abandoned: map[string]string{}}
+	return &fakeStore{records: map[string]*replay.Record{}, abandoned: map[string]string{}, ranked: map[string]bool{}}
 }
 
 func (f *fakeStore) Create(_ context.Context, seed uint64, dealer engine.Seat, players [4]replay.PlayerSeat) (string, error) {
@@ -76,7 +77,7 @@ func (f *fakeStore) AppendAction(_ context.Context, id string, ply int, a engine
 	return nil
 }
 
-func (f *fakeStore) Finish(_ context.Context, id string, _ bool) error {
+func (f *fakeStore) Finish(_ context.Context, id string, ranked bool) error {
 	if f.failFinish != nil {
 		return f.failFinish
 	}
@@ -89,6 +90,7 @@ func (f *fakeStore) Finish(_ context.Context, id string, _ bool) error {
 		return errors.New("partida não terminou")
 	}
 	rec.Status = replay.StatusFinished
+	f.ranked[id] = ranked
 	return nil
 }
 

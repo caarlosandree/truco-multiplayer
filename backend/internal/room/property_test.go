@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/bot"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/engine"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/protocol"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/replay"
@@ -23,9 +24,25 @@ func TestRandomMatchesStayConsistent(t *testing.T) {
 
 func runRandomMatch(t *testing.T, seed uint64) {
 	key := [32]byte{byte(seed), byte(seed >> 8)}
-	h := newHarness(t, func(o *room.Options) { o.Rand = rand.NewChaCha8(key) })
 	rng := rand.New(rand.NewPCG(seed, 99))
-	h.startMatch()
+	// Os bots escolhem uma ação legal qualquer (inclusive aumentos e cartas cobertas); a pausa varia.
+	thinker := &fakeThinker{auto: func(in bot.Input) bot.Decision { return bot.Decision{Action: in.Legal[rng.IntN(len(in.Legal))]} }}
+	delay := time.Duration(seed%3) * 500 * time.Millisecond
+	h := newHarness(t, func(o *room.Options) { o.Rand = rand.NewChaCha8(key) }, withBots(thinker, delay))
+	if seed%2 == 0 { // partidas pares: o assento 3 é de um bot
+		for i := range 3 {
+			h.join(i)
+		}
+		for _, u := range users[1:3] {
+			h.cmd(u, protocol.TypeSetReady, protocol.SetReadyPayload{Ready: true})
+		}
+		startWithBots(h, "u0")
+		if h.room.Status() != protocol.RoomPlaying {
+			t.Fatalf("seed %d: a partida com bot deveria ter começado", seed)
+		}
+	} else {
+		h.startMatch()
+	}
 	matchID := h.store.last().ID
 	online := [4]bool{true, true, true, true}
 	for step := 0; h.room.Status() == protocol.RoomPlaying && !h.room.Closed(); step++ {

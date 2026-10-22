@@ -367,8 +367,13 @@ func (r *Room) roomState(seat engine.Seat) protocol.ServerMessage {
 	for s, st := range r.seats {
 		if st != nil {
 			p.Seats[s] = &protocol.SeatInfo{UserID: st.userID, DisplayName: st.name, Ready: st.ready,
-				Connected: st.connected, Bot: st.bot, Absent: r.status == protocol.RoomPlaying && !st.absentSince.IsZero()}
+				Connected: st.connected, Bot: st.bot, Absent: r.status == protocol.RoomPlaying && !st.absentSince.IsZero(),
+				BotPlaying: !st.bot && r.botControlled(engine.Seat(s))}
 		}
+	}
+	if r.status == protocol.RoomPlaying {
+		ranked := !r.startedWithBots && !r.anyHumanBotControlled()
+		p.Ranked = &ranked
 	}
 	return protocol.Message(protocol.MsgRoomState, p)
 }
