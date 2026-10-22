@@ -16,7 +16,8 @@ func (r *Room) seatOf(userID string) (engine.Seat, bool) {
 	return 0, false
 }
 
-func (r *Room) members() int {
+// occupied conta os assentos ocupados (humanos e bots).
+func (r *Room) occupied() int {
 	n := 0
 	for _, st := range r.seats {
 		if st != nil {
@@ -26,14 +27,29 @@ func (r *Room) members() int {
 	return n
 }
 
-func (r *Room) firstOccupied() engine.Seat {
+// humans conta os assentos humanos: só eles mantêm a sala viva.
+func (r *Room) humans() int {
+	n := 0
+	for _, st := range r.seats {
+		if st != nil && !st.bot {
+			n++
+		}
+	}
+	return n
+}
+
+// firstHuman é o primeiro assento humano (o host nunca é bot).
+func (r *Room) firstHuman() engine.Seat {
 	for s, st := range r.seats {
-		if st != nil {
+		if st != nil && !st.bot {
 			return engine.Seat(s)
 		}
 	}
 	return 0
 }
+
+// isVacant: cadeira vazia ou de bot (um humano pode tomá-la).
+func (r *Room) isVacant(s engine.Seat) bool { return r.seats[s] == nil || r.seats[s].bot }
 
 func (r *Room) reply(userID, code string, seq int64) {
 	r.opt.Out.Send(userID, protocol.ErrorMsg(code, seq))
@@ -41,7 +57,7 @@ func (r *Room) reply(userID, code string, seq int64) {
 
 func (r *Room) broadcast(msg protocol.ServerMessage) {
 	for _, st := range r.seats {
-		if st != nil {
+		if st != nil && !st.bot {
 			r.opt.Out.Send(st.userID, msg)
 		}
 	}
@@ -69,8 +85,8 @@ func (r *Room) join(m Join) {
 		fail(code)
 		return
 	}
-	r.seats[seat] = &seatState{userID: m.UserID, name: m.DisplayName, connected: true}
-	if r.members() == 1 {
+	r.seats[seat] = &seatState{userID: m.UserID, name: m.DisplayName, connected: true} // substitui o bot, se houver
+	if r.humans() == 1 {
 		r.host = seat
 	}
 	r.opt.Registry.Seated(r.opt.ID, m.UserID)
@@ -93,7 +109,7 @@ func (r *Room) vacate(m Vacate) {
 }
 
 func (r *Room) pickSeat(want *engine.Seat, invite bool) (engine.Seat, string) {
-	if r.members() == 4 {
+	if r.humans() == 4 {
 		if invite {
 			return 0, protocol.CodeInviteExpired
 		}
@@ -103,7 +119,7 @@ func (r *Room) pickSeat(want *engine.Seat, invite bool) (engine.Seat, string) {
 		if *want > 3 {
 			return 0, protocol.CodeBadRequest
 		}
-		if r.seats[*want] != nil {
+		if !r.isVacant(*want) {
 			if invite {
 				return r.freeSeat(), ""
 			}
@@ -114,9 +130,15 @@ func (r *Room) pickSeat(want *engine.Seat, invite bool) (engine.Seat, string) {
 	return r.freeSeat(), ""
 }
 
+// freeSeat é o primeiro assento vazio; sem nenhum, o bot de menor número.
 func (r *Room) freeSeat() engine.Seat {
 	for s, st := range r.seats {
 		if st == nil {
+			return engine.Seat(s)
+		}
+	}
+	for s, st := range r.seats {
+		if st != nil && st.bot {
 			return engine.Seat(s)
 		}
 	}
@@ -138,6 +160,8 @@ func (r *Room) command(m Command) {
 		r.setReady(seat, m.Message)
 	case protocol.TypeKick:
 		r.kick(seat, m.Message)
+	case protocol.TypeStartWithBots:
+		r.startWithBots(seat, m.Message)
 	case protocol.TypeClaimForfeit:
 		r.claimForfeit(seat, m.Message.Seq)
 	case protocol.TypeSignal:
@@ -176,7 +200,7 @@ func (r *Room) takeSeat(seat engine.Seat, msg protocol.ClientMessage) {
 		r.opt.Out.Send(st.userID, r.roomState(seat))
 		return
 	}
-	if r.seats[p.Seat] != nil {
+	if !r.isVacant(p.Seat) {
 		r.reply(st.userID, protocol.CodeSeatTaken, msg.Seq)
 		return
 	}
@@ -224,16 +248,66 @@ func (r *Room) kick(seat engine.Seat, msg protocol.ClientMessage) {
 func (r *Room) removeSeat(seat engine.Seat, reason protocol.LeftReason) {
 	st := r.seats[seat]
 	r.seats[seat] = nil
-	r.opt.Out.Send(st.userID, protocol.LeftRoom(reason))
-	r.opt.Registry.Released(r.opt.ID, st.userID)
-	if r.members() == 0 {
+	if !st.bot { // bot nunca entra no índice do lobby
+		r.opt.Out.Send(st.userID, protocol.LeftRoom(reason))
+		r.opt.Registry.Released(r.opt.ID, st.userID)
+	}
+	if r.humans() == 0 {
+		clear(r.seats[:]) // bots não mantêm a sala viva
 		r.destroy()
 		return
 	}
 	if r.host == seat {
-		r.host = r.firstOccupied()
+		r.host = r.firstHuman()
 	}
 	r.publish()
+}
+
+// startWithBots (só o host, em espera): senta um bot em cada cadeira vazia, marca o host pronto e
+// deixa maybeStart decidir (a partida só começa com todos os humanos prontos).
+func (r *Room) startWithBots(seat engine.Seat, msg protocol.ClientMessage) {
+	user := r.seats[seat].userID
+	switch {
+	case r.status != protocol.RoomWaiting:
+		r.reply(user, protocol.CodeNotWaiting, msg.Seq)
+		return
+	case seat != r.host:
+		r.reply(user, protocol.CodeNotHost, msg.Seq)
+		return
+	}
+	var empty []engine.Seat
+	for s, st := range r.seats {
+		if st == nil {
+			empty = append(empty, engine.Seat(s))
+		}
+	}
+	if len(empty) == 0 {
+		r.reply(user, protocol.CodeNoEmptySeat, msg.Seq)
+		return
+	}
+	free := r.freeBots()
+	if len(free) < len(empty) {
+		r.opt.Log.Error("roster de bots insuficiente", "precisa", len(empty), "tem", len(free))
+		r.reply(user, protocol.CodeInternal, msg.Seq)
+		return
+	}
+	for i, s := range empty {
+		r.seats[s] = &seatState{userID: free[i].UserID, name: free[i].DisplayName, connected: true, ready: true, bot: true}
+	}
+	r.seats[seat].ready = true
+	r.publish()
+	r.maybeStart()
+}
+
+// freeBots são as identidades do roster ainda não sentadas nesta sala, em ordem de índice.
+func (r *Room) freeBots() []BotIdentity {
+	var out []BotIdentity
+	for _, b := range r.opt.Bots {
+		if _, seated := r.seatOf(b.UserID); !seated {
+			out = append(out, b)
+		}
+	}
+	return out
 }
 
 func (r *Room) destroy() {
@@ -273,7 +347,7 @@ func (r *Room) disconnected(userID string) {
 // publish envia o room_state a cada membro e o resumo ao lobby.
 func (r *Room) publish() {
 	for s, st := range r.seats {
-		if st != nil {
+		if st != nil && !st.bot {
 			r.opt.Out.Send(st.userID, r.roomState(engine.Seat(s)))
 		}
 	}
@@ -293,7 +367,7 @@ func (r *Room) roomState(seat engine.Seat) protocol.ServerMessage {
 	for s, st := range r.seats {
 		if st != nil {
 			p.Seats[s] = &protocol.SeatInfo{UserID: st.userID, DisplayName: st.name, Ready: st.ready,
-				Connected: st.connected, Absent: r.status == protocol.RoomPlaying && !st.absentSince.IsZero()}
+				Connected: st.connected, Bot: st.bot, Absent: r.status == protocol.RoomPlaying && !st.absentSince.IsZero()}
 		}
 	}
 	return protocol.Message(protocol.MsgRoomState, p)
@@ -303,7 +377,7 @@ func (r *Room) summary() Summary {
 	rs := protocol.RoomSummary{ID: r.opt.ID, Name: r.opt.Name, Status: r.status}
 	for s, st := range r.seats {
 		if st != nil {
-			rs.Seats[s] = &protocol.SeatSummary{DisplayName: st.name}
+			rs.Seats[s] = &protocol.SeatSummary{DisplayName: st.name, Bot: st.bot}
 		}
 	}
 	if r.status == protocol.RoomPlaying {

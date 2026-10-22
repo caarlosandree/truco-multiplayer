@@ -28,6 +28,10 @@ var (
 		AbsenceGrace: 2 * time.Minute, AbsenceBudget: 5 * time.Minute, WaitingDisconnect: time.Minute}
 )
 
+// testBots é o roster dos testes (mesma ordem de nomes da spec §6.1).
+var testBots = []room.BotIdentity{{UserID: "b0", DisplayName: "Seu Zé"}, {UserID: "b1", DisplayName: "Dona Cida"},
+	{UserID: "b2", DisplayName: "Tio Juca"}, {UserID: "b3", DisplayName: "Vó Nena"}, {UserID: "b4", DisplayName: "Compadre Tião"}}
+
 // fakeStore guarda os logs em memória e valida o contrato de escritor único (ply contíguo).
 type fakeStore struct {
 	records    map[string]*replay.Record
@@ -255,7 +259,8 @@ func newHarness(t *testing.T, mutate ...func(*room.Options)) *harness {
 	h := &harness{t: t, clock: clock.NewManual(t0), store: newFakeStore(), out: newOutbox(), reg: &registry{}}
 	o := room.Options{ID: "r1", Code: "K7QM2P", Name: "Sala de Ana", Public: true, Timing: testTiming,
 		Store: h.store, Out: h.out, Registry: h.reg, Clock: h.clock, Rand: rand.NewChaCha8([32]byte{1}),
-		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Post: func(m room.Msg) { h.queue = append(h.queue, m) }}
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Post: func(m room.Msg) { h.queue = append(h.queue, m) },
+		Bots: testBots}
 	for _, m := range mutate {
 		m(&o)
 	}

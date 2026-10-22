@@ -58,6 +58,9 @@ type Timing struct {
 	WaitingDisconnect                time.Duration
 }
 
+// BotIdentity é a conta de um bot (linha de users com kind='bot') que a sala pode sentar.
+type BotIdentity struct{ UserID, DisplayName string }
+
 type Options struct {
 	ID       string
 	Code     string
@@ -70,5 +73,6 @@ type Options struct {
 	Clock    clock.Clock
 	Rand     io.Reader // seed e dealer de cada partida (crypto/rand em produção)
 	Log      *slog.Logger
-	Post     func(Msg) // entrega mensagens (disparos de timer) na caixa de entrada do ator
+	Bots     []BotIdentity // roster: a sala escolhe os de menor índice ainda não sentados nela
+	Post     func(Msg)     // entrega mensagens (disparos de timer) na caixa de entrada do ator
 }

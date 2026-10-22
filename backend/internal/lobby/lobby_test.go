@@ -114,9 +114,13 @@ func (s *nopStore) Abandon(context.Context, string, string) error { return nil }
 func newLobby(t *testing.T, maxRooms int) *lobby.Lobby { return newLobbyWith(t, maxRooms, nil) }
 
 func newLobbyWith(t *testing.T, maxRooms int, people lobby.People) *lobby.Lobby {
+	return newLobbyBots(t, maxRooms, people, nil)
+}
+
+func newLobbyBots(t *testing.T, maxRooms int, people lobby.People, bots []room.BotIdentity) *lobby.Lobby {
 	l := lobby.New(context.Background(), lobby.Options{Timing: timing, MaxRooms: maxRooms, Store: &nopStore{},
 		Clock: clock.NewManual(time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)), Rand: rand.NewChaCha8([32]byte{2}),
-		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), People: people})
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), People: people, Bots: bots})
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
@@ -422,5 +426,57 @@ func TestRoomWithBotSeatIsListedAsJoinable(t *testing.T) {
 	roomState(t, bia)
 	if bia.count(protocol.MsgError) != 0 {
 		t.Fatalf("não esperava erro: %+v", bia.messages())
+	}
+}
+
+var botRoster = []room.BotIdentity{{UserID: "b0", DisplayName: "Seu Zé"}, {UserID: "b1", DisplayName: "Dona Cida"},
+	{UserID: "b2", DisplayName: "Tio Juca"}}
+
+// Sala real com bots sentados (start_with_bots): join sem assento ocupa o bot de menor assento e,
+// quando só há humanos, a sala volta a ser cheia.
+func TestJoinOccupiesRealBotSeat(t *testing.T) {
+	l := newLobbyBots(t, 3, nil, botRoster)
+	ana, bia, caio, duda, edu := connect(l, "u0", "Ana"), connect(l, "u1", "Bia"), connect(l, "u2", "Caio"),
+		connect(l, "u3", "Duda"), connect(l, "u4", "Edu")
+	dispatch(l, ana, protocol.TypeCreateRoom, protocol.CreateRoomPayload{Visibility: protocol.VisibilityPublic})
+	id := roomState(t, ana).ID
+	dispatch(l, bia, protocol.TypeJoinRoom, protocol.JoinRoomPayload{RoomID: &id})
+	roomState(t, bia)
+	dispatch(l, ana, protocol.TypeStartWithBots, nil) // Bia não está pronta: a sala espera com 2 bots
+	edu.waitFor(t, protocol.MsgRoomUpserted, func(m protocol.ServerMessage) bool {
+		r := m.Payload.(protocol.RoomUpsertedPayload).Room
+		return r.ID == id && r.Seats[2] != nil && r.Seats[2].Bot && r.Seats[3] != nil && r.Seats[3].Bot
+	})
+	dispatch(l, caio, protocol.TypeJoinRoom, protocol.JoinRoomPayload{RoomID: &id})
+	if st := roomState(t, caio); st.YourSeat != 2 || st.Seats[3] == nil || !st.Seats[3].Bot {
+		t.Fatalf("Caio deveria ocupar o bot de menor assento: %+v", st)
+	}
+	dispatch(l, duda, protocol.TypeJoinRoom, protocol.JoinRoomPayload{RoomID: &id})
+	if st := roomState(t, duda); st.YourSeat != 3 {
+		t.Fatalf("Duda deveria ocupar o último bot: %+v", st)
+	}
+	dispatch(l, edu, protocol.TypeJoinRoom, protocol.JoinRoomPayload{RoomID: &id})
+	edu.waitFor(t, protocol.MsgError, errorCode(protocol.CodeRoomFull))
+	// bot nunca entra no índice: o primeiro humano que sai ainda pode criar outra sala.
+	dispatch(l, edu, protocol.TypeCreateRoom, protocol.CreateRoomPayload{Visibility: protocol.VisibilityPrivate})
+	roomState(t, edu)
+}
+
+// Convite com assento explícito numa cadeira de bot (que é vaga) não responde seat_taken.
+func TestInviteToBotSeatIsNotSeatTaken(t *testing.T) {
+	people := newPeople(lobby.Invitee{ID: "u2", Username: "caio", DisplayName: "Caio"})
+	l := newLobbyBots(t, 3, people, botRoster)
+	ana, bia, caio := connect(l, "u0", "Ana"), connect(l, "u1", "Bia"), connect(l, "u2", "Caio")
+	dispatch(l, ana, protocol.TypeCreateRoom, protocol.CreateRoomPayload{Visibility: protocol.VisibilityPublic})
+	id := roomState(t, ana).ID
+	dispatch(l, bia, protocol.TypeJoinRoom, protocol.JoinRoomPayload{RoomID: &id})
+	roomState(t, bia)
+	dispatch(l, ana, protocol.TypeStartWithBots, nil)
+	waitSeats(t, caio, id, 4)
+	seat := engine.Seat(2)
+	dispatch(l, ana, protocol.TypeInvite, protocol.InvitePayload{Username: "caio", Seat: &seat})
+	caio.waitFor(t, protocol.MsgInviteReceived, nil)
+	if ana.count(protocol.MsgError) != 0 {
+		t.Fatalf("não esperava erro: %+v", ana.messages())
 	}
 }

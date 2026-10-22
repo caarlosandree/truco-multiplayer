@@ -48,7 +48,7 @@ func (r *Room) storeCtx() (context.Context, context.CancelFunc) {
 }
 
 func (r *Room) maybeStart() {
-	if r.status != protocol.RoomWaiting || r.members() < 4 {
+	if r.status != protocol.RoomWaiting || r.occupied() < 4 {
 		return
 	}
 	for _, st := range r.seats {
@@ -70,7 +70,7 @@ func (r *Room) startMatch() {
 	var players [4]replay.PlayerSeat
 	var enginePlayers [4]engine.Player
 	for s, st := range r.seats {
-		players[s] = replay.PlayerSeat{UserID: st.userID, DisplayName: st.name}
+		players[s] = replay.PlayerSeat{UserID: st.userID, DisplayName: st.name, Bot: st.bot}
 		enginePlayers[s] = engine.Player{ID: st.userID, Name: st.name}
 	}
 	ctx, cancel := r.storeCtx()
@@ -158,7 +158,7 @@ func (r *Room) stateFor(seat engine.Seat) protocol.ServerMessage {
 
 func (r *Room) broadcastGame(evs []engine.Event) {
 	for s, st := range r.seats {
-		if st == nil {
+		if st == nil || st.bot {
 			continue
 		}
 		seat := engine.Seat(s)
@@ -171,7 +171,7 @@ func (r *Room) broadcastGame(evs []engine.Event) {
 
 func (r *Room) broadcastState() {
 	for s, st := range r.seats {
-		if st != nil {
+		if st != nil && !st.bot {
 			r.opt.Out.Send(st.userID, r.stateFor(engine.Seat(s)))
 		}
 	}
@@ -207,7 +207,7 @@ func (r *Room) resetToWaiting() {
 		if st == nil {
 			continue
 		}
-		st.ready, st.timeouts, st.absentSince, st.absentTotal = false, 0, time.Time{}, 0
+		st.ready, st.timeouts, st.absentSince, st.absentTotal = st.bot, 0, time.Time{}, 0
 		if !st.connected {
 			st.disconnectedAt = now
 		}

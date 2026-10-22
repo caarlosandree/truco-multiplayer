@@ -88,7 +88,7 @@ func sameTeam(a, b *engine.Team) bool {
 
 func (r *Room) sendToTeam(team engine.Team, msg protocol.ServerMessage) {
 	for s, st := range r.seats {
-		if st != nil && engine.TeamOf(engine.Seat(s)) == team {
+		if st != nil && !st.bot && engine.TeamOf(engine.Seat(s)) == team {
 			r.opt.Out.Send(st.userID, msg)
 		}
 	}
@@ -158,9 +158,11 @@ func (r *Room) abandonAllAbsent() {
 		if st == nil {
 			continue
 		}
-		r.opt.Out.Send(st.userID, ended)
-		r.opt.Out.Send(st.userID, protocol.LeftRoom(protocol.LeftDestroyed))
-		r.opt.Registry.Released(r.opt.ID, st.userID)
+		if !st.bot {
+			r.opt.Out.Send(st.userID, ended)
+			r.opt.Out.Send(st.userID, protocol.LeftRoom(protocol.LeftDestroyed))
+			r.opt.Registry.Released(r.opt.ID, st.userID)
+		}
 		r.seats[s] = nil
 	}
 	r.destroy()

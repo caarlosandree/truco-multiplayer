@@ -40,7 +40,8 @@ type Options struct {
 	Clock    clock.Clock
 	Rand     io.Reader
 	Log      *slog.Logger
-	People   People // cadastro de contas para convidar; nil = ninguém pode ser convidado
+	Bots     []room.BotIdentity // roster dos bots que as salas podem sentar
+	People   People             // cadastro de contas para convidar; nil = ninguém pode ser convidado
 }
 
 type member struct {
@@ -461,7 +462,7 @@ func (l *Lobby) Shutdown(ctx context.Context) error {
 
 func (l *Lobby) roomOptions(id, code, name string, public bool) room.Options {
 	return room.Options{ID: id, Code: code, Name: name, Public: public, Timing: l.opt.Timing, Store: l.opt.Store,
-		Out: l, Registry: l, Clock: l.opt.Clock, Rand: l.rand, Log: l.opt.Log.With("room_id", id)}
+		Out: l, Registry: l, Clock: l.opt.Clock, Rand: l.rand, Log: l.opt.Log.With("room_id", id), Bots: l.opt.Bots}
 }
 
 func (l *Lobby) roomOfLocked(userID string) *entry {

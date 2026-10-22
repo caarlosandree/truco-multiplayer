@@ -313,7 +313,7 @@ func (l *Lobby) inviteLocked(m *member, p protocol.InvitePayload, who Invitee, l
 			fail(protocol.CodeBadRequest)
 			return
 		}
-		if e.summary.Room.Seats[*p.Seat] != nil {
+		if st := e.summary.Room.Seats[*p.Seat]; st != nil && !st.Bot { // cadeira de bot é vaga
 			fail(protocol.CodeSeatTaken)
 			return
 		}

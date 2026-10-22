@@ -22,6 +22,7 @@ type seatState struct {
 	absentSince    time.Time     // zero = presente
 	absentTotal    time.Duration // ausência acumulada na partida, sem o trecho corrente
 	lastSignal     time.Time
+	bot            bool // cadeira de bot: sempre conectado e pronto, nunca host, fora do índice do lobby
 }
 
 type Room struct {
