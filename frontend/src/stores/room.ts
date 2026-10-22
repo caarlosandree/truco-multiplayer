@@ -85,12 +85,18 @@ export const useRoomStore = defineStore('room', {
       if (novos.length === 0) return
       this.avisados = [...this.avisados, ...novos.map((n) => n.seat)]
       this.takeover = { key: (this.takeover?.key ?? 0) + 1, assentos: novos }
-      for (const { nome } of novos) {
-        useToastsStore().push(
-          this.startedWithBots
-            ? `${nome} saiu; um bot assumiu.`
-            : `${nome} saiu; um bot assumiu. Se ${nome} não voltar até o fim, a partida não conta no ranking — vocês ainda podem pedir W.O.`,
-        )
+      const meuAssento = this.mySeat
+      for (const { seat, nome } of novos) {
+        if (seat === meuAssento) continue // o próprio humano (conectado e inativo) não recebe aviso sobre si
+        const base = `${nome} saiu; um bot assumiu.`
+        if (this.startedWithBots) {
+          useToastsStore().push(base)
+          continue
+        }
+        const ranking = `Se ${nome} não voltar até o fim, a partida não conta no ranking`
+        // O W.O. só cabe aos adversários do ausente; o parceiro dele só é avisado do ranking.
+        const adversario = meuAssento !== null && teamOf(seat) !== teamOf(meuAssento)
+        useToastsStore().push(adversario ? `${base} ${ranking} — vocês ainda podem pedir W.O.` : `${base} ${ranking}.`)
       }
     },
     onLeft(p: LeftRoomPayload) {

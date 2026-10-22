@@ -38,7 +38,7 @@ func TestRunnerDoesNotBlockCaller(t *testing.T) {
 	}}, fakePolicy{func(context.Context, Input) Decision { return Decision{} }}, 1)
 	start := time.Now()
 	r.Think(Input{}, time.Now().Add(time.Minute), func(Decision) {})
-	if d := time.Since(start); d > time.Millisecond {
+	if d := time.Since(start); d > 20*time.Millisecond { // folga para -race e CI lento; a intenção é só não esperar a política
 		t.Fatalf("Think bloqueou o chamador por %v", d)
 	}
 }

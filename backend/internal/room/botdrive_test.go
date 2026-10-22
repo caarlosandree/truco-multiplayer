@@ -677,3 +677,54 @@ func TestRestoredBotsKeepPlaying(t *testing.T) {
 		t.Fatalf("na volta o assento é do humano, mas a partida com bots nunca conta: %+v (ranked %v)", st.Seats[0], st.Ranked)
 	}
 }
+
+// O prazo entregue ao Thinker (o do Runner) é anterior ao da rede de segurança: um Think que devolve
+// exatamente nesse prazo (fallback com o semáforo cheio) ainda é aplicado como bot, não como timeout.
+func TestThinkerDeadlineLeavesRoomToApplyBeforeSafetyNet(t *testing.T) {
+	th := &fakeThinker{}
+	h := newSolo(t, th, 0)
+	h.moveOthersUntilPending(1, soloUsers)
+	c := th.latest(t, 1)
+	n := h.actionCount()
+	h.advance(c.deadline.Sub(h.clock.Now())) // o Runner devolve no prazo que recebeu
+	if h.actionCount() != n {
+		t.Fatalf("nada pode ser aplicado sem decisão: %+v", h.store.lastAction())
+	}
+	c.done(bot.Decision{Action: c.in.Legal[0]})
+	h.drain()
+	h.advance(300 * time.Millisecond)
+	got := h.store.lastAction()
+	if h.actionCount() != n+1 || got.Source != replay.SourceBot || got.Action.Seat != 1 {
+		t.Fatalf("a decisão do Runner deveria ser aplicada antes da DefaultAction: %+v", got)
+	}
+	if h.seatTimeouts(1) != 0 {
+		t.Fatal("o bot não acumula timeout")
+	}
+}
+
+// BotDelay maior que o prazo da janela não impede o bot de agir antes da rede de segurança.
+func TestBotDelayLongerThanDeadlineStillActsBeforeSafetyNet(t *testing.T) {
+	th := &fakeThinker{auto: firstLegal}
+	h := newSolo(t, th, time.Hour)
+	h.moveOthersUntilPending(1, soloUsers)
+	n := h.actionCount()
+	h.advance(testTiming.Play)
+	if h.botActions(1) != 1 || h.seatTimeouts(1) != 0 {
+		t.Fatalf("bot deveria ter jogado antes do prazo: bot=%d timeouts=%d (ações %d -> %d)",
+			h.botActions(1), h.seatTimeouts(1), n, h.actionCount())
+	}
+}
+
+// Idem para o humano ausente: BotDelay > TIMER_ABSENT_SECONDS não vira timeout do humano.
+func TestBotDelayLongerThanAbsentDeadlinePlaysForAbsent(t *testing.T) {
+	th := &fakeThinker{auto: firstLegal}
+	h := newHarness(t, withBots(th, time.Hour))
+	h.startMatch()
+	h.send(room.Disconnected{UserID: "u1"})
+	h.moveOthersUntilPending(1, humanUsers())
+	before := h.seatTimeouts(1)
+	h.advance(testTiming.Absent)
+	if h.botActions(1) != 1 || h.seatTimeouts(1) != before {
+		t.Fatalf("o bot deveria jogar pelo ausente: bot=%d timeouts %d -> %d", h.botActions(1), before, h.seatTimeouts(1))
+	}
+}

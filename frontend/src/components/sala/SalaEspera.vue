@@ -209,7 +209,7 @@ const resumo = computed(() => {
             data-bots-faltam
             class="text-sm text-giz-muted"
           >
-            Faltam {{ humanosNaoProntos }} prontos
+            {{ humanosNaoProntos === 1 ? 'Falta 1 pronto' : `Faltam ${humanosNaoProntos} prontos` }}
           </p>
         </div>
         <p

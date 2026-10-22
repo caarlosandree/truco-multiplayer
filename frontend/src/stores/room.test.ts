@@ -151,6 +151,25 @@ describe('bots', () => {
     )
   })
 
+  it('parceiro do ausente: só o aviso de ranking, sem a parte do W.O.', async () => {
+    const { useToastsStore } = await import('./toasts')
+    const r = useRoomStore()
+    r.onRoomState(state({ status: 'playing', seats: seatsBots(), ranked: true }))
+    r.onRoomState(state({ status: 'playing', seats: seatsBots([{}, {}, { botPlaying: true }]), ranked: false }))
+    expect(useToastsStore().items.at(-1)?.text).toBe(
+      'Caio saiu; um bot assumiu. Se Caio não voltar até o fim, a partida não conta no ranking.',
+    )
+  })
+
+  it('o próprio humano substituído (conectado e inativo) não recebe aviso sobre si', async () => {
+    const { useToastsStore } = await import('./toasts')
+    const r = useRoomStore()
+    r.onRoomState(state({ status: 'playing', seats: seatsBots(), ranked: true }))
+    r.onRoomState(state({ status: 'playing', seats: seatsBots([{ botPlaying: true }]), ranked: false }))
+    expect(useToastsStore().items).toHaveLength(0)
+    expect(r.takeover?.assentos.map((x) => x.nome)).toEqual(['Ana'])
+  })
+
   it('partida que começou com bot: só "saiu; um bot assumiu."', async () => {
     const { useToastsStore } = await import('./toasts')
     const r = useRoomStore()

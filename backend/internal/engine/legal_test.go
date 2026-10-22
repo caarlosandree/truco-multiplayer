@@ -127,7 +127,7 @@ func TestLegalActionsEmptyWithoutDecision(t *testing.T) {
 		}
 	}
 	if g.Phase != PhasePlaying {
-		t.Skip("não chegou a playing")
+		t.Fatal("não chegou a playing")
 	}
 	for s := Seat(0); s < 4; s++ {
 		got := LegalActions(g, s)

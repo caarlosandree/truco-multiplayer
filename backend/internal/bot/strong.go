@@ -49,12 +49,12 @@ const (
 // que a melhor ação, com probabilidade bluffProb*(1-perda/bluffTolerance). Serve
 // à imprevisibilidade (um bot que nunca blefa é lido por humanos) e custa pouco
 // por construção, pois a perda esperada é limitada pela tolerância. Os valores
-// foram escolhidos por varredura contra quatro adversários sintéticos (tabela
-// em task-6-report.md): tolerância 0,03 com prob. 0,3 empata, dentro do ruído
-// (~1 ponto), com a melhor taxa média de vitória (86,5% contra 86,6% sem blefe)
-// e é o blefe mais frequente entre os empatados (~2% das mãos fracas); tolerâncias
-// ou probabilidades maiores custam de 1 a 8 pontos. São variáveis só para a
-// varredura de teste (TestBluffSweep); não mude em produção sem refazê-la.
+// foram escolhidos por varredura contra quatro adversários sintéticos
+// (TestBluffSweep, com BOT_SWEEP=jogos por célula): tolerância 0,03 com prob. 0,3
+// empata com o bot sem blefe, dentro do ruído (~1 ponto; 86,5% contra 86,6% de
+// vitórias) e é o blefe mais frequente entre os empatados (~2% das mãos fracas);
+// tolerâncias ou probabilidades maiores custam de 1 a 8 pontos. São variáveis só
+// para a varredura; refaça o TestBluffSweep antes de mudá-las em produção.
 var (
 	bluffTolerance = 0.03
 	bluffProb      = 0.3

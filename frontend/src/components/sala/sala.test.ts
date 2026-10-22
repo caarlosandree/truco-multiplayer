@@ -220,7 +220,7 @@ describe('bots na sala de espera', () => {
     useRoomStore().onRoomState(sala([seat('Ana'), seat('Bia'), null, null]))
     const w = mountEspera()
     expect(w.find('[data-acao="comecar-com-bots"]').attributes('disabled')).toBeDefined()
-    expect(w.text()).toContain('Faltam 1 prontos')
+    expect(w.text()).toContain('Falta 1 pronto')
   })
 
   it('não dono não vê o botão; sem cadeira vazia (bots já sentados) o botão some', () => {

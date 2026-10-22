@@ -61,6 +61,9 @@ func (s *Store) recoverOne(ctx context.Context, log *slog.Logger, id string) (Re
 	}
 	if state.Phase == engine.PhaseGameOver {
 		// O AND com matches.ranked mantém false para quem começou com bot.
+		// Limitação aceita: se o Finish original falhou antes do restart e a partida terminou com um bot no
+		// controle de um humano ausente, o ranked já fixado no boot (true) não sabe disso e a partida pode
+		// ser ranqueada aqui. O caso exige falha de persistência no último instante; o comportamento é mantido.
 		if err := s.Finish(ctx, id, true); err != nil {
 			log.ErrorContext(ctx, "falha ao finalizar partida recuperada; nova tentativa no próximo boot", "match_id", id, "err", err)
 		}

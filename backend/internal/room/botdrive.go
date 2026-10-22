@@ -16,6 +16,11 @@ import (
 // sobra ao humano o resto da janela para agir primeiro.
 const botInactiveLead = 250 * time.Millisecond
 
+// botThinkMargin é a folga que o Runner recebe antes do prazo da rede de segurança: o Think termina (inclusive
+// o fallback simples, com o semáforo cheio) com tempo de a decisão ser aplicada antes da DefaultAction (§5.4).
+// Deve ser >= botInactiveLead, o limite de aplicação da decisão.
+const botThinkMargin = 500 * time.Millisecond
+
 // botReq é o pedido de decisão de um assento controlado por bot na janela corrente.
 type botReq struct {
 	gen      uint64
@@ -118,11 +123,18 @@ func (r *Room) driveBots(now time.Time) {
 		if st.connected && !st.bot { // conectado e inativo: o humano tem a janela curta para agir primeiro
 			readyAt = deadline.Add(-botInactiveLead)
 		}
+		if limit := deadline.Add(-botInactiveLead); readyAt.After(limit) {
+			readyAt = limit // a pausa de "pensar" nunca passa do prazo: o bot ainda age antes da DefaultAction
+		}
+		thinkBy := deadline.Add(-botThinkMargin)
+		if thinkBy.Before(now) {
+			thinkBy = now
+		}
 		r.botSeq++
 		req := &botReq{gen: r.botSeq, window: r.window, readyAt: readyAt}
 		r.botReqs[s] = req
 		post, window, seat, gen := r.opt.Post, r.window, s, req.gen
-		r.opt.Thinker.Think(in, deadline, func(d bot.Decision) {
+		r.opt.Thinker.Think(in, thinkBy, func(d bot.Decision) {
 			post(botDecided{gen: gen, window: window, seat: seat, d: d})
 		})
 	}
