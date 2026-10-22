@@ -48,7 +48,7 @@ func (h *harness) playMatch(tb table, seed uint64, actions int) (string, replay.
 		}
 	}
 	if actions < 0 {
-		if err := h.store.Finish(ctx, id); err != nil {
+		if err := h.store.Finish(ctx, id, true); err != nil {
 			h.t.Fatal(err)
 		}
 	}

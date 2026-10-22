@@ -25,7 +25,7 @@ var ErrLogDiverged = errors.New("room: log da partida divergiu do estado da sala
 type MatchStore interface {
 	Create(ctx context.Context, seed uint64, firstDealer engine.Seat, players [4]replay.PlayerSeat) (string, error)
 	AppendAction(ctx context.Context, id string, ply int, a engine.Action, src replay.Source) error
-	Finish(ctx context.Context, id string) error
+	Finish(ctx context.Context, id string, ranked bool) error
 	Abandon(ctx context.Context, id, reason string) error
 }
 

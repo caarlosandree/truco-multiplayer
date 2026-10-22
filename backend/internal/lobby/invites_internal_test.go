@@ -49,7 +49,7 @@ func (stubStore) Create(context.Context, uint64, engine.Seat, [4]replay.PlayerSe
 func (stubStore) AppendAction(context.Context, string, int, engine.Action, replay.Source) error {
 	return nil
 }
-func (stubStore) Finish(context.Context, string) error          { return nil }
+func (stubStore) Finish(context.Context, string, bool) error    { return nil }
 func (stubStore) Abandon(context.Context, string, string) error { return nil }
 
 type onePerson struct{ who Invitee }

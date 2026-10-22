@@ -113,8 +113,9 @@ func (q *Queries) LockAdmins(ctx context.Context) error {
 }
 
 const searchUsers = `-- name: SearchUsers :many
-SELECT id, username, email, display_name, password_hash, is_admin, email_verified_at, disabled_at, must_reset_password, created_at, updated_at FROM users
-WHERE ($1::text = '' OR username LIKE '%' || $1::text || '%' ESCAPE '\'
+SELECT id, username, email, display_name, password_hash, is_admin, email_verified_at, disabled_at, must_reset_password, created_at, updated_at, kind FROM users
+WHERE kind = 'human'
+  AND ($1::text = '' OR username LIKE '%' || $1::text || '%' ESCAPE '\'
                          OR email LIKE '%' || $1::text || '%' ESCAPE '\')
   AND ($2::timestamptz IS NULL
        OR (created_at, id) > ($2::timestamptz, $3::uuid))
@@ -155,6 +156,7 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 			&i.MustResetPassword,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Kind,
 		); err != nil {
 			return nil, err
 		}

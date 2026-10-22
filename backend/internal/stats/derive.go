@@ -67,18 +67,19 @@ type accumulator struct {
 
 func (a *accumulator) observe(s replay.Step) {
 	action := s.Logged.Action
+	// Ações de bot não contam nos contadores por assento (o assento pode ser um bot ou um humano ausente).
 	if s.Logged.Source == replay.SourceTimeout {
 		a.seat[action.Seat].timeouts++
 	}
 	isRaise := action.Kind == engine.ActRequestRaise || (action.Kind == engine.ActVote && action.Choice == engine.VoteRaise)
-	if isRaise {
+	if isRaise && s.Logged.Source != replay.SourceBot {
 		a.seat[action.Seat].raisesCalled++
 	}
 	if action.Kind == engine.ActSysStartHand && s.After.Hand != nil {
 		a.startHand(s.After)
 	}
 	for _, e := range s.Events {
-		a.event(e)
+		a.event(e, s.Logged.Source)
 	}
 }
 
@@ -99,7 +100,7 @@ func (a *accumulator) startHand(g engine.GameState) {
 	}
 }
 
-func (a *accumulator) event(e engine.Event) {
+func (a *accumulator) event(e engine.Event, src replay.Source) {
 	switch e.Kind {
 	case engine.EvHandEnded:
 		a.handsPlayed++
@@ -124,7 +125,7 @@ func (a *accumulator) event(e engine.Event) {
 			a.team[*e.Team].elevenRuns++
 		}
 	case engine.EvRaisePunished:
-		if e.Seat != nil {
+		if e.Seat != nil && src != replay.SourceBot {
 			a.seat[*e.Seat].punished++
 		}
 	}

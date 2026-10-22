@@ -60,7 +60,8 @@ func (s *Store) recoverOne(ctx context.Context, log *slog.Logger, id string) (Re
 		return Recovered{}, false
 	}
 	if state.Phase == engine.PhaseGameOver {
-		if err := s.Finish(ctx, id); err != nil {
+		// O AND com matches.ranked mantém false para quem começou com bot.
+		if err := s.Finish(ctx, id, true); err != nil {
 			log.ErrorContext(ctx, "falha ao finalizar partida recuperada; nova tentativa no próximo boot", "match_id", id, "err", err)
 		}
 		return Recovered{}, false

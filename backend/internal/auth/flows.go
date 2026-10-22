@@ -89,8 +89,8 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) error {
 	if err != nil {
 		return err
 	}
-	if existing, err := s.q.GetUserByEmail(ctx, email); err == nil {
-		s.sendLater(mail.AccountExists(existing.Email, existing.DisplayName, s.link("/entrar"), s.link("/esqueci-senha")))
+	if existing, err := s.q.GetUserByEmail(ctx, &email); err == nil {
+		s.sendLater(mail.AccountExists(deref(existing.Email), existing.DisplayName, s.link("/entrar"), s.link("/esqueci-senha")))
 		return nil
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return err
@@ -99,7 +99,7 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) error {
 	var token string
 	err = db.WithTx(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
-		user, err := q.CreateUser(ctx, dbgen.CreateUserParams{Username: username, Email: email, DisplayName: displayName, PasswordHash: hash, Now: now})
+		user, err := q.CreateUser(ctx, dbgen.CreateUserParams{Username: username, Email: &email, DisplayName: displayName, PasswordHash: &hash, Now: now})
 		if err != nil {
 			return mapUserInsertError(err)
 		}
@@ -135,7 +135,7 @@ func (s *Service) VerifyEmail(ctx context.Context, token string) error {
 }
 
 func (s *Service) ResendVerification(ctx context.Context, email string) error {
-	user, err := s.q.GetUserByEmail(ctx, NormalizeEmail(email))
+	user, err := s.q.GetUserByEmail(ctx, ptr(NormalizeEmail(email)))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
@@ -153,7 +153,7 @@ func (s *Service) sendVerification(ctx context.Context, user dbgen.User) error {
 	if err != nil {
 		return err
 	}
-	s.sendLater(mail.VerifyEmail(user.Email, user.DisplayName, s.link("/verificar-email?token="+token)))
+	s.sendLater(mail.VerifyEmail(deref(user.Email), user.DisplayName, s.link("/verificar-email?token="+token)))
 	return nil
 }
 
@@ -162,7 +162,7 @@ func (s *Service) Login(ctx context.Context, login, password string, meta Sessio
 	var row dbgen.User
 	var err error
 	if strings.Contains(login, "@") {
-		row, err = s.q.GetUserByEmail(ctx, login)
+		row, err = s.q.GetUserByEmail(ctx, &login)
 	} else {
 		row, err = s.q.GetUserByUsername(ctx, login)
 	}
@@ -173,7 +173,11 @@ func (s *Service) Login(ctx context.Context, login, password string, meta Sessio
 	if err != nil {
 		return LoginResult{}, err
 	}
-	ok, needsRehash, err := s.hasher.Verify(password, row.PasswordHash)
+	if row.PasswordHash == nil { // conta de bot: não tem credenciais
+		s.hasher.VerifyDummy(password)
+		return LoginResult{}, ErrInvalidCredentials
+	}
+	ok, needsRehash, err := s.hasher.Verify(password, *row.PasswordHash)
 	if err != nil {
 		return LoginResult{}, err
 	}
@@ -202,7 +206,7 @@ func (s *Service) Login(ctx context.Context, login, password string, meta Sessio
 func (s *Service) rehash(ctx context.Context, userID, password string) {
 	hash, err := s.hasher.Hash(password)
 	if err == nil {
-		err = s.q.SetPasswordHash(ctx, dbgen.SetPasswordHashParams{PasswordHash: hash, Now: s.now(), ID: userID})
+		err = s.q.SetPasswordHash(ctx, dbgen.SetPasswordHashParams{PasswordHash: &hash, Now: s.now(), ID: userID})
 	}
 	if err != nil {
 		s.log.Error("falha ao atualizar hash de senha", "user_id", userID, "err", err)
@@ -210,7 +214,7 @@ func (s *Service) rehash(ctx context.Context, userID, password string) {
 }
 
 func (s *Service) ForgotPassword(ctx context.Context, email string) error {
-	user, err := s.q.GetUserByEmail(ctx, NormalizeEmail(email))
+	user, err := s.q.GetUserByEmail(ctx, ptr(NormalizeEmail(email)))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
@@ -241,9 +245,9 @@ func (s *Service) SendPasswordReset(ctx context.Context, userID string, forced b
 	}
 	link := s.link("/redefinir-senha?token=" + token)
 	if forced {
-		s.sendLater(mail.ForcedPasswordReset(user.Email, user.DisplayName, link))
+		s.sendLater(mail.ForcedPasswordReset(deref(user.Email), user.DisplayName, link))
 	} else {
-		s.sendLater(mail.PasswordReset(user.Email, user.DisplayName, link))
+		s.sendLater(mail.PasswordReset(deref(user.Email), user.DisplayName, link))
 	}
 	return nil
 }
@@ -265,7 +269,7 @@ func (s *Service) ResetPassword(ctx context.Context, token, password string) err
 		return err
 	}
 	// Valida antes de consumir: um erro de digitação não queima o link.
-	if msg := ValidatePassword(password, user.Username, user.Email); msg != "" {
+	if msg := ValidatePassword(password, user.Username, deref(user.Email)); msg != "" {
 		return FieldErrors{"password": msg}
 	}
 	passwordHash, err := s.hasher.Hash(password)
@@ -279,7 +283,7 @@ func (s *Service) ResetPassword(ctx context.Context, token, password string) err
 		} else if err != nil {
 			return err
 		}
-		if err := q.CompletePasswordReset(ctx, dbgen.CompletePasswordResetParams{PasswordHash: passwordHash, Now: now, ID: user.ID}); err != nil {
+		if err := q.CompletePasswordReset(ctx, dbgen.CompletePasswordResetParams{PasswordHash: &passwordHash, Now: now, ID: user.ID}); err != nil {
 			return err
 		}
 		if err := q.DeleteUnusedTokens(ctx, dbgen.DeleteUnusedTokensParams{UserID: user.ID, Purpose: purposeReset}); err != nil {
@@ -290,7 +294,7 @@ func (s *Service) ResetPassword(ctx context.Context, token, password string) err
 	if err != nil {
 		return err
 	}
-	s.sendLater(mail.PasswordChanged(user.Email, user.DisplayName))
+	s.sendLater(mail.PasswordChanged(deref(user.Email), user.DisplayName))
 	return nil
 }
 
@@ -300,14 +304,14 @@ func (s *Service) ChangePassword(ctx context.Context, p Principal, current, next
 	if err != nil {
 		return "", err
 	}
-	ok, _, err := s.hasher.Verify(current, user.PasswordHash)
+	ok, _, err := s.hasher.Verify(current, deref(user.PasswordHash))
 	if err != nil {
 		return "", err
 	}
 	if !ok {
 		return "", ErrInvalidCredentials
 	}
-	if msg := ValidatePassword(next, user.Username, user.Email); msg != "" {
+	if msg := ValidatePassword(next, user.Username, deref(user.Email)); msg != "" {
 		return "", FieldErrors{"newPassword": msg}
 	}
 	passwordHash, err := s.hasher.Hash(next)
@@ -317,7 +321,7 @@ func (s *Service) ChangePassword(ctx context.Context, p Principal, current, next
 	var token string
 	err = db.WithTx(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
-		if err := q.SetPasswordHash(ctx, dbgen.SetPasswordHashParams{PasswordHash: passwordHash, Now: s.now(), ID: user.ID}); err != nil {
+		if err := q.SetPasswordHash(ctx, dbgen.SetPasswordHashParams{PasswordHash: &passwordHash, Now: s.now(), ID: user.ID}); err != nil {
 			return err
 		}
 		// Links de reset emitidos antes da troca não podem desfazê-la.
@@ -333,7 +337,7 @@ func (s *Service) ChangePassword(ctx context.Context, p Principal, current, next
 	if err != nil {
 		return "", err
 	}
-	s.sendLater(mail.PasswordChanged(user.Email, user.DisplayName))
+	s.sendLater(mail.PasswordChanged(deref(user.Email), user.DisplayName))
 	return token, nil
 }
 
@@ -350,4 +354,14 @@ func (s *Service) UpdateDisplayName(ctx context.Context, userID, name string) (U
 		return User{}, err
 	}
 	return userFromRow(row), nil
+}
+
+func ptr(s string) *string { return &s }
+
+// deref lê um campo anulável de credencial. Nulo só ocorre em contas de bot, que nunca chegam aqui.
+func deref(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
 }

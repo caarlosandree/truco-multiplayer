@@ -34,7 +34,7 @@ func (f fixture) registerVerified(t *testing.T, username string) string {
 func (f fixture) countUsers(t *testing.T) int {
 	t.Helper()
 	var n int
-	if err := f.pool.QueryRow(context.Background(), "SELECT count(*) FROM users").Scan(&n); err != nil {
+	if err := f.pool.QueryRow(context.Background(), "SELECT count(*) FROM users WHERE kind = 'human'").Scan(&n); err != nil {
 		t.Fatal(err)
 	}
 	return n

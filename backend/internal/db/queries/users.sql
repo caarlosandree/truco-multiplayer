@@ -37,9 +37,12 @@ RETURNING *;
 
 -- name: SearchDirectory :many
 SELECT username, display_name FROM users
-WHERE disabled_at IS NULL AND email_verified_at IS NOT NULL
+WHERE kind = 'human' AND disabled_at IS NULL AND email_verified_at IS NOT NULL
   AND (@query::text = '' OR username LIKE '%' || @query::text || '%' ESCAPE '\'
                          OR lower(display_name) LIKE '%' || @query::text || '%' ESCAPE '\')
   AND username > @after::text
 ORDER BY username
 LIMIT @lim::integer;
+
+-- name: ListBots :many
+SELECT id, username, display_name FROM users WHERE kind = 'bot' ORDER BY username;

@@ -91,7 +91,7 @@ type GetSessionPrincipalRow struct {
 	LastSeenAt  time.Time
 	UserID      string
 	Username    string
-	Email       string
+	Email       *string
 	DisplayName string
 	IsAdmin     bool
 }

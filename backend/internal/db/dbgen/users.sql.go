@@ -20,7 +20,7 @@ WHERE id = $3
 `
 
 type CompletePasswordResetParams struct {
-	PasswordHash string
+	PasswordHash *string
 	Now          time.Time
 	ID           string
 }
@@ -33,14 +33,14 @@ func (q *Queries) CompletePasswordReset(ctx context.Context, arg CompletePasswor
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (username, email, display_name, password_hash, created_at, updated_at)
 VALUES ($1, $2, $3, $4, $5, $5)
-RETURNING id, username, email, display_name, password_hash, is_admin, email_verified_at, disabled_at, must_reset_password, created_at, updated_at
+RETURNING id, username, email, display_name, password_hash, is_admin, email_verified_at, disabled_at, must_reset_password, created_at, updated_at, kind
 `
 
 type CreateUserParams struct {
 	Username     string
-	Email        string
+	Email        *string
 	DisplayName  string
-	PasswordHash string
+	PasswordHash *string
 	Now          time.Time
 }
 
@@ -65,15 +65,16 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.MustResetPassword,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Kind,
 	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, username, email, display_name, password_hash, is_admin, email_verified_at, disabled_at, must_reset_password, created_at, updated_at FROM users WHERE email = $1
+SELECT id, username, email, display_name, password_hash, is_admin, email_verified_at, disabled_at, must_reset_password, created_at, updated_at, kind FROM users WHERE email = $1
 `
 
-func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
+func (q *Queries) GetUserByEmail(ctx context.Context, email *string) (User, error) {
 	row := q.db.QueryRow(ctx, getUserByEmail, email)
 	var i User
 	err := row.Scan(
@@ -88,12 +89,13 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.MustResetPassword,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Kind,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, username, email, display_name, password_hash, is_admin, email_verified_at, disabled_at, must_reset_password, created_at, updated_at FROM users WHERE id = $1
+SELECT id, username, email, display_name, password_hash, is_admin, email_verified_at, disabled_at, must_reset_password, created_at, updated_at, kind FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id string) (User, error) {
@@ -111,12 +113,13 @@ func (q *Queries) GetUserByID(ctx context.Context, id string) (User, error) {
 		&i.MustResetPassword,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Kind,
 	)
 	return i, err
 }
 
 const getUserByIDForUpdate = `-- name: GetUserByIDForUpdate :one
-SELECT id, username, email, display_name, password_hash, is_admin, email_verified_at, disabled_at, must_reset_password, created_at, updated_at FROM users WHERE id = $1 FOR UPDATE
+SELECT id, username, email, display_name, password_hash, is_admin, email_verified_at, disabled_at, must_reset_password, created_at, updated_at, kind FROM users WHERE id = $1 FOR UPDATE
 `
 
 // Trava a linha: a checagem "alvo é admin" não pode ficar velha até a escrita.
@@ -135,12 +138,13 @@ func (q *Queries) GetUserByIDForUpdate(ctx context.Context, id string) (User, er
 		&i.MustResetPassword,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Kind,
 	)
 	return i, err
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, username, email, display_name, password_hash, is_admin, email_verified_at, disabled_at, must_reset_password, created_at, updated_at FROM users WHERE username = $1
+SELECT id, username, email, display_name, password_hash, is_admin, email_verified_at, disabled_at, must_reset_password, created_at, updated_at, kind FROM users WHERE username = $1
 `
 
 func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {
@@ -158,8 +162,39 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.MustResetPassword,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Kind,
 	)
 	return i, err
+}
+
+const listBots = `-- name: ListBots :many
+SELECT id, username, display_name FROM users WHERE kind = 'bot' ORDER BY username
+`
+
+type ListBotsRow struct {
+	ID          string
+	Username    string
+	DisplayName string
+}
+
+func (q *Queries) ListBots(ctx context.Context) ([]ListBotsRow, error) {
+	rows, err := q.db.Query(ctx, listBots)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBotsRow
+	for rows.Next() {
+		var i ListBotsRow
+		if err := rows.Scan(&i.ID, &i.Username, &i.DisplayName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const markEmailVerified = `-- name: MarkEmailVerified :exec
@@ -179,7 +214,7 @@ func (q *Queries) MarkEmailVerified(ctx context.Context, arg MarkEmailVerifiedPa
 
 const searchDirectory = `-- name: SearchDirectory :many
 SELECT username, display_name FROM users
-WHERE disabled_at IS NULL AND email_verified_at IS NOT NULL
+WHERE kind = 'human' AND disabled_at IS NULL AND email_verified_at IS NOT NULL
   AND ($1::text = '' OR username LIKE '%' || $1::text || '%' ESCAPE '\'
                          OR lower(display_name) LIKE '%' || $1::text || '%' ESCAPE '\')
   AND username > $2::text
@@ -223,7 +258,7 @@ UPDATE users SET password_hash = $1, updated_at = $2 WHERE id = $3
 `
 
 type SetPasswordHashParams struct {
-	PasswordHash string
+	PasswordHash *string
 	Now          time.Time
 	ID           string
 }
@@ -235,7 +270,7 @@ func (q *Queries) SetPasswordHash(ctx context.Context, arg SetPasswordHashParams
 
 const updateDisplayName = `-- name: UpdateDisplayName :one
 UPDATE users SET display_name = $1, updated_at = $2 WHERE id = $3
-RETURNING id, username, email, display_name, password_hash, is_admin, email_verified_at, disabled_at, must_reset_password, created_at, updated_at
+RETURNING id, username, email, display_name, password_hash, is_admin, email_verified_at, disabled_at, must_reset_password, created_at, updated_at, kind
 `
 
 type UpdateDisplayNameParams struct {
@@ -259,6 +294,7 @@ func (q *Queries) UpdateDisplayName(ctx context.Context, arg UpdateDisplayNamePa
 		&i.MustResetPassword,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Kind,
 	)
 	return i, err
 }

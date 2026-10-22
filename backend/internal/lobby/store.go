@@ -24,8 +24,8 @@ func (a storeAdapter) AppendAction(ctx context.Context, id string, ply int, act 
 	return translate(a.s.AppendAction(ctx, id, ply, act, src))
 }
 
-func (a storeAdapter) Finish(ctx context.Context, id string) error {
-	return translate(a.s.Finish(ctx, id))
+func (a storeAdapter) Finish(ctx context.Context, id string, ranked bool) error {
+	return translate(a.s.Finish(ctx, id, ranked))
 }
 
 func (a storeAdapter) Abandon(ctx context.Context, id, reason string) error {

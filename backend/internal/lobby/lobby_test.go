@@ -108,7 +108,7 @@ func (s *nopStore) Create(context.Context, uint64, engine.Seat, [4]replay.Player
 func (s *nopStore) AppendAction(context.Context, string, int, engine.Action, replay.Source) error {
 	return nil
 }
-func (s *nopStore) Finish(context.Context, string) error          { return nil }
+func (s *nopStore) Finish(context.Context, string, bool) error    { return nil }
 func (s *nopStore) Abandon(context.Context, string, string) error { return nil }
 
 func newLobby(t *testing.T, maxRooms int) *lobby.Lobby { return newLobbyWith(t, maxRooms, nil) }

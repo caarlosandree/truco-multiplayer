@@ -354,7 +354,7 @@ func (s *Service) ListUsers(ctx context.Context, query, cursor string) (UserPage
 			page.NextCursor = pagination.Encode(last.CreatedAt, last.ID)
 			break
 		}
-		page.Items = append(page.Items, UserSummary{ID: u.ID, Username: u.Username, Email: u.Email, DisplayName: u.DisplayName,
+		page.Items = append(page.Items, UserSummary{ID: u.ID, Username: u.Username, Email: deref(u.Email), DisplayName: u.DisplayName,
 			IsAdmin: u.IsAdmin, EmailVerified: u.EmailVerifiedAt != nil, Disabled: u.DisabledAt != nil,
 			MustResetPassword: u.MustResetPassword, CreatedAt: u.CreatedAt})
 	}
@@ -405,12 +405,15 @@ func lookupByLogin(ctx context.Context, q *dbgen.Queries, login string) (dbgen.U
 	var user dbgen.User
 	var err error
 	if strings.Contains(login, "@") {
-		user, err = q.GetUserByEmail(ctx, login)
+		user, err = q.GetUserByEmail(ctx, &login)
 	} else {
 		user, err = q.GetUserByUsername(ctx, login)
 	}
 	if err != nil {
 		return dbgen.User{}, notFound(err)
+	}
+	if user.Kind == "bot" { // contas de bot não são administráveis
+		return dbgen.User{}, ErrNotFound
 	}
 	return user, nil
 }
@@ -468,4 +471,12 @@ func DemoteAdmin(ctx context.Context, pool *pgxpool.Pool, login string, now time
 		}
 		return writeAudit(ctx, qt, user.ID, "user.demote_admin", "user", user.ID, map[string]any{"via": "cli"}, now)
 	})
+}
+
+// deref lê o e-mail anulável; nulo só ocorre em contas de bot, que a listagem exclui.
+func deref(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
 }

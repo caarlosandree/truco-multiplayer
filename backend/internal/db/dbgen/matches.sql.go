@@ -60,8 +60,8 @@ func (q *Queries) AddMatchPlayer(ctx context.Context, arg AddMatchPlayerParams) 
 }
 
 const createMatch = `-- name: CreateMatch :one
-INSERT INTO matches (seed, first_dealer, engine_version, created_at)
-VALUES ($1, $2, $3, $4)
+INSERT INTO matches (seed, first_dealer, engine_version, created_at, ranked)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING id
 `
 
@@ -70,6 +70,7 @@ type CreateMatchParams struct {
 	FirstDealer   int16
 	EngineVersion int32
 	Now           time.Time
+	Ranked        bool
 }
 
 func (q *Queries) CreateMatch(ctx context.Context, arg CreateMatchParams) (string, error) {
@@ -78,20 +79,23 @@ func (q *Queries) CreateMatch(ctx context.Context, arg CreateMatchParams) (strin
 		arg.FirstDealer,
 		arg.EngineVersion,
 		arg.Now,
+		arg.Ranked,
 	)
 	var id string
 	err := row.Scan(&id)
 	return id, err
 }
 
-const finishMatch = `-- name: FinishMatch :exec
+const finishMatch = `-- name: FinishMatch :one
 UPDATE matches
-SET status = 'finished', winner_team = $1::smallint, score_a = $2::smallint,
-    score_b = $3::smallint, finished_at = $4::timestamptz, end_reason = $5::text
-WHERE id = $6
+SET ranked = ranked AND $1::boolean, status = 'finished', winner_team = $2::smallint, score_a = $3::smallint,
+    score_b = $4::smallint, finished_at = $5::timestamptz, end_reason = $6::text
+WHERE id = $7
+RETURNING ranked
 `
 
 type FinishMatchParams struct {
+	Ranked     bool
 	WinnerTeam int16
 	ScoreA     int16
 	ScoreB     int16
@@ -100,8 +104,10 @@ type FinishMatchParams struct {
 	ID         string
 }
 
-func (q *Queries) FinishMatch(ctx context.Context, arg FinishMatchParams) error {
-	_, err := q.db.Exec(ctx, finishMatch,
+// ranked final = o que a partida já tinha E o que a sala informa: nunca "re-ranqueia".
+func (q *Queries) FinishMatch(ctx context.Context, arg FinishMatchParams) (bool, error) {
+	row := q.db.QueryRow(ctx, finishMatch,
+		arg.Ranked,
 		arg.WinnerTeam,
 		arg.ScoreA,
 		arg.ScoreB,
@@ -109,11 +115,13 @@ func (q *Queries) FinishMatch(ctx context.Context, arg FinishMatchParams) error 
 		arg.EndReason,
 		arg.ID,
 	)
-	return err
+	var ranked bool
+	err := row.Scan(&ranked)
+	return ranked, err
 }
 
 const getMatch = `-- name: GetMatch :one
-SELECT id, seed, first_dealer, engine_version, status, winner_team, score_a, score_b, created_at, finished_at, abandon_reason, end_reason FROM matches WHERE id = $1
+SELECT id, seed, first_dealer, engine_version, status, winner_team, score_a, score_b, created_at, finished_at, abandon_reason, end_reason, ranked FROM matches WHERE id = $1
 `
 
 func (q *Queries) GetMatch(ctx context.Context, id string) (Match, error) {
@@ -132,6 +140,7 @@ func (q *Queries) GetMatch(ctx context.Context, id string) (Match, error) {
 		&i.FinishedAt,
 		&i.AbandonReason,
 		&i.EndReason,
+		&i.Ranked,
 	)
 	return i, err
 }
@@ -158,7 +167,7 @@ func (q *Queries) GetMatchAction(ctx context.Context, arg GetMatchActionParams) 
 }
 
 const getMatchForUpdate = `-- name: GetMatchForUpdate :one
-SELECT id, seed, first_dealer, engine_version, status, winner_team, score_a, score_b, created_at, finished_at, abandon_reason, end_reason FROM matches WHERE id = $1 FOR UPDATE
+SELECT id, seed, first_dealer, engine_version, status, winner_team, score_a, score_b, created_at, finished_at, abandon_reason, end_reason, ranked FROM matches WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) GetMatchForUpdate(ctx context.Context, id string) (Match, error) {
@@ -177,6 +186,7 @@ func (q *Queries) GetMatchForUpdate(ctx context.Context, id string) (Match, erro
 		&i.FinishedAt,
 		&i.AbandonReason,
 		&i.EndReason,
+		&i.Ranked,
 	)
 	return i, err
 }
@@ -206,7 +216,7 @@ func (q *Queries) InsertMatchAction(ctx context.Context, arg InsertMatchActionPa
 }
 
 const listFinishedMatchIDs = `-- name: ListFinishedMatchIDs :many
-SELECT id FROM matches WHERE status = 'finished' ORDER BY finished_at, id
+SELECT id FROM matches WHERE status = 'finished' AND ranked ORDER BY finished_at, id
 `
 
 func (q *Queries) ListFinishedMatchIDs(ctx context.Context) ([]string, error) {
@@ -325,7 +335,7 @@ func (q *Queries) ListMatchActions(ctx context.Context, matchID string) ([]ListM
 }
 
 const listMatchPlayers = `-- name: ListMatchPlayers :many
-SELECT mp.seat, mp.user_id, mp.display_name, u.username
+SELECT mp.seat, mp.user_id, mp.display_name, u.username, u.kind
 FROM match_players mp
 JOIN users u ON u.id = mp.user_id
 WHERE mp.match_id = $1
@@ -337,6 +347,7 @@ type ListMatchPlayersRow struct {
 	UserID      string
 	DisplayName string
 	Username    string
+	Kind        string
 }
 
 func (q *Queries) ListMatchPlayers(ctx context.Context, matchID string) ([]ListMatchPlayersRow, error) {
@@ -353,6 +364,7 @@ func (q *Queries) ListMatchPlayers(ctx context.Context, matchID string) ([]ListM
 			&i.UserID,
 			&i.DisplayName,
 			&i.Username,
+			&i.Kind,
 		); err != nil {
 			return nil, err
 		}

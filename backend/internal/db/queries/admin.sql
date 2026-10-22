@@ -13,7 +13,8 @@ LIMIT @lim::integer;
 
 -- name: SearchUsers :many
 SELECT * FROM users
-WHERE (@query::text = '' OR username LIKE '%' || @query::text || '%' ESCAPE '\'
+WHERE kind = 'human'
+  AND (@query::text = '' OR username LIKE '%' || @query::text || '%' ESCAPE '\'
                          OR email LIKE '%' || @query::text || '%' ESCAPE '\')
   AND (sqlc.narg(cursor_created_at)::timestamptz IS NULL
        OR (created_at, id) > (sqlc.narg(cursor_created_at)::timestamptz, sqlc.narg(cursor_id)::uuid))

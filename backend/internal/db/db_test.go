@@ -169,3 +169,60 @@ func TestEndReasonBackfill(t *testing.T) {
 		t.Error("end_reason fora do domínio deveria ser rejeitado")
 	}
 }
+
+func TestBotsMigration(t *testing.T) {
+	ctx := context.Background()
+	pool := testdb.New(t)
+	rows, err := pool.Query(ctx, `SELECT username, display_name, email IS NULL AND password_hash IS NULL FROM users WHERE kind = 'bot' ORDER BY username`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for rows.Next() {
+		var u, d string
+		var noCreds bool
+		if err := rows.Scan(&u, &d, &noCreds); err != nil {
+			t.Fatal(err)
+		}
+		if !noCreds {
+			t.Errorf("bot %s com credenciais", u)
+		}
+		got[u] = d
+	}
+	rows.Close()
+	want := map[string]string{"bot_seu_ze": "Seu Zé", "bot_dona_cida": "Dona Cida", "bot_tio_juca": "Tio Juca", "bot_vo_nena": "Vó Nena",
+		"bot_compadre_tiao": "Compadre Tião", "bot_dona_lurdes": "Dona Lurdes", "bot_primo_dede": "Primo Dedé", "bot_tia_fia": "Tia Fia"}
+	if len(got) != len(want) {
+		t.Fatalf("bots = %v", got)
+	}
+	for u, d := range want {
+		if got[u] != d {
+			t.Errorf("bot %s = %q, quer %q", u, got[u], d)
+		}
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO users (username, display_name) VALUES ('humano_sem_email', 'H')`); err == nil {
+		t.Error("humano sem e-mail/senha aceito")
+	}
+	var matchID string
+	if err := pool.QueryRow(ctx, `INSERT INTO matches (seed, first_dealer, engine_version) VALUES (1, 0, 1) RETURNING id::text`).Scan(&matchID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO match_actions (match_id, ply, action, source) VALUES ($1, 0, '{"kind":"play_card"}', 'bot')`, matchID); err != nil {
+		t.Fatalf("source=bot rejeitado: %v", err)
+	}
+	var ranked bool
+	if err := pool.QueryRow(ctx, `SELECT ranked FROM matches WHERE id = $1`, matchID).Scan(&ranked); err != nil || !ranked {
+		t.Fatalf("ranked padrão = %v err=%v", ranked, err)
+	}
+	// Com ação de bot gravada o down 5 -> 4 precisa limpar sem erro (match_players não tem bots).
+	if _, err := pool.Exec(ctx, `DELETE FROM match_actions WHERE source = 'bot'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.MigrateDownTo(ctx, pool, 4); err != nil {
+		t.Fatalf("down 5->4: %v", err)
+	}
+	var n int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM users WHERE username LIKE 'bot\_%'`).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("bots restantes = %d err=%v", n, err)
+	}
+}

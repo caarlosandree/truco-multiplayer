@@ -16,10 +16,11 @@ const (
 	SourcePlayer  Source = "player"
 	SourceTimeout Source = "timeout" // ação padrão resolvida pela sala quando o tempo acaba
 	SourceSystem  Source = "system"  // ações de sistema, como sys_start_hand
+	SourceBot     Source = "bot"     // ação decidida por um bot (não conta em estatísticas por jogador)
 )
 
 func (s Source) Valid() bool {
-	return s == SourcePlayer || s == SourceTimeout || s == SourceSystem
+	return s == SourcePlayer || s == SourceTimeout || s == SourceSystem || s == SourceBot
 }
 
 // Status é o ciclo de vida de uma partida persistida.
@@ -46,6 +47,7 @@ const (
 type PlayerSeat struct {
 	UserID      string
 	DisplayName string
+	Bot         bool
 }
 
 type LoggedAction struct {
@@ -61,6 +63,7 @@ type Record struct {
 	FirstDealer   engine.Seat
 	EngineVersion int
 	Status        Status
+	Ranked        bool // matches.ranked: só partidas ranqueadas contam em estatísticas
 	Players       [4]PlayerSeat
 	Actions       []LoggedAction // ordenadas por Ply, a partir de 0
 }

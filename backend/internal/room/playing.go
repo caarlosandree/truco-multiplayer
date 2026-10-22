@@ -180,7 +180,8 @@ func (r *Room) broadcastState() {
 // finish grava o resultado. Falha de Finish não trava a sala: o Recover conclui no próximo boot.
 func (r *Room) finish(last engine.Action) {
 	ctx, cancel := r.storeCtx()
-	if err := r.opt.Store.Finish(ctx, r.matchID); err != nil {
+	// ranked fixo em true até a T10 calcular.
+	if err := r.opt.Store.Finish(ctx, r.matchID, true); err != nil {
 		r.opt.Log.Error("falha ao finalizar a partida; o Recover conclui no próximo boot", "match_id", r.matchID, "err", err)
 	}
 	cancel()

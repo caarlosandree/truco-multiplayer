@@ -56,7 +56,7 @@ func (w world) playWith(t *testing.T, seed uint64, players [4]replay.PlayerSeat)
 		}
 	}
 	w.clock.Advance(time.Minute)
-	if err := w.store.Finish(ctx, id); err != nil {
+	if err := w.store.Finish(ctx, id, true); err != nil {
 		t.Fatal(err)
 	}
 	return id
@@ -80,7 +80,7 @@ func (w world) playForfeit(t *testing.T, seed uint64) string {
 		t.Fatal(err)
 	}
 	w.clock.Advance(time.Minute)
-	if err := w.store.Finish(ctx, id); err != nil {
+	if err := w.store.Finish(ctx, id, true); err != nil {
 		t.Fatal(err)
 	}
 	return id

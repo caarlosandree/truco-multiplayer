@@ -13,7 +13,8 @@ func TestGeneratedQueriesRoundTripUUIDAndTime(t *testing.T) {
 	ctx := context.Background()
 	q := dbgen.New(testdb.New(t))
 	now := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
-	user, err := q.CreateUser(ctx, dbgen.CreateUserParams{Username: "ana", Email: "ana@empresa.com", DisplayName: "Ana", PasswordHash: "h", Now: now})
+	email, hash := "ana@empresa.com", "h"
+	user, err := q.CreateUser(ctx, dbgen.CreateUserParams{Username: "ana", Email: &email, DisplayName: "Ana", PasswordHash: &hash, Now: now})
 	if err != nil {
 		t.Fatal(err)
 	}

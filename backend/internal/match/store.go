@@ -55,12 +55,13 @@ func (s *Store) Create(ctx context.Context, seed uint64, firstDealer engine.Seat
 	if firstDealer > 3 {
 		return "", fmt.Errorf("match: dealer inicial inválido: %d", firstDealer)
 	}
+	ranked := !slices.ContainsFunc(players[:], func(p replay.PlayerSeat) bool { return p.Bot })
 	var id string
 	err := db.WithTx(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
 		var err error
 		id, err = q.CreateMatch(ctx, dbgen.CreateMatchParams{Seed: int64(seed), FirstDealer: int16(firstDealer),
-			EngineVersion: int32(engine.RulesVersion), Now: s.now()})
+			EngineVersion: int32(engine.RulesVersion), Now: s.now(), Ranked: ranked})
 		if err != nil {
 			return err
 		}
@@ -148,7 +149,7 @@ func (s *Store) Load(ctx context.Context, id string) (replay.Record, error) {
 
 func loadRecord(ctx context.Context, q *dbgen.Queries, m dbgen.Match) (replay.Record, error) {
 	rec := replay.Record{ID: m.ID, Seed: uint64(m.Seed), FirstDealer: engine.Seat(m.FirstDealer),
-		EngineVersion: int(m.EngineVersion), Status: replay.Status(m.Status)}
+		EngineVersion: int(m.EngineVersion), Status: replay.Status(m.Status), Ranked: m.Ranked}
 	players, err := q.ListMatchPlayers(ctx, m.ID)
 	if err != nil {
 		return rec, err
@@ -157,7 +158,7 @@ func loadRecord(ctx context.Context, q *dbgen.Queries, m dbgen.Match) (replay.Re
 		return rec, &replay.CorruptLogError{Ply: -1, Err: fmt.Errorf("partida com %d jogadores", len(players))}
 	}
 	for _, p := range players {
-		rec.Players[p.Seat] = replay.PlayerSeat{UserID: p.UserID, DisplayName: p.DisplayName}
+		rec.Players[p.Seat] = replay.PlayerSeat{UserID: p.UserID, DisplayName: p.DisplayName, Bot: p.Kind == "bot"}
 	}
 	actions, err := q.ListMatchActions(ctx, m.ID)
 	if err != nil {
@@ -174,7 +175,9 @@ func loadRecord(ctx context.Context, q *dbgen.Queries, m dbgen.Match) (replay.Re
 }
 
 // Finish encerra a partida a partir do próprio log: reconstrói, confere o fim e grava estatísticas.
-func (s *Store) Finish(ctx context.Context, id string) error {
+// O ranked final é matches.ranked AND ranked: uma partida iniciada com bot nunca vira ranqueada, e só
+// partidas ranqueadas gravam match_player_stats/player_stats.
+func (s *Store) Finish(ctx context.Context, id string, ranked bool) error {
 	return db.WithTx(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
 		m, err := q.GetMatchForUpdate(ctx, id)
@@ -204,10 +207,13 @@ func (s *Store) Finish(ctx context.Context, id string) error {
 		if n := len(rec.Actions); n > 0 && rec.Actions[n-1].Action.Kind == engine.ActSysForfeit {
 			end = replay.EndForfeit
 		}
-		err = q.FinishMatch(ctx, dbgen.FinishMatchParams{WinnerTeam: int16(winner), ScoreA: int16(perSeat[0].PointsFor),
-			ScoreB: int16(perSeat[0].PointsAgainst), Now: now, EndReason: string(end), ID: id})
+		finalRanked, err := q.FinishMatch(ctx, dbgen.FinishMatchParams{WinnerTeam: int16(winner), ScoreA: int16(perSeat[0].PointsFor),
+			ScoreB: int16(perSeat[0].PointsAgainst), Now: now, EndReason: string(end), Ranked: ranked, ID: id})
 		if err != nil {
 			return err
+		}
+		if !finalRanked {
+			return nil
 		}
 		return writeStats(ctx, q, id, perSeat, now)
 	})
@@ -309,6 +315,26 @@ func (s *Store) Summary(ctx context.Context, id string) (Summary, error) {
 	}
 	if m.ScoreA != nil && m.ScoreB != nil {
 		out.Score = &[2]int{int(*m.ScoreA), int(*m.ScoreB)}
+	}
+	return out, nil
+}
+
+// Bot é uma conta de bot (users.kind = 'bot') disponível para sentar à mesa.
+type Bot struct {
+	ID          string
+	Username    string
+	DisplayName string
+}
+
+// ListBots devolve os bots em ordem de username.
+func (s *Store) ListBots(ctx context.Context) ([]Bot, error) {
+	rows, err := s.q.ListBots(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Bot, len(rows))
+	for i, r := range rows {
+		out[i] = Bot{ID: r.ID, Username: r.Username, DisplayName: r.DisplayName}
 	}
 	return out, nil
 }

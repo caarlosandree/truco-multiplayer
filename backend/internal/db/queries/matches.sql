@@ -1,6 +1,6 @@
 -- name: CreateMatch :one
-INSERT INTO matches (seed, first_dealer, engine_version, created_at)
-VALUES (@seed, @first_dealer, @engine_version, @now)
+INSERT INTO matches (seed, first_dealer, engine_version, created_at, ranked)
+VALUES (@seed, @first_dealer, @engine_version, @now, @ranked)
 RETURNING id;
 
 -- name: AddMatchPlayer :exec
@@ -28,7 +28,7 @@ SELECT * FROM matches WHERE id = @id;
 SELECT * FROM matches WHERE id = @id FOR UPDATE;
 
 -- name: ListMatchPlayers :many
-SELECT mp.seat, mp.user_id, mp.display_name, u.username
+SELECT mp.seat, mp.user_id, mp.display_name, u.username, u.kind
 FROM match_players mp
 JOIN users u ON u.id = mp.user_id
 WHERE mp.match_id = @match_id
@@ -41,13 +41,15 @@ SELECT ply, action, source FROM match_actions WHERE match_id = @match_id ORDER B
 SELECT id FROM matches WHERE status = 'in_progress' ORDER BY created_at, id;
 
 -- name: ListFinishedMatchIDs :many
-SELECT id FROM matches WHERE status = 'finished' ORDER BY finished_at, id;
+SELECT id FROM matches WHERE status = 'finished' AND ranked ORDER BY finished_at, id;
 
--- name: FinishMatch :exec
+-- name: FinishMatch :one
+-- ranked final = o que a partida já tinha E o que a sala informa: nunca "re-ranqueia".
 UPDATE matches
-SET status = 'finished', winner_team = @winner_team::smallint, score_a = @score_a::smallint,
+SET ranked = ranked AND @ranked::boolean, status = 'finished', winner_team = @winner_team::smallint, score_a = @score_a::smallint,
     score_b = @score_b::smallint, finished_at = @now::timestamptz, end_reason = @end_reason::text
-WHERE id = @id;
+WHERE id = @id
+RETURNING ranked;
 
 -- name: AbandonMatch :execrows
 UPDATE matches

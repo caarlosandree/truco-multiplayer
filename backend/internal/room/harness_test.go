@@ -72,7 +72,7 @@ func (f *fakeStore) AppendAction(_ context.Context, id string, ply int, a engine
 	return nil
 }
 
-func (f *fakeStore) Finish(_ context.Context, id string) error {
+func (f *fakeStore) Finish(_ context.Context, id string, _ bool) error {
 	if f.failFinish != nil {
 		return f.failFinish
 	}

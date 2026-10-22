@@ -38,6 +38,7 @@ type Match struct {
 	FinishedAt    *time.Time
 	AbandonReason *string
 	EndReason     *string
+	Ranked        bool
 }
 
 type MatchAction struct {
@@ -113,15 +114,16 @@ type Session struct {
 type User struct {
 	ID                string
 	Username          string
-	Email             string
+	Email             *string
 	DisplayName       string
-	PasswordHash      string
+	PasswordHash      *string
 	IsAdmin           bool
 	EmailVerifiedAt   *time.Time
 	DisabledAt        *time.Time
 	MustResetPassword bool
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
+	Kind              string
 }
 
 type UserToken struct {

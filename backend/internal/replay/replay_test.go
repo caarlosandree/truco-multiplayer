@@ -7,7 +7,7 @@ import (
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/engine"
 )
 
-var testSeats = [4]PlayerSeat{{"u0", "Ana"}, {"u1", "Bia"}, {"u2", "Caio"}, {"u3", "Duda"}}
+var testSeats = [4]PlayerSeat{{UserID: "u0", DisplayName: "Ana"}, {UserID: "u1", DisplayName: "Bia"}, {UserID: "u2", DisplayName: "Caio"}, {UserID: "u3", DisplayName: "Duda"}}
 
 func newRecord(actions ...LoggedAction) Record {
 	return Record{ID: "m1", Seed: 42, FirstDealer: 0, EngineVersion: engine.RulesVersion,
@@ -127,12 +127,12 @@ func TestBuildFramesHasOneViewPerSeat(t *testing.T) {
 }
 
 func TestSourceValid(t *testing.T) {
-	for _, s := range []Source{SourcePlayer, SourceTimeout, SourceSystem} {
+	for _, s := range []Source{SourcePlayer, SourceTimeout, SourceSystem, SourceBot} {
 		if !s.Valid() {
 			t.Fatalf("%q deveria ser válido", s)
 		}
 	}
-	if Source("bot").Valid() {
-		t.Fatal("bot não é uma origem válida")
+	if Source("alien").Valid() {
+		t.Fatal("origem desconhecida não é válida")
 	}
 }

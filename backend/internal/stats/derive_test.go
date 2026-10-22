@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/engine"
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/enginetest"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/replay"
 )
 
@@ -84,5 +85,72 @@ func TestAccumulatorTiedHandCountsOnlyAsPlayed(t *testing.T) {
 	a.observe(eventStep(engine.Event{Kind: engine.EvHandEnded}))
 	if a.handsPlayed != 1 || a.team[0].handsWon != 0 || a.team[1].handsWon != 0 {
 		t.Fatalf("handsPlayed %d, vitórias %d/%d", a.handsPlayed, a.team[0].handsWon, a.team[1].handsWon)
+	}
+}
+
+func TestDeriveSkipsSeatCountersForBotActions(t *testing.T) {
+	var a accumulator
+	raise := func(src replay.Source) replay.Step {
+		s := eventStep()
+		s.Logged = replay.LoggedAction{Action: engine.Action{Kind: engine.ActRequestRaise, Seat: 1}, Source: src}
+		return s
+	}
+	a.observe(raise(replay.SourceBot))
+	a.observe(raise(replay.SourcePlayer))
+	if a.seat[1].raisesCalled != 1 {
+		t.Fatalf("RaisesCalled[1] = %d, quer 1", a.seat[1].raisesCalled)
+	}
+	timeout := eventStep()
+	timeout.Logged = replay.LoggedAction{Action: engine.Action{Kind: engine.ActPlayCard, Seat: 1}, Source: replay.SourceTimeout}
+	a.observe(timeout)
+	bot := eventStep()
+	bot.Logged = replay.LoggedAction{Action: engine.Action{Kind: engine.ActPlayCard, Seat: 1}, Source: replay.SourceBot}
+	a.observe(bot)
+	if a.seat[1].timeouts != 1 {
+		t.Fatalf("timeouts[1] = %d, quer 1", a.seat[1].timeouts)
+	}
+
+	punish := func(src replay.Source) replay.Step {
+		st := eventStep(engine.Event{Kind: engine.EvRaisePunished, Seat: seatPtr(2)})
+		st.Logged.Source = src
+		return st
+	}
+	a.observe(punish(replay.SourceBot))
+	if a.seat[2].punished != 0 {
+		t.Fatalf("punished[2] = %d com ação de bot, quer 0", a.seat[2].punished)
+	}
+	a.observe(punish(replay.SourcePlayer))
+	if a.seat[2].punished != 1 {
+		t.Fatalf("punished[2] = %d com ação de jogador, quer 1", a.seat[2].punished)
+	}
+
+	// Contadores de equipe e de mão não dependem da origem da ação.
+	rec, _ := enginetest.RandomRecord(7)
+	base, err := Derive(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	botRec := rec
+	botRec.Actions = append([]replay.LoggedAction(nil), rec.Actions...)
+	for i := range botRec.Actions {
+		if botRec.Actions[i].Source == replay.SourcePlayer {
+			botRec.Actions[i].Source = replay.SourceBot
+		}
+	}
+	got, err := Derive(botRec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for seat := range 4 {
+		want := base[seat]
+		want.RaisesCalled, want.Punished = 0, 0
+		g := got[seat]
+		if g.RaisesCalled != 0 {
+			t.Errorf("assento %d: RaisesCalled = %d com tudo de bot", seat, g.RaisesCalled)
+		}
+		g.RaisesCalled, g.Punished = 0, 0
+		if g != want {
+			t.Errorf("assento %d: %+v != %+v", seat, g, want)
+		}
 	}
 }

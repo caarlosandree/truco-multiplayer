@@ -64,7 +64,7 @@ func (nopStore) Create(context.Context, uint64, engine.Seat, [4]replay.PlayerSea
 func (nopStore) AppendAction(context.Context, string, int, engine.Action, replay.Source) error {
 	return nil
 }
-func (nopStore) Finish(context.Context, string) error          { return nil }
+func (nopStore) Finish(context.Context, string, bool) error    { return nil }
 func (nopStore) Abandon(context.Context, string, string) error { return nil }
 
 type env struct {

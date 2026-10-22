@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -119,7 +120,7 @@ func TestAppendActionErrors(t *testing.T) {
 	if err := e.store.AppendAction(ctx, id, 3, engine.Action{Kind: engine.ActSysTimeout, Seat: 1}, replay.SourceTimeout); err == nil {
 		t.Fatal("sys_timeout não pode ser gravado")
 	}
-	if err := e.store.AppendAction(ctx, id, 3, first.Action, replay.Source("bot")); err == nil {
+	if err := e.store.AppendAction(ctx, id, 3, first.Action, replay.Source("alien")); err == nil {
 		t.Fatal("origem inválida aceita")
 	}
 	if err := e.store.Abandon(ctx, id, "teste"); err != nil {
@@ -167,7 +168,7 @@ func TestFinishWritesResultAndStats(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	id, rec := e.persist(t, 5, -1)
-	if err := e.store.Finish(ctx, id); err != nil {
+	if err := e.store.Finish(ctx, id, true); err != nil {
 		t.Fatal(err)
 	}
 	final, _ := replay.Rebuild(rec)
@@ -200,7 +201,7 @@ func TestFinishWritesResultAndStats(t *testing.T) {
 	if rows != 4 {
 		t.Fatalf("%d linhas em match_player_stats", rows)
 	}
-	if err := e.store.Finish(ctx, id); !errors.Is(err, match.ErrMatchClosed) {
+	if err := e.store.Finish(ctx, id, true); !errors.Is(err, match.ErrMatchClosed) {
 		t.Fatalf("Finish duplicado: %v", err)
 	}
 }
@@ -209,7 +210,7 @@ func TestFinishRejectsUnfinishedMatch(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	id, _ := e.persist(t, 5, 20)
-	if err := e.store.Finish(ctx, id); !errors.Is(err, match.ErrNotGameOver) {
+	if err := e.store.Finish(ctx, id, true); !errors.Is(err, match.ErrNotGameOver) {
 		t.Fatalf("err = %v", err)
 	}
 	summary, _ := e.store.Summary(ctx, id)
@@ -223,7 +224,7 @@ func TestPlayerStatsAccumulateAcrossMatches(t *testing.T) {
 	ctx := context.Background()
 	for _, seed := range []uint64{11, 12} {
 		id, _ := e.persist(t, seed, -1)
-		if err := e.store.Finish(ctx, id); err != nil {
+		if err := e.store.Finish(ctx, id, true); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -250,7 +251,7 @@ func TestAbandon(t *testing.T) {
 	if err := e.store.Abandon(ctx, id, "de novo"); !errors.Is(err, match.ErrMatchClosed) {
 		t.Fatalf("abandono duplicado: %v", err)
 	}
-	if err := e.store.Finish(ctx, id); !errors.Is(err, match.ErrMatchClosed) {
+	if err := e.store.Finish(ctx, id, true); !errors.Is(err, match.ErrMatchClosed) {
 		t.Fatalf("Finish de abandonada: %v", err)
 	}
 	if err := e.store.Abandon(ctx, "00000000-0000-7000-8000-000000000000", "x"); !errors.Is(err, match.ErrNotFound) {
@@ -324,7 +325,7 @@ func TestRecomputeStatsRestoresAggregates(t *testing.T) {
 	ctx := context.Background()
 	for _, seed := range []uint64{31, 32} {
 		id, _ := e.persist(t, seed, -1)
-		if err := e.store.Finish(ctx, id); err != nil {
+		if err := e.store.Finish(ctx, id, true); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -357,11 +358,11 @@ func TestRecomputeStatsSkipsCorruptFinishedMatch(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	goodID, _ := e.persist(t, 41, -1)
-	if err := e.store.Finish(ctx, goodID); err != nil {
+	if err := e.store.Finish(ctx, goodID, true); err != nil {
 		t.Fatal(err)
 	}
 	badID, _ := e.persist(t, 42, -1)
-	if err := e.store.Finish(ctx, badID); err != nil {
+	if err := e.store.Finish(ctx, badID, true); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.pool.Exec(ctx, "UPDATE match_actions SET action = '\"lixo\"'::jsonb WHERE match_id = $1 AND ply = 0", badID); err != nil {
@@ -464,7 +465,7 @@ func TestConcurrentFinishWithSameUsersDoesNotDeadlock(t *testing.T) {
 		for j, id := range []string{a, b} {
 			wg.Go(func() {
 				<-start
-				errs[j] = e.store.Finish(context.Background(), id)
+				errs[j] = e.store.Finish(context.Background(), id, true)
 			})
 		}
 		close(start)
@@ -481,14 +482,14 @@ func TestRecomputeStatsConcurrentWithFinishKeepsTotals(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	for i := range 3 {
-		if err := e.store.Finish(ctx, e.persistFull(t, uint64(300+i), e.players)); err != nil {
+		if err := e.store.Finish(ctx, e.persistFull(t, uint64(300+i), e.players), true); err != nil {
 			t.Fatal(err)
 		}
 	}
 	pending := e.persistFull(t, 400, e.players)
 	var wg sync.WaitGroup
 	var finishErr, recomputeErr error
-	wg.Go(func() { finishErr = e.store.Finish(ctx, pending) })
+	wg.Go(func() { finishErr = e.store.Finish(ctx, pending, true) })
 	wg.Go(func() { _, recomputeErr = e.store.RecomputeStats(ctx) })
 	wg.Wait()
 	if finishErr != nil || recomputeErr != nil {
@@ -567,7 +568,7 @@ func TestFinishRecordsEndReason(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	id, _ := e.persist(t, 5, -1)
-	if err := e.store.Finish(ctx, id); err != nil {
+	if err := e.store.Finish(ctx, id, true); err != nil {
 		t.Fatal(err)
 	}
 	sum, _ := e.store.Summary(ctx, id)
@@ -579,7 +580,7 @@ func TestFinishRecordsEndReason(t *testing.T) {
 	if err := e.store.AppendAction(ctx, id, 20, engine.Action{Kind: engine.ActSysForfeit, Team: 1}, replay.SourceSystem); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.store.Finish(ctx, id); err != nil {
+	if err := e.store.Finish(ctx, id, true); err != nil {
 		t.Fatal(err)
 	}
 	sum, _ = e.store.Summary(ctx, id)
@@ -602,5 +603,137 @@ func TestAbandonRecordsEndReason(t *testing.T) {
 	sum, _ = e.store.Summary(ctx, id)
 	if sum.EndReason == nil || *sum.EndReason != replay.EndAbandoned {
 		t.Fatalf("end_reason = %v", sum.EndReason)
+	}
+}
+
+// botEnv devolve os jogadores com o assento 1 ocupado pelo primeiro bot.
+func (e env) withBot(t *testing.T) [4]replay.PlayerSeat {
+	t.Helper()
+	bots, err := e.store.ListBots(context.Background())
+	if err != nil || len(bots) == 0 {
+		t.Fatalf("ListBots: %v (%d)", err, len(bots))
+	}
+	players := e.players
+	players[1] = replay.PlayerSeat{UserID: bots[0].ID, DisplayName: bots[0].DisplayName, Bot: true}
+	return players
+}
+
+func (e env) persistWith(t *testing.T, players [4]replay.PlayerSeat, seed uint64) string {
+	t.Helper()
+	ctx := context.Background()
+	rec, _ := enginetest.RandomRecord(seed)
+	id, err := e.store.Create(ctx, rec.Seed, rec.FirstDealer, players)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, logged := range rec.Actions {
+		if err := e.store.AppendAction(ctx, id, logged.Ply, logged.Action, logged.Source); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return id
+}
+
+func (e env) countRows(t *testing.T, query string, args ...any) int {
+	t.Helper()
+	var n int
+	if err := e.pool.QueryRow(context.Background(), query, args...).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+func TestCreateWithBotIsUnranked(t *testing.T) {
+	e := newEnv(t)
+	id := e.persistWith(t, e.withBot(t), 3)
+	rec, err := e.store.Load(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Ranked || !rec.Players[1].Bot || rec.Players[0].Bot {
+		t.Fatalf("Ranked=%v bots=%v/%v", rec.Ranked, rec.Players[1].Bot, rec.Players[0].Bot)
+	}
+	humanID, _ := e.persist(t, 4, 5)
+	human, _ := e.store.Load(context.Background(), humanID)
+	if !human.Ranked {
+		t.Fatal("partida só de humanos deveria ser ranqueada")
+	}
+}
+
+func TestFinishUnrankedSkipsStats(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	id, _ := e.persist(t, 5, -1)
+	if err := e.store.Finish(ctx, id, false); err != nil {
+		t.Fatal(err)
+	}
+	var ranked bool
+	var status string
+	if err := e.pool.QueryRow(ctx, "SELECT ranked, status FROM matches WHERE id = $1", id).Scan(&ranked, &status); err != nil {
+		t.Fatal(err)
+	}
+	if ranked || status != "finished" {
+		t.Fatalf("ranked=%v status=%s", ranked, status)
+	}
+	if n := e.countRows(t, "SELECT count(*) FROM match_player_stats WHERE match_id = $1", id); n != 0 {
+		t.Fatalf("%d linhas em match_player_stats", n)
+	}
+	if n := e.countRows(t, "SELECT count(*) FROM player_stats"); n != 0 {
+		t.Fatalf("%d linhas em player_stats", n)
+	}
+}
+
+func TestFinishRankedKeepsStats(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	id, _ := e.persist(t, 5, -1)
+	if err := e.store.Finish(ctx, id, true); err != nil {
+		t.Fatal(err)
+	}
+	if n := e.countRows(t, "SELECT count(*) FROM match_player_stats WHERE match_id = $1", id); n != 4 {
+		t.Fatalf("%d linhas em match_player_stats", n)
+	}
+	if n := e.countRows(t, "SELECT count(*) FROM player_stats WHERE matches_played = 1"); n != 4 {
+		t.Fatalf("%d linhas em player_stats", n)
+	}
+	if n := e.countRows(t, "SELECT count(*) FROM matches WHERE id = $1 AND ranked", id); n != 1 {
+		t.Fatal("ranked deveria continuar true")
+	}
+}
+
+func TestFinishCannotRerankBotMatch(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	id := e.persistWith(t, e.withBot(t), 5)
+	if err := e.store.Finish(ctx, id, true); err != nil {
+		t.Fatal(err)
+	}
+	if n := e.countRows(t, "SELECT count(*) FROM matches WHERE id = $1 AND NOT ranked AND status = 'finished'", id); n != 1 {
+		t.Fatal("partida com bot virou ranqueada")
+	}
+	if n := e.countRows(t, "SELECT count(*) FROM match_player_stats WHERE match_id = $1", id); n != 0 {
+		t.Fatalf("%d linhas em match_player_stats", n)
+	}
+	if n := e.countRows(t, "SELECT count(*) FROM player_stats"); n != 0 {
+		t.Fatalf("%d linhas em player_stats", n)
+	}
+}
+
+func TestListBots(t *testing.T) {
+	e := newEnv(t)
+	bots, err := e.store.ListBots(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bots) != 8 {
+		t.Fatalf("%d bots", len(bots))
+	}
+	for i, b := range bots {
+		if !strings.HasPrefix(b.Username, "bot_") || b.ID == "" || b.DisplayName == "" {
+			t.Errorf("bot inválido: %+v", b)
+		}
+		if i > 0 && bots[i-1].Username >= b.Username {
+			t.Errorf("fora de ordem: %s, %s", bots[i-1].Username, b.Username)
+		}
 	}
 }
