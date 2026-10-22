@@ -88,7 +88,7 @@ func sameTeam(a, b *engine.Team) bool {
 
 func (r *Room) sendToTeam(team engine.Team, msg protocol.ServerMessage) {
 	for s, st := range r.seats {
-		if st != nil && !st.bot && engine.TeamOf(engine.Seat(s)) == team {
+		if st.member() && engine.TeamOf(engine.Seat(s)) == team {
 			r.opt.Out.Send(st.userID, msg)
 		}
 	}
@@ -154,19 +154,21 @@ func (r *Room) allAbsentAt() (time.Time, bool) {
 	return latest.Add(r.opt.Timing.AbsenceBudget), true
 }
 
-func (r *Room) abandonAllAbsent() {
+// abandonMatch encerra a partida sem humanos presentes (all_absent) ou sem humanos na sala (all_left)
+// e destrói a sala. Quem já saiu não recebe nada.
+func (r *Room) abandonMatch(reason string) {
 	ctx, cancel := r.storeCtx()
-	if err := r.opt.Store.Abandon(ctx, r.matchID, "all_absent"); err != nil && !errors.Is(err, ErrMatchClosed) {
+	if err := r.opt.Store.Abandon(ctx, r.matchID, reason); err != nil && !errors.Is(err, ErrMatchClosed) {
 		r.opt.Log.Error("falha ao abandonar partida sem jogadores", "match_id", r.matchID, "err", err)
 	}
 	cancel()
-	r.opt.Log.Info("partida abandonada: todos ausentes", "match_id", r.matchID)
+	r.opt.Log.Info("partida abandonada", "match_id", r.matchID, "reason", reason)
 	ended := protocol.MatchEnded(protocol.EndAbandoned, nil, r.game.Score, false)
 	for s, st := range r.seats {
 		if st == nil {
 			continue
 		}
-		if !st.bot {
+		if st.member() {
 			r.opt.Out.Send(st.userID, ended)
 			r.opt.Out.Send(st.userID, protocol.LeftRoom(protocol.LeftDestroyed))
 			r.opt.Registry.Released(r.opt.ID, st.userID)

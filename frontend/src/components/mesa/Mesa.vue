@@ -14,13 +14,14 @@ import Placar from './Placar.vue'
 import PainelAcao from './PainelAcao.vue'
 import BannerWO from './BannerWO.vue'
 import BarraSinais from './BarraSinais.vue'
+import SairPartida from './SairPartida.vue'
 import { installShortcuts } from '@/game/shortcuts'
 import { startTabTitleBlink } from '@/game/tabTitle'
 
 /**
  * A mesa. Encaixes para as próximas tarefas:
  *  - slot `painel`: o padrão é o PainelAcao (T18), que também mostra de quem é a vez;
- *  - coluna da direita: BannerWO (topo), painel de ação e BarraSinais (secundária, embaixo);
+ *  - coluna da direita: BannerWO (topo), painel de ação, BarraSinais (secundária) e SairPartida (rodapé);
  *  - anúncios para leitores de tela: só o Anunciador, montado no AppShell (a mesa não tem região viva própria);
  *  - `inject('coberta')` (Ref<boolean>): jogar a próxima carta coberta.
  */
@@ -253,6 +254,7 @@ onBeforeUnmount(() => {
         />
       </slot>
       <BarraSinais />
+      <SairPartida />
     </aside>
   </div>
   <p

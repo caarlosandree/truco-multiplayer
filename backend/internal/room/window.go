@@ -12,7 +12,7 @@ const absentAfterTimeouts = 3
 
 // isAbsent: bot nunca fica ausente.
 func (st *seatState) isAbsent() bool {
-	return !st.bot && (!st.connected || st.timeouts >= absentAfterTimeouts)
+	return !st.bot && (st.left || !st.connected || st.timeouts >= absentAfterTimeouts)
 }
 
 // pendingSeats são os assentos com decisão pendente no estado.

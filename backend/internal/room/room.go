@@ -24,7 +24,11 @@ type seatState struct {
 	absentTotal    time.Duration // ausência acumulada na partida, sem o trecho corrente
 	lastSignal     time.Time
 	bot            bool // cadeira de bot: sempre conectado e pronto, nunca host, fora do índice do lobby
+	left           bool // saiu no meio da partida: o bot joga por ele até o fim e a sala não fala mais com ele
 }
+
+// member: humano que ainda está na sala (recebe as mensagens dela e conta para mantê-la viva).
+func (st *seatState) member() bool { return st != nil && !st.bot && !st.left }
 
 type Room struct {
 	opt    Options

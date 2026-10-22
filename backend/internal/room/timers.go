@@ -22,7 +22,7 @@ func (r *Room) settle() {
 			}
 		case protocol.RoomPlaying:
 			if at, all := r.allAbsentAt(); all && !now.Before(at) {
-				r.abandonAllAbsent()
+				r.abandonMatch("all_absent")
 				return
 			}
 			r.pruneBotReqs()

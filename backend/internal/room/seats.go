@@ -9,7 +9,7 @@ import (
 
 func (r *Room) seatOf(userID string) (engine.Seat, bool) {
 	for s, st := range r.seats {
-		if st != nil && st.userID == userID {
+		if st != nil && !st.left && st.userID == userID {
 			return engine.Seat(s), true
 		}
 	}
@@ -27,21 +27,21 @@ func (r *Room) occupied() int {
 	return n
 }
 
-// humans conta os assentos humanos: só eles mantêm a sala viva.
+// humans conta os humanos que ainda estão na sala: só eles a mantêm viva.
 func (r *Room) humans() int {
 	n := 0
 	for _, st := range r.seats {
-		if st != nil && !st.bot {
+		if st.member() {
 			n++
 		}
 	}
 	return n
 }
 
-// firstHuman é o primeiro assento humano (o host nunca é bot).
+// firstHuman é o primeiro assento humano ainda na sala (o host nunca é bot).
 func (r *Room) firstHuman() engine.Seat {
 	for s, st := range r.seats {
-		if st != nil && !st.bot {
+		if st.member() {
 			return engine.Seat(s)
 		}
 	}
@@ -57,7 +57,7 @@ func (r *Room) reply(userID, code string, seq int64) {
 
 func (r *Room) broadcast(msg protocol.ServerMessage) {
 	for _, st := range r.seats {
-		if st != nil && !st.bot {
+		if st.member() {
 			r.opt.Out.Send(st.userID, msg)
 		}
 	}
@@ -153,7 +153,7 @@ func (r *Room) command(m Command) {
 	}
 	switch m.Message.Type {
 	case protocol.TypeLeaveRoom:
-		r.leave(seat, m.Message)
+		r.leave(seat)
 	case protocol.TypeTakeSeat:
 		r.takeSeat(seat, m.Message)
 	case protocol.TypeSetReady:
@@ -180,10 +180,31 @@ func (r *Room) requireWaiting(seat engine.Seat, seq int64) bool {
 	return false
 }
 
-func (r *Room) leave(seat engine.Seat, msg protocol.ClientMessage) {
-	if r.requireWaiting(seat, msg.Seq) {
-		r.removeSeat(seat, protocol.LeftLeft)
+func (r *Room) leave(seat engine.Seat) {
+	if r.status == protocol.RoomPlaying {
+		r.leaveMatch(seat)
+		return
 	}
+	r.removeSeat(seat, protocol.LeftLeft)
+}
+
+// leaveMatch tira o jogador da partida em andamento. Sem outro humano na sala, a partida é abandonada na hora;
+// com outros, o assento fica ausente para sempre (o bot joga por ele, inclusive para o ranking e o W.O.) e só
+// sai da mesa na volta à espera.
+func (r *Room) leaveMatch(seat engine.Seat) {
+	st := r.seats[seat]
+	st.left, st.connected, st.disconnectedAt = true, false, r.now()
+	r.opt.Out.Send(st.userID, protocol.LeftRoom(protocol.LeftLeft))
+	r.opt.Registry.Released(r.opt.ID, st.userID)
+	r.opt.Log.Info("jogador saiu da partida", "match_id", r.matchID, "seat", seat)
+	if r.humans() == 0 {
+		r.abandonMatch("all_left")
+		return
+	}
+	if r.host == seat {
+		r.host = r.firstHuman()
+	}
+	r.publish()
 }
 
 func (r *Room) takeSeat(seat engine.Seat, msg protocol.ClientMessage) {
@@ -347,7 +368,7 @@ func (r *Room) disconnected(userID string) {
 // publish envia o room_state a cada membro e o resumo ao lobby.
 func (r *Room) publish() {
 	for s, st := range r.seats {
-		if st != nil && !st.bot {
+		if st.member() {
 			r.opt.Out.Send(st.userID, r.roomState(engine.Seat(s)))
 		}
 	}

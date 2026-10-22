@@ -174,7 +174,7 @@ func (r *Room) broadcastGame(evs []engine.Event) {
 		}
 		seat := engine.Seat(s)
 		appendSeatEvents(&r.seatEvents, seat, evs) // memória de cada assento (os bots só sabem isto)
-		if st.bot {
+		if !st.member() {
 			continue
 		}
 		if msg, ok := protocol.EventsMessage(evs, seat); ok {
@@ -205,7 +205,7 @@ func SeatEventsOf(rec replay.Record) ([4][]engine.Event, error) {
 
 func (r *Room) broadcastState() {
 	for s, st := range r.seats {
-		if st != nil && !st.bot {
+		if st.member() {
 			r.opt.Out.Send(st.userID, r.stateFor(engine.Seat(s)))
 		}
 	}
@@ -238,14 +238,19 @@ func (r *Room) endMatch(reason protocol.EndReason, winner *engine.Team, ranked b
 	r.resetToWaiting()
 }
 
-// resetToWaiting volta a sala para a espera com os mesmos ocupantes (revanche).
+// resetToWaiting volta a sala para a espera com os mesmos ocupantes (revanche); quem saiu da partida
+// deixa a cadeira vazia.
 func (r *Room) resetToWaiting() {
 	now := r.now()
 	r.status, r.matchID, r.game, r.nextPly = protocol.RoomWaiting, "", engine.GameState{}, 0
 	r.window, r.deadlines, r.pauseUntil, r.offered = "", nil, time.Time{}, nil
 	r.resetBotState()
-	for _, st := range r.seats {
+	for s, st := range r.seats {
 		if st == nil {
+			continue
+		}
+		if st.left {
+			r.seats[s] = nil
 			continue
 		}
 		st.ready, st.timeouts, st.absentSince, st.absentTotal = st.bot, 0, time.Time{}, 0
