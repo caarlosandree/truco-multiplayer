@@ -162,3 +162,17 @@ func TestAcceptWithReservedButUnseatedUser(t *testing.T) {
 		}
 	})
 }
+
+func TestFreeSeatsCountsBotSeats(t *testing.T) {
+	var rs protocol.RoomSummary
+	rs.Seats[0] = &protocol.SeatSummary{DisplayName: "Ana"}
+	rs.Seats[1] = &protocol.SeatSummary{DisplayName: "Seu Zé", Bot: true}
+	rs.Seats[2] = &protocol.SeatSummary{DisplayName: "Bia"}
+	if got := freeSeats(room.Summary{Room: rs}); got != 2 { // 1 nil + 1 bot
+		t.Fatalf("freeSeats = %d, esperado 2", got)
+	}
+	rs.Seats[3] = &protocol.SeatSummary{DisplayName: "Caio"}
+	if got := freeSeats(room.Summary{Room: rs}); got != 1 {
+		t.Fatalf("freeSeats = %d, esperado 1", got)
+	}
+}

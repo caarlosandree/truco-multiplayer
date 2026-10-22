@@ -17,12 +17,12 @@ enableAutoUnmount(afterEach)
 let pinia: ReturnType<typeof createPinia>
 let send: ReturnType<typeof vi.fn<Sender>>
 const seats = (n: number) =>
-  [0, 1, 2, 3].map((s) => ({ userId: `u${s}`, displayName: ['Ana', 'Bia', 'Caio', 'Duda'][s]!, ready: true, connected: true, absent: false, n }))
+  [0, 1, 2, 3].map((s) => ({ userId: `u${s}`, displayName: ['Ana', 'Bia', 'Caio', 'Duda'][s]!, ready: true, connected: true, absent: false, bot: false, botPlaying: false, n }))
 
 function roomState(over: Partial<Parameters<ReturnType<typeof useRoomStore>['onRoomState']>[0]> = {}) {
   return {
     id: 'r', code: 'ABC234', name: 'Sala', visibility: 'public' as const, host: 0, status: 'playing' as const, matchId: 'm',
-    seats: seats(0), yourSeat: 0, ...over,
+    seats: seats(0), yourSeat: 0, ranked: null, ...over,
   }
 }
 
@@ -147,7 +147,7 @@ describe('FimPartida', () => {
   const corpo = () => document.body.textContent ?? ''
 
   it('vitória por W.O.: resultado, motivo neutro e placar da minha dupla', async () => {
-    useRoomStore().onMatchEnded({ reason: 'forfeit', winner: 0, score: [12, 7] })
+    useRoomStore().onMatchEnded({ reason: 'forfeit', winner: 0, score: [12, 7], ranked: true })
     abrir()
     await flushPromises()
     expect(corpo()).toContain('Vitória')
@@ -157,8 +157,8 @@ describe('FimPartida', () => {
   })
 
   it('derrota: o placar é relativo à minha dupla', async () => {
-    useRoomStore().onRoomState(roomState({ yourSeat: 1 }))
-    useRoomStore().onMatchEnded({ reason: 'game_over', winner: 0, score: [12, 7] })
+    useRoomStore().onRoomState(roomState({ yourSeat: 1, ranked: null }))
+    useRoomStore().onMatchEnded({ reason: 'game_over', winner: 0, score: [12, 7], ranked: true })
     abrir()
     await flushPromises()
     expect(corpo()).toContain('Derrota')
@@ -170,7 +170,7 @@ describe('FimPartida', () => {
     ['aborted', 'Partida abortada pelo administrador'],
     ['abandoned', 'Partida abandonada'],
   ] as const)('sem vencedor (%s)', async (reason, texto) => {
-    useRoomStore().onMatchEnded({ reason, winner: null, score: [3, 2] })
+    useRoomStore().onMatchEnded({ reason, winner: null, score: [3, 2], ranked: true })
     abrir()
     await flushPromises()
     expect(corpo()).toContain(texto)
@@ -178,14 +178,14 @@ describe('FimPartida', () => {
   })
 
   it('o foco inicial vai para "Revanche" (ação principal), não para "Sair da sala"', async () => {
-    useRoomStore().onMatchEnded({ reason: 'game_over', winner: 0, score: [12, 7] })
+    useRoomStore().onMatchEnded({ reason: 'game_over', winner: 0, score: [12, 7], ranked: true })
     abrir()
     await flushPromises()
     expect(document.activeElement).toBe(document.querySelector('[data-acao="revanche"]'))
   })
 
   it('o diálogo é descrito pelo resultado e o foco entra nele', async () => {
-    useRoomStore().onMatchEnded({ reason: 'game_over', winner: 0, score: [12, 7] })
+    useRoomStore().onMatchEnded({ reason: 'game_over', winner: 0, score: [12, 7], ranked: true })
     abrir()
     await flushPromises()
     const dlg = document.querySelector('[role="dialog"]')
@@ -197,7 +197,7 @@ describe('FimPartida', () => {
 
   it('revanche fecha o modal e a sala de espera continua; o modal antigo não volta', async () => {
     const room = useRoomStore()
-    room.onMatchEnded({ reason: 'game_over', winner: 0, score: [12, 7] })
+    room.onMatchEnded({ reason: 'game_over', winner: 0, score: [12, 7], ranked: true })
     // o servidor volta a sala para "waiting" com todos sem pronto
     room.onRoomState(roomState({ status: 'waiting', seats: seats(1).map((s) => ({ ...s, ready: false })) }))
     abrir()
@@ -210,7 +210,7 @@ describe('FimPartida', () => {
     expect(room.amReady).toBe(false)
     // nova partida e novo fim: o modal aparece de novo, uma vez só
     room.onRoomState(roomState())
-    room.onMatchEnded({ reason: 'game_over', winner: 1, score: [3, 12] })
+    room.onMatchEnded({ reason: 'game_over', winner: 1, score: [3, 12], ranked: true })
     await flushPromises()
     expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1)
     expect(corpo()).toContain('Derrota')
@@ -218,7 +218,7 @@ describe('FimPartida', () => {
 
   it('sair da sala: envia leave_room e fecha; erro vira toast e mantém o modal', async () => {
     const room = useRoomStore()
-    room.onMatchEnded({ reason: 'game_over', winner: 0, score: [12, 7] })
+    room.onMatchEnded({ reason: 'game_over', winner: 0, score: [12, 7], ranked: true })
     abrir()
     await flushPromises()
     send.mockRejectedValueOnce({ code: 'internal', message: 'x' })
@@ -234,14 +234,14 @@ describe('FimPartida', () => {
 
   it('left_room (expulso, abandono) limpa o fim de partida antigo', () => {
     const room = useRoomStore()
-    room.onMatchEnded({ reason: 'game_over', winner: 0, score: [12, 7] })
+    room.onMatchEnded({ reason: 'game_over', winner: 0, score: [12, 7], ranked: true })
     room.onLeft({ reason: 'kicked' })
     expect(room.ended).toBeNull()
   })
 
   it('entrar em outra sala não traz o fim de partida antigo de volta', () => {
     const room = useRoomStore()
-    room.onMatchEnded({ reason: 'game_over', winner: 0, score: [12, 7] })
+    room.onMatchEnded({ reason: 'game_over', winner: 0, score: [12, 7], ranked: true })
     room.onRoomState(roomState({ id: 'outra', status: 'waiting' }))
     expect(room.ended).toBeNull()
   })

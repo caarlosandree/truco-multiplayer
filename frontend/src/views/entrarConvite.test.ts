@@ -20,6 +20,7 @@ const sala = (id: string) => ({
   status: 'waiting' as const,
   seats: [null, null, null, null] as never,
   yourSeat: 1 as const,
+  ranked: null,
 })
 
 async function montar(conexao: 'open' | 'connecting' = 'open') {

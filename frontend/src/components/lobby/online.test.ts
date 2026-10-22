@@ -47,8 +47,8 @@ function populate(users: PresenceEntry[]) {
 function sentarEmSala() {
   useRoomStore().onRoomState({
     id: 'r1', code: 'ABC234', name: 'Sala', visibility: 'public', host: 0, status: 'waiting',
-    seats: [{ userId: 'id-eu', displayName: 'EU', ready: false, connected: true, absent: false }, null, null, null],
-    yourSeat: 0,
+    seats: [{ userId: 'id-eu', displayName: 'EU', ready: false, connected: true, absent: false, bot: false, botPlaying: false }, null, null, null],
+    yourSeat: 0, ranked: null,
   })
 }
 
@@ -102,8 +102,8 @@ it('em sala com lugar livre, "Convidar" chama invite; eu e quem já está na sal
   useRoomStore().onRoomState({
     ...useRoomStore().room!,
     seats: [
-      { userId: 'id-eu', displayName: 'EU', ready: false, connected: true, absent: false },
-      { userId: 'id-dani', displayName: 'Dani', ready: false, connected: true, absent: false },
+      { userId: 'id-eu', displayName: 'EU', ready: false, connected: true, absent: false, bot: false, botPlaying: false },
+      { userId: 'id-dani', displayName: 'Dani', ready: false, connected: true, absent: false, bot: false, botPlaying: false },
       null,
       null,
     ],

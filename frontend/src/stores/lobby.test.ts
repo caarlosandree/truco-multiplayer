@@ -7,7 +7,7 @@ const room = (id: string, over: Partial<RoomSummary> = {}): RoomSummary => ({
   id,
   name: `Sala ${id}`,
   status: 'waiting',
-  seats: [{ displayName: 'Ana' }, null, null, null],
+  seats: [{ displayName: 'Ana', bot: false }, null, null, null],
   ...over,
 })
 

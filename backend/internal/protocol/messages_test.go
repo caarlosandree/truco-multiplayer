@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/bot"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/engine"
 )
 
@@ -139,5 +140,40 @@ func TestDecodeInvitePayloads(t *testing.T) {
 		if !KnownClientType(typ) {
 			t.Fatalf("%s deveria ser tipo conhecido", typ)
 		}
+	}
+}
+
+func TestSignalIDsMatchBotSignals(t *testing.T) {
+	got := []string{string(SignalTruco), string(SignalBoa), string(SignalVamos), string(SignalCalma), string(SignalDesculpa), string(SignalValeu)}
+	want := []string{string(bot.SigTruco), string(bot.SigBoa), string(bot.SigVamos), string(bot.SigCalma), string(bot.SigDesculpa), string(bot.SigValeu)}
+	for i := range want {
+		if got[i] != want[i] || !SignalID(want[i]).Valid() {
+			t.Fatalf("sinal %d: protocol=%q bot=%q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestBotFieldsOnTheWire(t *testing.T) {
+	ranked := true
+	raw, _ := json.Marshal(RoomStatePayload{Ranked: &ranked, Seats: [4]*SeatInfo{{Bot: true, BotPlaying: true}}})
+	for _, want := range []string{`"ranked":true`, `"bot":true`, `"botPlaying":true`} {
+		if !strings.Contains(string(raw), want) {
+			t.Fatalf("faltou %s em %s", want, raw)
+		}
+	}
+	raw, _ = json.Marshal(RoomStatePayload{})
+	if !strings.Contains(string(raw), `"ranked":null`) {
+		t.Fatalf("ranked deve ser null fora de playing: %s", raw)
+	}
+	raw, _ = json.Marshal(MatchEnded(EndGameOver, nil, [2]int{}, true).Payload)
+	if !strings.Contains(string(raw), `"ranked":true`) {
+		t.Fatalf("match_ended sem ranked: %s", raw)
+	}
+	raw, _ = json.Marshal(RoomSummary{Seats: [4]*SeatSummary{{DisplayName: "x", Bot: true}}})
+	if !strings.Contains(string(raw), `"bot":true`) {
+		t.Fatalf("seat summary sem bot: %s", raw)
+	}
+	if !KnownClientType(TypeStartWithBots) || errorText(CodeNoEmptySeat) != "não há cadeira vazia" || errorText(CodeNotWaiting) != "a partida já começou" {
+		t.Fatal("start_with_bots/códigos de erro ausentes")
 	}
 }

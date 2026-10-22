@@ -188,13 +188,13 @@ func ForfeitAvailable(team *engine.Team) ServerMessage {
 	return Message(MsgForfeitAvailable, ForfeitAvailablePayload{Team: copied})
 }
 
-func MatchEnded(reason EndReason, winner *engine.Team, score [2]int) ServerMessage {
+func MatchEnded(reason EndReason, winner *engine.Team, score [2]int, ranked bool) ServerMessage {
 	var copied *engine.Team
 	if winner != nil {
 		w := *winner
 		copied = &w
 	}
-	return Message(MsgMatchEnded, MatchEndedPayload{Reason: reason, Winner: copied, Score: score})
+	return Message(MsgMatchEnded, MatchEndedPayload{Reason: reason, Winner: copied, Score: score, Ranked: ranked})
 }
 
 func SignalBroadcast(seat engine.Seat, id SignalID) ServerMessage {

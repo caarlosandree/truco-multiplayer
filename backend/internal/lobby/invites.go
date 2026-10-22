@@ -86,7 +86,7 @@ func (l *Lobby) randomString(n int) (string, error) {
 func freeSeats(s room.Summary) int {
 	n := 0
 	for _, st := range s.Room.Seats {
-		if st == nil {
+		if st == nil || st.Bot {
 			n++
 		}
 	}

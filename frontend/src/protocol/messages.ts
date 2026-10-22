@@ -39,6 +39,10 @@ export const TypeSignal = "signal";
 /**
  * Tipos de mensagem de sala/social enviados pelo cliente. As de jogo usam engine.ActionKind.
  */
+export const TypeStartWithBots = "start_with_bots";
+/**
+ * Tipos de mensagem de sala/social enviados pelo cliente. As de jogo usam engine.ActionKind.
+ */
 export const TypeInvite = "invite";
 /**
  * Tipos de mensagem de sala/social enviados pelo cliente. As de jogo usam engine.ActionKind.
@@ -187,6 +191,14 @@ export const CodeCannotInviteSelf = "cannot_invite_self";
  * Códigos de erro de sala/lobby. Erros de regra usam engine.ErrorCode.
  */
 export const CodeUserNotFound = "user_not_found";
+/**
+ * Códigos de erro de sala/lobby. Erros de regra usam engine.ErrorCode.
+ */
+export const CodeNoEmptySeat = "no_empty_seat";
+/**
+ * Códigos de erro de sala/lobby. Erros de regra usam engine.ErrorCode.
+ */
+export const CodeNotWaiting = "not_waiting";
 
 //////////
 // source: server.go
@@ -205,6 +217,7 @@ export const RoomWaiting: RoomStatus = "waiting";
 export const RoomPlaying: RoomStatus = "playing";
 export interface SeatSummary {
   displayName: string;
+  bot: boolean;
 }
 /**
  * RoomSummary é a linha da sala na lista do lobby (só salas públicas aparecem).
@@ -231,6 +244,8 @@ export interface SeatInfo {
   ready: boolean;
   connected: boolean;
   absent: boolean;
+  bot: boolean; // cadeira ocupada por bot
+  botPlaying: boolean; // humano ausente com bot jogando por ele
 }
 /**
  * RoomStatePayload é a visão da sala para um membro; o código só vai para membros.
@@ -245,6 +260,10 @@ export interface RoomStatePayload {
   seats: (SeatInfo | null)[];
   matchId?: string;
   yourSeat: engine.Seat;
+  /**
+   * Ranked: "se a partida terminasse agora, contaria?"; null fora de playing.
+   */
+  ranked: boolean | null;
 }
 export type LeftReason = string;
 export const LeftLeft: LeftReason = "left";
@@ -276,6 +295,7 @@ export interface MatchEndedPayload {
   reason: EndReason;
   winner: engine.Team | null;
   score: number /* int */[];
+  ranked: boolean;
 }
 export interface SignalBroadcastPayload {
   seat: engine.Seat;

@@ -13,12 +13,12 @@ import type { PresenceEntry, RoomInvite, RoomStatePayload } from '@/protocol/mes
 const base: RoomStatePayload = {
   id: 'r1', code: 'ABC234', name: 'Sala da Ana', visibility: 'private', host: 0, status: 'waiting',
   seats: [
-    { userId: 'id-eu', displayName: 'EU', ready: false, connected: true, absent: false },
-    { userId: 'id-bia', displayName: 'BIA', ready: true, connected: true, absent: false },
+    { userId: 'id-eu', displayName: 'EU', ready: false, connected: true, absent: false, bot: false, botPlaying: false },
+    { userId: 'id-bia', displayName: 'BIA', ready: true, connected: true, absent: false, bot: false, botPlaying: false },
     null,
     null,
   ],
-  yourSeat: 0,
+  yourSeat: 0, ranked: null,
 }
 const entry = (username: string, over: Partial<PresenceEntry> = {}): PresenceEntry => ({
   userId: `id-${username}`, username, displayName: username.toUpperCase(), status: 'lobby', ...over,
@@ -143,7 +143,7 @@ it('erro ao convidar mostra toast, mantém o seletor aberto', async () => {
 it('sem canInvite (sala cheia ou em jogo) nenhum botão "Convidar" aparece', () => {
   const cheia: RoomStatePayload = {
     ...base,
-    seats: [0, 1, 2, 3].map((i) => ({ userId: `u${i}`, displayName: `P${i}`, ready: false, connected: true, absent: false })),
+    seats: [0, 1, 2, 3].map((i) => ({ userId: `u${i}`, displayName: `P${i}`, ready: false, connected: true, absent: false, bot: false, botPlaying: false })),
   }
   const w = mountEspera(cheia)
   expect(w.find('[data-acao="convidar"]').exists()).toBe(false)

@@ -16,12 +16,12 @@ import type { RoomStatePayload } from '@/protocol/messages'
 const base: RoomStatePayload = {
   id: 'r1', code: 'ABC234', name: 'Sala da Ana', visibility: 'private', host: 0, status: 'waiting',
   seats: [
-    { userId: 'u1', displayName: 'Ana', ready: false, connected: true, absent: false },
-    { userId: 'u2', displayName: 'Bia', ready: true, connected: false, absent: false },
+    { userId: 'u1', displayName: 'Ana', ready: false, connected: true, absent: false, bot: false, botPlaying: false },
+    { userId: 'u2', displayName: 'Bia', ready: true, connected: false, absent: false, bot: false, botPlaying: false },
     null,
     null,
   ],
-  yourSeat: 0,
+  yourSeat: 0, ranked: null,
 }
 const dialog = () => document.querySelector('[role="dialog"]')
 const wrappers: VueWrapper[] = []
@@ -178,7 +178,7 @@ describe('SalaView', () => {
     useSessionStore().setConnection('open')
     const room = useRoomStore()
     room.onRoomState({ ...base, status: 'playing', matchId: 'm' })
-    room.onMatchEnded({ reason: 'game_over', winner: 0, score: [12, 7] })
+    room.onMatchEnded({ reason: 'game_over', winner: 0, score: [12, 7], ranked: true })
     // o servidor volta a sala a "waiting" (sem prontos)
     room.onRoomState({ ...base, seats: base.seats.map((s) => (s ? { ...s, ready: false } : s)) })
     await flushPromises()

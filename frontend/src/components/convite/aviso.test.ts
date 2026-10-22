@@ -22,7 +22,7 @@ const convite = (inviteId: string, over: Partial<InviteReceivedPayload> = {}): I
 })
 const sala = (status: 'waiting' | 'playing'): RoomStatePayload => ({
   id: 'r0', code: 'ABC234', name: 'Minha sala', visibility: 'private', host: 0, status,
-  seats: [null, null, null, null], yourSeat: 0,
+  seats: [null, null, null, null], yourSeat: 0, ranked: null,
 })
 
 let pinia: ReturnType<typeof createPinia>

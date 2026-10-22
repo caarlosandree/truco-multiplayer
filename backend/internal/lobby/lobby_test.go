@@ -397,3 +397,30 @@ func TestRestoreKeepsFirstRoomWhenUserAppearsTwice(t *testing.T) {
 		t.Fatalf("faltou o aviso de usuário duplicado:\n%s", out)
 	}
 }
+
+func TestRoomWithBotSeatIsListedAsJoinable(t *testing.T) {
+	l := newLobby(t, 3)
+	ana, bia := connect(l, "u0", "Ana"), connect(l, "u1", "Bia")
+	dispatch(l, ana, protocol.TypeCreateRoom, protocol.CreateRoomPayload{Visibility: protocol.VisibilityPublic})
+	st := roomState(t, ana)
+	var rs protocol.RoomSummary
+	rs.ID, rs.Name, rs.Status = st.ID, st.Name, protocol.RoomWaiting
+	rs.Seats[0] = &protocol.SeatSummary{DisplayName: "Ana"}
+	rs.Seats[1] = &protocol.SeatSummary{DisplayName: "Cida"}
+	rs.Seats[2] = &protocol.SeatSummary{DisplayName: "Dedé"}
+	rs.Seats[3] = &protocol.SeatSummary{DisplayName: "Seu Zé", Bot: true}
+	l.Update(room.Summary{Room: rs, Public: true, Code: st.Code})
+	up := bia.waitFor(t, protocol.MsgRoomUpserted, func(m protocol.ServerMessage) bool {
+		r := m.Payload.(protocol.RoomUpsertedPayload).Room
+		return r.Seats[3] != nil && r.Seats[3].Bot
+	}).Payload.(protocol.RoomUpsertedPayload)
+	if up.Room.ID != st.ID {
+		t.Fatalf("sala listada = %+v", up.Room)
+	}
+	// join_room sem assento é encaminhado à sala (que decide); o lobby não responde room_full.
+	dispatch(l, bia, protocol.TypeJoinRoom, protocol.JoinRoomPayload{RoomID: &st.ID})
+	roomState(t, bia)
+	if bia.count(protocol.MsgError) != 0 {
+		t.Fatalf("não esperava erro: %+v", bia.messages())
+	}
+}

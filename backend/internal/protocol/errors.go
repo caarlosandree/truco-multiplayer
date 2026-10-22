@@ -20,6 +20,8 @@ const (
 	CodeInviteePlaying     = "invitee_playing"
 	CodeCannotInviteSelf   = "cannot_invite_self"
 	CodeUserNotFound       = "user_not_found"
+	CodeNoEmptySeat        = "no_empty_seat"
+	CodeNotWaiting         = "not_waiting"
 )
 
 var errorTexts = map[string]string{
@@ -41,6 +43,8 @@ var errorTexts = map[string]string{
 	CodeInviteePlaying:     "a pessoa está numa partida",
 	CodeCannotInviteSelf:   "você não pode convidar a si mesmo",
 	CodeUserNotFound:       "usuário não encontrado",
+	CodeNoEmptySeat:        "não há cadeira vazia",
+	CodeNotWaiting:         "a partida já começou",
 }
 
 func errorText(code string) string {

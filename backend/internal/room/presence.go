@@ -153,7 +153,7 @@ func (r *Room) abandonAllAbsent() {
 	}
 	cancel()
 	r.opt.Log.Info("partida abandonada: todos ausentes", "match_id", r.matchID)
-	ended := protocol.MatchEnded(protocol.EndAbandoned, nil, r.game.Score)
+	ended := protocol.MatchEnded(protocol.EndAbandoned, nil, r.game.Score, false)
 	for s, st := range r.seats {
 		if st == nil {
 			continue

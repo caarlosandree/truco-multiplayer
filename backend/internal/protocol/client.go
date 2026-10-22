@@ -4,14 +4,15 @@ import "github.com/caarlosandree/truco-multiplayer/backend/internal/engine"
 
 // Tipos de mensagem de sala/social enviados pelo cliente. As de jogo usam engine.ActionKind.
 const (
-	TypeCreateRoom   = "create_room"
-	TypeJoinRoom     = "join_room"
-	TypeLeaveRoom    = "leave_room"
-	TypeTakeSeat     = "take_seat"
-	TypeSetReady     = "set_ready"
-	TypeKick         = "kick"
-	TypeClaimForfeit = "claim_forfeit"
-	TypeSignal       = "signal"
+	TypeCreateRoom    = "create_room"
+	TypeJoinRoom      = "join_room"
+	TypeLeaveRoom     = "leave_room"
+	TypeTakeSeat      = "take_seat"
+	TypeSetReady      = "set_ready"
+	TypeKick          = "kick"
+	TypeClaimForfeit  = "claim_forfeit"
+	TypeSignal        = "signal"
+	TypeStartWithBots = "start_with_bots"
 
 	TypeInvite            = "invite"
 	TypeInviteRespond     = "invite_respond"

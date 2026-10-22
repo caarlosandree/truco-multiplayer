@@ -18,6 +18,7 @@ export type ClientMessage =
   | { type: "vote"; seq?: number; payload: m.VotePayload }
   | { type: "claim_forfeit"; seq?: number }
   | { type: "signal"; seq?: number; payload: m.SignalPayload }
+  | { type: "start_with_bots"; seq?: number }
   | { type: "invite"; seq?: number; payload: m.InvitePayload }
   | { type: "invite_respond"; seq?: number; payload: m.InviteRespondPayload }
   | { type: "invite_accept_token"; seq?: number; payload: m.InviteAcceptTokenPayload };

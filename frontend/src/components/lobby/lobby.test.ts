@@ -9,7 +9,7 @@ import { useToastsStore } from '@/stores/toasts'
 import Modal from '@/components/ui/Modal.vue'
 import { WsSendError } from '@/ws/client'
 
-const room = (id: string, over = {}) => ({ id, name: `Sala ${id}`, status: 'waiting', seats: [{ displayName: 'Ana' }, null, null, null], ...over })
+const room = (id: string, over = {}) => ({ id, name: `Sala ${id}`, status: 'waiting', seats: [{ displayName: 'Ana', bot: false }, null, null, null], ...over })
 const dialog = () => document.querySelector('[role="dialog"]')
 
 let pinia: ReturnType<typeof createPinia>
@@ -113,8 +113,8 @@ it('código inexistente aparece junto ao campo, sem toast', async () => {
 it('sala cheia e em jogo ficam indisponíveis para leitor de tela, sem ações', async () => {
   useLobbyStore().onSnapshot({
     rooms: [
-      room('c', { seats: [{ displayName: 'A' }, { displayName: 'B' }, { displayName: 'C' }, { displayName: 'D' }] }),
-      room('p', { status: 'playing', seats: [{ displayName: 'A' }, { displayName: 'B' }, { displayName: 'C' }, { displayName: 'D' }], score: [9, 11] }),
+      room('c', { seats: [{ displayName: 'A', bot: false }, { displayName: 'B', bot: false }, { displayName: 'C', bot: false }, { displayName: 'D', bot: false }] }),
+      room('p', { status: 'playing', seats: [{ displayName: 'A', bot: false }, { displayName: 'B', bot: false }, { displayName: 'C', bot: false }, { displayName: 'D', bot: false }], score: [9, 11] }),
     ],
   })
   const w = mountLobby()

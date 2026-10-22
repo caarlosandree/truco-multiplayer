@@ -54,11 +54,11 @@ it('entrega cada tipo à store dona', () => {
   dispatch({ type: 'room_removed', payload: { roomId: 'r' } })
   dispatch({
     type: 'room_state',
-    payload: { id: 'r', code: 'ABC', name: 'n', visibility: 'public', host: 0, status: 'waiting', seats: [null, null, null, null], yourSeat: 0 },
+    payload: { id: 'r', code: 'ABC', name: 'n', visibility: 'public', host: 0, status: 'waiting', seats: [null, null, null, null], yourSeat: 0, ranked: null },
   })
   dispatch({ type: 'left_room', payload: { reason: 'left' } })
   dispatch({ type: 'forfeit_available', payload: { team: 1 } })
-  dispatch({ type: 'match_ended', payload: { reason: 'game_over', winner: 0, score: [12, 3] } })
+  dispatch({ type: 'match_ended', payload: { reason: 'game_over', winner: 0, score: [12, 3], ranked: true } })
   dispatch({ type: 'state', payload: { view, deadlines: {}, pendingSeats: [] } })
   dispatch({ type: 'events', payload: [] })
   dispatch({ type: 'signal', payload: { seat: 1, id: 'boa' } })
@@ -96,7 +96,7 @@ describe('reconexão e sala fantasma', () => {
     host: 0,
     status: 'waiting' as const,
     seats: [null, null, null, null],
-    yourSeat: 0,
+    yourSeat: 0, ranked: null,
   }
 
   it('lobby_snapshot com sala antiga no store: o servidor diz que estamos fora, limpa sala e jogo', () => {
@@ -186,7 +186,7 @@ describe('convites', () => {
     await invites.acceptToken('tok')
     dispatch({
       type: 'room_state',
-      payload: { id: 'r', code: 'ABC', name: 'n', visibility: 'private', host: 0, status: 'waiting', seats: [null, null, null, null], yourSeat: 1 },
+      payload: { id: 'r', code: 'ABC', name: 'n', visibility: 'private', host: 0, status: 'waiting', seats: [null, null, null, null], yourSeat: 1, ranked: null },
     })
     expect(invites.tokenOutcome).toBe('accepted')
     setSender(null)

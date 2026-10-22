@@ -20,7 +20,7 @@ it('convite estando em outra sala: avisa e leva à sala atual', async () => {
     host: 0,
     status: 'waiting',
     seats: [null, null, null, null],
-    yourSeat: 0,
+    yourSeat: 0, ranked: null,
   })
   await router.push('/convite/XYZ789')
   const replace = vi.spyOn(router, 'replace')

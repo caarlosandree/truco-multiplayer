@@ -16,7 +16,7 @@ beforeEach(() => {
 
 const roomState: RoomStatePayload = {
   id: 'r1', code: 'ABC234', name: 'Sala', visibility: 'public', host: 0, status: 'waiting',
-  seats: [{ userId: 'u1', displayName: 'Ana', ready: false, connected: true, absent: false }, null, null, null], yourSeat: 0,
+  seats: [{ userId: 'u1', displayName: 'Ana', ready: false, connected: true, absent: false, bot: false, botPlaying: false }, null, null, null], yourSeat: 0, ranked: null,
 }
 
 it('entrar numa sala leva a /sala; ser removido volta ao lobby com aviso', async () => {

@@ -28,6 +28,7 @@ var ClientMessages = []MessageSpec{
 	{string(engine.ActVote), reflect.TypeFor[VotePayload]()},
 	{TypeClaimForfeit, nil},
 	{TypeSignal, reflect.TypeFor[SignalPayload]()},
+	{TypeStartWithBots, nil},
 	{TypeInvite, reflect.TypeFor[InvitePayload]()},
 	{TypeInviteRespond, reflect.TypeFor[InviteRespondPayload]()},
 	{TypeInviteAcceptToken, reflect.TypeFor[InviteAcceptTokenPayload]()},

@@ -194,7 +194,7 @@ func (r *Room) finish(last engine.Action) {
 
 func (r *Room) endMatch(reason protocol.EndReason, winner *engine.Team) {
 	r.opt.Log.Info("partida encerrada", "match_id", r.matchID, "reason", reason)
-	r.broadcast(protocol.MatchEnded(reason, winner, r.game.Score))
+	r.broadcast(protocol.MatchEnded(reason, winner, r.game.Score, false))
 	r.resetToWaiting()
 }
 

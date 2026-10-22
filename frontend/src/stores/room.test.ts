@@ -17,12 +17,12 @@ const state = (over: Partial<RoomStatePayload> = {}): RoomStatePayload => ({
   host: 0,
   status: 'waiting',
   seats: [
-    { userId: 'u1', displayName: 'Ana', ready: true, connected: true, absent: false },
+    { userId: 'u1', displayName: 'Ana', ready: true, connected: true, absent: false, bot: false, botPlaying: false },
     null,
-    { userId: 'u3', displayName: 'Caio', ready: false, connected: true, absent: false },
+    { userId: 'u3', displayName: 'Caio', ready: false, connected: true, absent: false, bot: false, botPlaying: false },
     null,
   ],
-  yourSeat: 0,
+  yourSeat: 0, ranked: null,
   ...over,
 })
 
@@ -51,7 +51,7 @@ it('volta a waiting limpa o jogo; left_room limpa tudo', () => {
 
 it('guarda e descarta o fim de partida', () => {
   const r = useRoomStore()
-  r.onMatchEnded({ reason: 'forfeit', winner: 0, score: [12, 4] })
+  r.onMatchEnded({ reason: 'forfeit', winner: 0, score: [12, 4], ranked: true })
   expect(r.ended?.reason).toBe('forfeit')
   r.dismissEnded()
   expect(r.ended).toBeNull()
@@ -80,9 +80,9 @@ it('toca vitória ou derrota no match_ended conforme a dupla vencedora', () => {
   setMatchSoundPlayer(play)
   const r = useRoomStore()
   r.onRoomState(state({ status: 'playing', matchId: 'm1' }))
-  r.onMatchEnded({ reason: 'game_over', winner: 0, score: [12, 6] })
-  r.onMatchEnded({ reason: 'game_over', winner: 1, score: [6, 12] })
-  r.onMatchEnded({ reason: 'aborted', winner: null, score: [0, 0] })
+  r.onMatchEnded({ reason: 'game_over', winner: 0, score: [12, 6], ranked: true })
+  r.onMatchEnded({ reason: 'game_over', winner: 1, score: [6, 12], ranked: true })
+  r.onMatchEnded({ reason: 'aborted', winner: null, score: [0, 0], ranked: true })
   expect(play.mock.calls.map((c) => c[0])).toEqual(['victory', 'defeat'])
 })
 
@@ -91,7 +91,7 @@ it('W.O. com vencedor toca o som da dupla vencedora', () => {
   setMatchSoundPlayer(play)
   const r = useRoomStore()
   r.onRoomState(state({ status: 'playing', matchId: 'm1' }))
-  r.onMatchEnded({ reason: 'forfeit', winner: 1, score: [4, 12] })
+  r.onMatchEnded({ reason: 'forfeit', winner: 1, score: [4, 12], ranked: true })
   expect(play.mock.calls.map((c) => c[0])).toEqual(['defeat'])
 })
 
@@ -102,7 +102,7 @@ it('onOutsideRoom limpa sala, desistência, fim de partida e jogo; sem sala não
   expect(reset).not.toHaveBeenCalled()
   r.onRoomState(state({ status: 'playing', matchId: 'm1' }))
   r.onForfeit({ team: 1 })
-  r.onMatchEnded({ reason: 'game_over', winner: 0, score: [12, 3] })
+  r.onMatchEnded({ reason: 'game_over', winner: 0, score: [12, 3], ranked: true })
   r.onOutsideRoom()
   expect([r.room, r.forfeitTeam, r.ended, r.lastLeft]).toEqual([null, null, null, null])
   expect(reset).toHaveBeenCalledOnce()
@@ -118,7 +118,7 @@ describe('convidar para a sala', () => {
 
   it('canInvite é falso com 4 sentados e durante o jogo', () => {
     const r = useRoomStore()
-    const seat = (userId: string) => ({ userId, displayName: userId, ready: true, connected: true, absent: false })
+    const seat = (userId: string) => ({ userId, displayName: userId, ready: true, connected: true, absent: false, bot: false, botPlaying: false })
     r.onRoomState(state({ seats: [seat('a'), seat('b'), seat('c'), seat('d')] }))
     expect([r.freeSeats, r.canInvite]).toEqual([[], false])
     r.onRoomState(state({ status: 'playing' }))

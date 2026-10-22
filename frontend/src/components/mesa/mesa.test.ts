@@ -49,8 +49,8 @@ beforeEach(() => {
   useSessionStore().connection = 'open'
   useRoomStore().onRoomState({
     id: 'r', code: 'ABC234', name: 'Sala', visibility: 'public', host: 0, status: 'playing', matchId: 'm',
-    seats: [0, 1, 2, 3].map((s) => ({ userId: `u${s}`, displayName: ['Ana', 'Bia', 'Caio', 'Duda'][s]!, ready: true, connected: true, absent: s === 3 })),
-    yourSeat: 1,
+    seats: [0, 1, 2, 3].map((s) => ({ userId: `u${s}`, displayName: ['Ana', 'Bia', 'Caio', 'Duda'][s]!, ready: true, connected: true, absent: s === 3, bot: false, botPlaying: false })),
+    yourSeat: 1, ranked: null,
   })
 })
 const offsetHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')

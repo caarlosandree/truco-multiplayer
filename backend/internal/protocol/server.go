@@ -22,6 +22,7 @@ const (
 
 type SeatSummary struct {
 	DisplayName string `json:"displayName"`
+	Bot         bool   `json:"bot"`
 }
 
 // RoomSummary é a linha da sala na lista do lobby (só salas públicas aparecem).
@@ -51,6 +52,8 @@ type SeatInfo struct {
 	Ready       bool   `json:"ready"`
 	Connected   bool   `json:"connected"`
 	Absent      bool   `json:"absent"`
+	Bot         bool   `json:"bot"`        // cadeira ocupada por bot
+	BotPlaying  bool   `json:"botPlaying"` // humano ausente com bot jogando por ele
 }
 
 // RoomStatePayload é a visão da sala para um membro; o código só vai para membros.
@@ -64,6 +67,8 @@ type RoomStatePayload struct {
 	Seats      [4]*SeatInfo `json:"seats" tstype:"(SeatInfo | null)[],required"`
 	MatchID    string       `json:"matchId,omitempty"`
 	YourSeat   engine.Seat  `json:"yourSeat"`
+	// Ranked: "se a partida terminasse agora, contaria?"; null fora de playing.
+	Ranked *bool `json:"ranked" tstype:"boolean | null,required"`
 }
 
 type LeftReason string
@@ -103,6 +108,7 @@ type MatchEndedPayload struct {
 	Reason EndReason    `json:"reason"`
 	Winner *engine.Team `json:"winner" tstype:"engine.Team | null,required"`
 	Score  [2]int       `json:"score"`
+	Ranked bool         `json:"ranked"`
 }
 
 type SignalBroadcastPayload struct {
