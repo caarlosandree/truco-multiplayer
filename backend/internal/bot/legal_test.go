@@ -3,28 +3,13 @@ package bot
 import (
 	"context"
 	"math/rand/v2"
-	"slices"
 	"testing"
 
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/engine"
 )
 
-// inputFor monta o Input de um assento a partir do estado real. É helper de
-// TESTE: nenhuma função exportada do pacote recebe GameState.
-func inputFor(g engine.GameState, seat engine.Seat, evs []engine.Event) Input {
-	return Input{
-		View:   engine.ViewFor(g, seat),
-		Events: engine.FilterEvents(evs, seat),
-		Legal:  engine.LegalActions(g, seat),
-	}
-}
-
-func actionIn(legal []engine.Action, a engine.Action) bool {
-	return slices.ContainsFunc(legal, func(l engine.Action) bool { return sameAction(l, a) })
-}
-
 func TestPoliciesAlwaysReturnLegalAction(t *testing.T) {
-	policies := map[string]Policy{"simple": Simple{}}
+	policies := map[string]Policy{"simple": Simple{}, "strong": Strong{Samples: 8}}
 	players := [4]engine.Player{{ID: "a", Name: "A"}, {ID: "b", Name: "B"}, {ID: "c", Name: "C"}, {ID: "d", Name: "D"}}
 	for name, p := range policies {
 		t.Run(name, func(t *testing.T) {
@@ -39,7 +24,7 @@ func TestPoliciesAlwaysReturnLegalAction(t *testing.T) {
 					var a engine.Action
 					acted := false
 					for s := engine.Seat(0); s < 4; s++ {
-						in := inputFor(g, s, evs)
+						in := inputFromState(g, s, evs)
 						if len(in.Legal) == 0 {
 							continue
 						}

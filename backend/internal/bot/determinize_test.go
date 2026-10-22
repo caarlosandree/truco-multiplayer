@@ -142,7 +142,7 @@ func TestSampleConservesCards(t *testing.T) {
 	rng := rand.New(rand.NewPCG(5, 6))
 	for i, sn := range snaps {
 		seat := engine.Seat(i % 4)
-		in := inputFor(sn.g, seat, sn.evs)
+		in := inputFromState(sn.g, seat, sn.evs)
 		b := NewBelief(in)
 		phases[sn.g.Phase]++
 		if sn.g.Hand != nil {
@@ -159,7 +159,7 @@ func TestSampleMatchesView(t *testing.T) {
 	rng := rand.New(rand.NewPCG(11, 12))
 	for i, sn := range randomSnapshots(t, 500) {
 		seat := engine.Seat(i % 4)
-		in := inputFor(sn.g, seat, sn.evs)
+		in := inputFromState(sn.g, seat, sn.evs)
 		b := NewBelief(in)
 		for range 5 {
 			got := engine.ViewFor(Sample(in, b, rng), seat)
@@ -202,7 +202,7 @@ func TestSampleKeepsHiddenHidden(t *testing.T) {
 		if !swapped {
 			continue
 		}
-		in1, in2 := inputFor(sn.g, me, sn.evs), inputFor(g2, me, sn.evs)
+		in1, in2 := inputFromState(sn.g, me, sn.evs), inputFromState(g2, me, sn.evs)
 		if !reflect.DeepEqual(in1, in2) {
 			t.Fatalf("Input depende de carta escondida (fase %s)", sn.g.Phase)
 		}
@@ -229,7 +229,7 @@ func TestSampleIronAndElevenHands(t *testing.T) {
 		kinds := map[engine.HandKind]int{}
 		for i, sn := range randomSnapshotsFrom(t, 300, score) {
 			seat := engine.Seat(i % 4)
-			in := inputFor(sn.g, seat, sn.evs)
+			in := inputFromState(sn.g, seat, sn.evs)
 			b := NewBelief(in)
 			if sn.g.Hand != nil {
 				kinds[sn.g.Hand.Kind]++
@@ -250,7 +250,7 @@ func TestSampleIronAndElevenHands(t *testing.T) {
 
 func TestSampleDeterministic(t *testing.T) {
 	for _, sn := range randomSnapshots(t, 50) {
-		in := inputFor(sn.g, 2, sn.evs)
+		in := inputFromState(sn.g, 2, sn.evs)
 		b := NewBelief(in)
 		a := Sample(in, b, rand.New(rand.NewPCG(8, 9)))
 		c := Sample(in, b, rand.New(rand.NewPCG(8, 9)))
@@ -263,7 +263,7 @@ func TestSampleDeterministic(t *testing.T) {
 func TestSampleZeroBeliefFallsBackToUniform(t *testing.T) {
 	rng := rand.New(rand.NewPCG(1, 2))
 	for _, sn := range randomSnapshots(t, 100) {
-		in := inputFor(sn.g, 1, sn.evs)
+		in := inputFromState(sn.g, 1, sn.evs)
 		checkConservation(t, sn.g, Sample(in, Belief{}, rng))
 	}
 }
@@ -290,7 +290,7 @@ func raiseSnapshot(t *testing.T, viewer engine.Seat) Input {
 			}
 			g, evs = next, append(evs, newEvs...)
 			if a.Kind == engine.ActRequestRaise && a.Seat == 1 && g.Phase == engine.PhaseAwaitingRaiseResponse {
-				return inputFor(g, viewer, evs)
+				return inputFromState(g, viewer, evs)
 			}
 		}
 	}
@@ -359,7 +359,7 @@ func BenchmarkSample(b *testing.B) {
 	var ins []Input
 	for i, sn := range snaps {
 		if sn.g.Phase == engine.PhasePlaying {
-			ins = append(ins, inputFor(sn.g, engine.Seat(i%4), sn.evs))
+			ins = append(ins, inputFromState(sn.g, engine.Seat(i%4), sn.evs))
 		}
 	}
 	bels := make([]Belief, len(ins))
