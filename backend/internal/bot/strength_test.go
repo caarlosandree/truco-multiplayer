@@ -1,10 +1,6 @@
 package bot
 
-import (
-	"testing"
-
-	"github.com/caarlosandree/truco-multiplayer/backend/internal/engine"
-)
+import "testing"
 
 // MinGamesCI e MinWinsCI: versão reduzida da meta de §5.5 que roda no CI. 40
 // vitórias em 60 partidas dão p < 0,01 contra 50%.
@@ -21,22 +17,11 @@ func strongVsSimpleFrom(strong Policy, first uint64, games int) int {
 }
 
 // strongVsOpponent joga games partidas (seeds first..first+games-1) e devolve as
-// vitórias da dupla forte. O lado da dupla forte é (seed/4)%2, desacoplado do
-// dealer inicial (seed%4): em cada 8 seeds a dupla forte passa por todos os
-// dealers iniciais nos dois lados.
+// vitórias da dupla forte (alternância de lados em PlayVersus).
 func strongVsOpponent(strong, opp Policy, first uint64, games int) int {
 	wins := 0
 	for seed := first; seed < first+uint64(games); seed++ {
-		var ps [4]Policy
-		strongTeam := engine.Team((seed / 4) % 2)
-		for s := range 4 {
-			if engine.TeamOf(engine.Seat(s)) == strongTeam {
-				ps[s] = strong
-			} else {
-				ps[s] = opp
-			}
-		}
-		if PlayMatch(ps, seed) == strongTeam {
+		if PlayVersus(strong, opp, seed) {
 			wins++
 		}
 	}

@@ -1,4 +1,4 @@
-.PHONY: test test-short gen-types gen-sql dev-db run migrate web-install web-dev web-build web-test e2e
+.PHONY: bot-bench test test-short gen-types gen-sql dev-db run migrate web-install web-dev web-build web-test e2e
 
 test:
 	cd backend && go test ./...
@@ -37,3 +37,7 @@ web-test:
 
 e2e:
 	./scripts/e2e.sh
+
+# Benchmark de força do bot (Spec 5 §5.5): falha abaixo de 300 vitórias em 400.
+bot-bench:
+	cd backend && go run ./cmd/botbench -games 400 -seed 1

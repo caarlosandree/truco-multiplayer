@@ -74,3 +74,20 @@ func PlayMatch(policies [4]Policy, seed uint64) engine.Team {
 	}
 	return *g.Winner
 }
+
+// PlayVersus joga uma partida da dupla strong contra a dupla opp e diz se a
+// forte venceu. O lado da forte é (seed/4)%2, desacoplado do dealer inicial
+// (seed%4): em cada 8 seeds ela passa por todos os dealers iniciais nos dois
+// lados. Usado pelo teste de força e pelo cmd/botbench.
+func PlayVersus(strong, opp Policy, seed uint64) bool {
+	var ps [4]Policy
+	strongTeam := engine.Team((seed / 4) % 2)
+	for s := range 4 {
+		if engine.TeamOf(engine.Seat(s)) == strongTeam {
+			ps[s] = strong
+		} else {
+			ps[s] = opp
+		}
+	}
+	return PlayMatch(ps, seed) == strongTeam
+}

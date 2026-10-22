@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/url"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -31,6 +32,12 @@ type GameTiming struct {
 	WaitingDisconnect                time.Duration
 }
 
+// BotConfig reúne os parâmetros dos bots (Spec 5 §10).
+type BotConfig struct {
+	ThinkBudget, DelayMin, DelayMax time.Duration
+	MaxConcurrent                   int
+}
+
 // Config reúne as opções do servidor já validadas.
 type Config struct {
 	DatabaseURL         string
@@ -49,6 +56,7 @@ type Config struct {
 	LogFormat           string
 	StaticDir           string
 	Game                GameTiming
+	Bots                BotConfig
 	MaxRooms            int
 	ShutdownTimeout     time.Duration
 }
@@ -148,6 +156,18 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 	if cfg.Game.AbsenceBudget < cfg.Game.AbsenceGrace {
 		errs = append(errs, errors.New("ABSENCE_BUDGET_SECONDS deve ser >= ABSENCE_GRACE_SECONDS"))
+	}
+	millis := func(key string, fallback, lo, hi int) time.Duration {
+		return time.Duration(intIn(key, fallback, lo, hi)) * time.Millisecond
+	}
+	cfg.Bots = BotConfig{
+		ThinkBudget:   millis("BOT_THINK_BUDGET_MS", 800, 50, 5000),
+		MaxConcurrent: intIn("BOT_MAX_CONCURRENT", min(max(runtime.GOMAXPROCS(0), 1), 64), 1, 64),
+		DelayMin:      millis("BOT_DELAY_MIN_MS", 1000, 0, 10000),
+		DelayMax:      millis("BOT_DELAY_MAX_MS", 3000, 0, 10000),
+	}
+	if cfg.Bots.DelayMax < cfg.Bots.DelayMin {
+		errs = append(errs, errors.New("BOT_DELAY_MAX_MS deve ser >= BOT_DELAY_MIN_MS"))
 	}
 	cfg.MaxRooms = intIn("MAX_ROOMS", 50, 1, 1000)
 	cfg.ShutdownTimeout = seconds("SHUTDOWN_TIMEOUT_SECONDS", 15, 1, 120)

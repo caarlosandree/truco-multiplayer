@@ -173,3 +173,58 @@ func TestAbsenceBudgetMustCoverGrace(t *testing.T) {
 		t.Fatalf("orçamento menor que a carência deve falhar: %v", err)
 	}
 }
+
+func TestBotConfigDefaults(t *testing.T) {
+	cfg, err := Load(env(validEnv()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := cfg.Bots
+	if b.ThinkBudget != 800*time.Millisecond || b.DelayMin != time.Second || b.DelayMax != 3*time.Second {
+		t.Fatalf("padrões dos bots errados: %+v", b)
+	}
+	if b.MaxConcurrent < 1 || b.MaxConcurrent > 64 {
+		t.Fatalf("MaxConcurrent = %d fora de 1..64", b.MaxConcurrent)
+	}
+}
+
+func TestBotConfigOverridesAndLimits(t *testing.T) {
+	with := func(k, v string) map[string]string {
+		m := validEnv()
+		m[k] = v
+		return m
+	}
+	cfg, err := Load(env(func() map[string]string {
+		m := validEnv()
+		m["BOT_THINK_BUDGET_MS"] = "50"
+		m["BOT_MAX_CONCURRENT"] = "64"
+		m["BOT_DELAY_MIN_MS"] = "0"
+		m["BOT_DELAY_MAX_MS"] = "10000"
+		return m
+	}()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Bots.ThinkBudget != 50*time.Millisecond || cfg.Bots.MaxConcurrent != 64 || cfg.Bots.DelayMin != 0 || cfg.Bots.DelayMax != 10*time.Second {
+		t.Fatalf("bots = %+v", cfg.Bots)
+	}
+	for _, c := range [][2]string{
+		{"BOT_THINK_BUDGET_MS", "49"}, {"BOT_THINK_BUDGET_MS", "5001"},
+		{"BOT_MAX_CONCURRENT", "0"}, {"BOT_MAX_CONCURRENT", "65"},
+		{"BOT_DELAY_MIN_MS", "-1"}, {"BOT_DELAY_MIN_MS", "10001"},
+		{"BOT_DELAY_MAX_MS", "10001"}, {"BOT_DELAY_MAX_MS", "abc"},
+	} {
+		if _, err := Load(env(with(c[0], c[1]))); err == nil || !strings.Contains(err.Error(), c[0]) {
+			t.Errorf("%s=%s deveria falhar citando a variável, err = %v", c[0], c[1], err)
+		}
+	}
+}
+
+func TestBotDelayMaxMustCoverMin(t *testing.T) {
+	m := validEnv()
+	m["BOT_DELAY_MIN_MS"] = "2000"
+	m["BOT_DELAY_MAX_MS"] = "1000"
+	if _, err := Load(env(m)); err == nil || !strings.Contains(err.Error(), "BOT_DELAY_MAX_MS") {
+		t.Fatalf("err = %v", err)
+	}
+}
