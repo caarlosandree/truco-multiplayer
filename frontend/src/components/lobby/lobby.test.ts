@@ -202,3 +202,20 @@ it('erro ao entrar vira toast', async () => {
   await flushPromises()
   expect(useToastsStore().items.map((t) => t.text)).toEqual(['A sala está cheia.'])
 })
+
+it('cadeira de bot tem selo e é clicável como vaga, e a sala com bot não é cheia', async () => {
+  const send = vi.fn().mockResolvedValue(undefined)
+  setSender(send)
+  useLobbyStore().onSnapshot({
+    rooms: [room('a', { seats: [{ displayName: 'Ana', bot: false }, { displayName: 'Seu Zé', bot: true }, { displayName: 'Bia', bot: false }, { displayName: 'Caio', bot: false }] })],
+  })
+  const w = mountLobby()
+  const bot = w.find('[data-sala="a"] [data-assento="1"]')
+  expect(bot.element.tagName).toBe('BUTTON')
+  expect(bot.find('[data-selo-bot]').text()).toContain('bot')
+  expect(bot.text()).toContain('Seu Zé')
+  expect(w.find('[data-sala="a"]').text()).not.toContain('Cheia')
+  await bot.trigger('click')
+  await flushPromises()
+  expect(send).toHaveBeenCalledWith({ type: 'join_room', payload: { roomId: 'a', seat: 1 } })
+})

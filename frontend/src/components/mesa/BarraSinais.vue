@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref, useId, watch } from 'vue'
 import type { SignalID } from '@/protocol/messages'
 import { SIGNALS } from '@/game/labels'
 import { useGameStore } from '@/stores/game'
+import LegendaSinais from './LegendaSinais.vue'
 
 /**
  * Sinais rápidos: secundários ao painel de ação. Desktop: grade 3×2 sempre à vista na coluna da lousa.
@@ -12,6 +13,8 @@ import { useGameStore } from '@/stores/game'
 const game = useGameStore()
 const gradeId = useId()
 const aberto = ref(false)
+const legenda = ref(false)
+const ajuda = ref<HTMLButtonElement | null>(null)
 const raiz = ref<HTMLElement | null>(null)
 const toggle = ref<HTMLButtonElement | null>(null)
 
@@ -43,6 +46,11 @@ watch(
   },
 )
 
+function fecharLegenda() {
+  legenda.value = false
+  ajuda.value?.focus()
+}
+
 async function enviar(id: SignalID) {
   recolher(true)
   await game.sendSignal(id)
@@ -72,40 +80,57 @@ onBeforeUnmount(() => {
     data-sinais
     class="relative flex flex-col gap-2"
   >
-    <div class="flex items-center justify-between gap-3 text-sm text-(--painel-dica) max-lg:hidden">
-      <span>Sinais</span>
-      <span
-        v-if="espera"
-        class="tabular-nums"
-        data-sinais-espera
-      >Aguarde {{ restanteS }} s</span>
+    <div class="flex items-center justify-between gap-3 text-sm text-(--painel-dica) max-lg:justify-end">
+      <div class="flex items-center gap-3 max-lg:hidden">
+        <span>Sinais</span>
+        <span
+          v-if="espera"
+          class="tabular-nums"
+          data-sinais-espera
+        >Aguarde {{ restanteS }} s</span>
+      </div>
+      <!-- legenda: o que cada sinal quer dizer (os bots usam a mesma convenção) -->
+      <button
+        ref="ajuda"
+        type="button"
+        data-sinais-ajuda
+        aria-label="O que cada sinal significa"
+        aria-haspopup="dialog"
+        class="inline-grid size-11 place-items-center rounded-botao-2 text-(--painel-fg) hover:bg-giz/10 max-lg:order-first"
+        @click="aberto = false; legenda = true"
+      >
+        <span
+          aria-hidden="true"
+          class="grid size-6 place-items-center rounded-full text-sm leading-none font-bold inset-ring-1 inset-ring-line/60"
+        >?</span>
+      </button>
+      <button
+        ref="toggle"
+        type="button"
+        data-sinais-toggle
+        :aria-expanded="aberto"
+        :aria-controls="gradeId"
+        class="inline-flex h-11 min-w-11 items-center gap-2 rounded-botao-2 px-3 text-sm font-bold text-(--painel-fg) inset-ring-1 inset-ring-line/60 hover:bg-giz/10 lg:hidden"
+        @click="aberto = !aberto"
+      >
+        Sinais
+        <span
+          v-if="espera"
+          class="font-normal text-(--painel-dica) tabular-nums"
+        >{{ restanteS }} s</span>
+        <svg
+          viewBox="0 0 16 16"
+          class="size-4 transition-transform duration-(--dur-rapido) ease-padrao"
+          :class="aberto ? 'rotate-180' : ''"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        ><path d="M3.5 10.5 8 6l4.5 4.5" /></svg>
+      </button>
     </div>
-    <button
-      ref="toggle"
-      type="button"
-      data-sinais-toggle
-      :aria-expanded="aberto"
-      :aria-controls="gradeId"
-      class="ml-auto inline-flex h-11 min-w-11 items-center gap-2 rounded-botao-2 px-3 text-sm font-bold text-(--painel-fg) inset-ring-1 inset-ring-line/60 hover:bg-giz/10 lg:hidden"
-      @click="aberto = !aberto"
-    >
-      Sinais
-      <span
-        v-if="espera"
-        class="font-normal text-(--painel-dica) tabular-nums"
-      >{{ restanteS }} s</span>
-      <svg
-        viewBox="0 0 16 16"
-        class="size-4 transition-transform duration-(--dur-rapido) ease-padrao"
-        :class="aberto ? 'rotate-180' : ''"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
-      ><path d="M3.5 10.5 8 6l4.5 4.5" /></svg>
-    </button>
     <div
       :id="gradeId"
       role="group"
@@ -128,5 +153,9 @@ onBeforeUnmount(() => {
         {{ s.text }}
       </button>
     </div>
+    <LegendaSinais
+      :open="legenda"
+      @close="fecharLegenda"
+    />
   </div>
 </template>

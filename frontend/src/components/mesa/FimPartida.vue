@@ -5,6 +5,7 @@ import { useRoomStore } from '@/stores/room'
 import { useToastsStore } from '@/stores/toasts'
 import Botao from '@/components/ui/Botao.vue'
 import Modal from '@/components/ui/Modal.vue'
+import SeloBot from '@/components/ui/SeloBot.vue'
 import Tentos from './Tentos.vue'
 
 /**
@@ -82,6 +83,14 @@ async function sair() {
           data-motivo
         >
           {{ endReasonText(e.reason) }}
+        </p>
+        <p
+          v-if="e.ranked === false"
+          data-sem-ranking
+          class="mt-3 text-balance text-base text-giz-muted"
+        >
+          <SeloBot class="mr-2 align-middle" />
+          Partida com bots — não conta no ranking.
         </p>
         <p
           class="sr-only"

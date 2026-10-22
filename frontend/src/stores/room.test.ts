@@ -125,3 +125,82 @@ describe('convidar para a sala', () => {
     expect([r.freeSeats, r.canInvite]).toEqual([[1, 3], false])
   })
 })
+
+describe('bots', () => {
+  const seatsBots = (over: { bot?: boolean; botPlaying?: boolean }[] = []) =>
+    ['Ana', 'Bia', 'Caio', 'Duda'].map((displayName, i) => ({
+      userId: `u${i}`, displayName, ready: true, connected: true, absent: false, bot: false, botPlaying: false, ...over[i],
+    }))
+
+  it('startWithBots envia start_with_bots sem payload', async () => {
+    const send = vi.fn().mockResolvedValue(undefined)
+    setSender(send)
+    await useRoomStore().startWithBots()
+    expect(send).toHaveBeenCalledWith({ type: 'start_with_bots' })
+  })
+
+  it('botPlaying vira true em partida só de humanos: aviso longo e anúncio', async () => {
+    const { useToastsStore } = await import('./toasts')
+    const r = useRoomStore()
+    r.onRoomState(state({ status: 'playing', seats: seatsBots(), ranked: true }))
+    expect(r.takeover).toBeNull()
+    r.onRoomState(state({ status: 'playing', seats: seatsBots([{}, {}, {}, { botPlaying: true }]), ranked: false }))
+    expect(r.takeover?.assentos.map((a) => a.nome)).toEqual(['Duda'])
+    expect(useToastsStore().items.at(-1)?.text).toBe(
+      'Duda saiu; um bot assumiu. Se Duda não voltar até o fim, a partida não conta no ranking — vocês ainda podem pedir W.O.',
+    )
+  })
+
+  it('partida que começou com bot: só "saiu; um bot assumiu."', async () => {
+    const { useToastsStore } = await import('./toasts')
+    const r = useRoomStore()
+    r.onRoomState(state({ status: 'waiting', seats: seatsBots([{}, {}, { bot: true }, { bot: true }]) }))
+    r.onRoomState(state({ status: 'playing', seats: seatsBots([{}, {}, { bot: true }, { bot: true }]), ranked: false }))
+    r.onRoomState(state({ status: 'playing', seats: seatsBots([{}, { botPlaying: true }, { bot: true }, { bot: true }]), ranked: false }))
+    expect(useToastsStore().items.at(-1)?.text).toBe('Bia saiu; um bot assumiu.')
+  })
+
+  it('não repete o aviso enquanto o bot segue no lugar nem ao reconectar já com bot jogando', async () => {
+    const { useToastsStore } = await import('./toasts')
+    const r = useRoomStore()
+    const jogando = seatsBots([{}, {}, {}, { botPlaying: true }])
+    r.onRoomState(state({ status: 'playing', seats: jogando, ranked: false }))
+    r.onRoomState(state({ status: 'playing', seats: jogando, ranked: false }))
+    expect(useToastsStore().items).toHaveLength(0)
+  })
+
+  it('cai, volta e cai de novo: um aviso só por assento por partida', async () => {
+    const { useToastsStore } = await import('./toasts')
+    const r = useRoomStore()
+    const normal = seatsBots()
+    const caido = seatsBots([{}, {}, {}, { botPlaying: true }])
+    r.onRoomState(state({ status: 'playing', seats: normal, ranked: true }))
+    r.onRoomState(state({ status: 'playing', seats: caido, ranked: false }))
+    r.onRoomState(state({ status: 'playing', seats: normal, ranked: true }))
+    r.onRoomState(state({ status: 'playing', seats: caido, ranked: false }))
+    expect(useToastsStore().items).toHaveLength(1)
+    // nova partida: avisa de novo
+    r.onRoomState(state({ status: 'waiting', seats: normal }))
+    r.onRoomState(state({ status: 'playing', seats: normal, ranked: true }))
+    r.onRoomState(state({ status: 'playing', seats: caido, ranked: false }))
+    expect(useToastsStore().items).toHaveLength(2)
+  })
+
+  it('dois assentos assumidos no mesmo room_state: dois avisos e os dois no lote', async () => {
+    const { useToastsStore } = await import('./toasts')
+    const r = useRoomStore()
+    r.onRoomState(state({ status: 'playing', seats: seatsBots(), ranked: true }))
+    r.onRoomState(state({ status: 'playing', seats: seatsBots([{}, { botPlaying: true }, {}, { botPlaying: true }]), ranked: false }))
+    expect(useToastsStore().items.map((t) => t.text.split(' saiu')[0])).toEqual(['Bia', 'Duda'])
+    expect(r.takeover?.assentos.map((a) => a.nome)).toEqual(['Bia', 'Duda'])
+  })
+
+  it('voltar para waiting zera o aviso', () => {
+    const r = useRoomStore()
+    r.onRoomState(state({ status: 'playing', seats: seatsBots(), ranked: true }))
+    r.onRoomState(state({ status: 'playing', seats: seatsBots([{}, {}, {}, { botPlaying: true }]), ranked: false }))
+    expect(r.takeover).not.toBeNull()
+    r.onRoomState(state({ status: 'waiting', seats: seatsBots() }))
+    expect(r.takeover).toBeNull()
+  })
+})

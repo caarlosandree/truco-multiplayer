@@ -456,3 +456,32 @@ it('Prazo não agenda quadros sem prazo, religa quando ele chega e cancela ao su
   raf.mockRestore()
   caf.mockRestore()
 })
+
+describe('bots na mesa (assentos)', () => {
+  const seatsB = (over: { bot?: boolean; botPlaying?: boolean; absent?: boolean }[]) =>
+    ['Ana', 'Bia', 'Caio', 'Duda'].map((displayName, i) => ({
+      userId: `u${i}`, displayName, ready: true, connected: true, absent: false, bot: false, botPlaying: false, ...over[i],
+    }))
+  const posta = (over: Parameters<typeof seatsB>[0]) => {
+    useRoomStore().onRoomState({
+      id: 'r', code: 'ABC234', name: 'Sala', visibility: 'public', host: 0, status: 'playing', matchId: 'm',
+      seats: seatsB(over), yourSeat: 1, ranked: null,
+    })
+    useGameStore().onState(makeState({ seat: 1, turn: 1 }, [1]))
+  }
+
+  it('assento de bot mostra o selo "bot"', () => {
+    posta([{}, {}, { bot: true }, { bot: true }])
+    const w = mount(Mesa, { global: { plugins: [pinia] } })
+    expect(w.findAll('[data-selo-bot]')).toHaveLength(2)
+    expect(w.find('[data-posicao="top"]').text()).toContain('bot')
+  })
+
+  it('humano ausente com bot jogando: "bot jogando por Ana" e placa esmaecida', () => {
+    posta([{ absent: true, botPlaying: true }, {}, {}, {}])
+    const w = mount(Mesa, { global: { plugins: [pinia] } })
+    const assento = w.findAll('[data-posicao]').find((a) => a.text().includes('Ana'))
+    expect(assento?.text()).toContain('bot jogando por Ana')
+    expect(assento?.find('[data-placa-esmaecida]').exists()).toBe(true)
+  })
+})

@@ -52,6 +52,9 @@ const ERRORS: Record<string, string> = {
   game_over: 'A partida já terminou.',
   already_decided: 'Você já decidiu.',
   invalid_seat: 'Lugar inválido.',
+  // Bots
+  no_empty_seat: 'Não há cadeira vazia.',
+  not_waiting: 'A partida já começou.',
 }
 
 export function errorText(code: string, serverMessage?: string): string {
@@ -93,6 +96,18 @@ export const SIGNALS: readonly { id: SignalID; text: string }[] = [
 export function signalText(id: SignalID): string {
   return SIGNALS.find((s) => s.id === id)?.text ?? id
 }
+
+/** Legenda dos sinais (spec dos bots §5.6): o que cada um quer dizer na mesa e como o bot o usa. */
+export const SIGNAL_LEGEND: readonly { sinais: readonly string[]; manda: string; entende: string }[] = [
+  { sinais: ['Truco!'], manda: 'Tem mão para pedir ou aceitar truco.', entende: 'Parceiro forte: topa pedir e aceitar mais fácil.' },
+  { sinais: ['Vamos!'], manda: 'Quer que o parceiro aceite ou siga.', entende: 'Aceita mais fácil.' },
+  { sinais: ['Calma…'], manda: 'Mão fraca, não vai pedir.', entende: 'Evita pedir e corre mais fácil.' },
+  {
+    sinais: ['Boa!', 'Valeu!', 'Desculpa!'],
+    manda: 'Reações: ganhou a rodada, o parceiro jogou bem ou você errou.',
+    entende: 'Ignora na hora de decidir.',
+  },
+]
 
 const END_REASONS: Record<EndReason, string> = {
   game_over: 'Fim de jogo',

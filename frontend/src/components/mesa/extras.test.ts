@@ -338,3 +338,51 @@ it('BarraSinais: fechar a folha devolve o foco ao botão "Sinais"', async () => 
   await flushPromises()
   expect(document.activeElement).toBe(w.find('[data-sinais-toggle]').element)
 })
+
+describe('bots na mesa', () => {
+  const seatsB = (over: { bot?: boolean; botPlaying?: boolean }[]) =>
+    seats(0).map((s, i) => ({ ...s, ...over[i] }))
+
+  it('FimPartida com ranked=false avisa que não conta no ranking; com ranked=true não', async () => {
+    useRoomStore().onMatchEnded({ reason: 'game_over', winner: 0, score: [12, 7], ranked: false })
+    mount(FimPartida, { global: { plugins: [pinia] }, attachTo: document.body })
+    await flushPromises()
+    expect(document.body.textContent).toContain('Partida com bots — não conta no ranking.')
+    useRoomStore().onMatchEnded({ reason: 'game_over', winner: 0, score: [12, 7], ranked: true })
+    await flushPromises()
+    expect(document.body.textContent).not.toContain('não conta no ranking')
+  })
+
+  it('Anunciador anuncia quando um bot assume o lugar de alguém', async () => {
+    const w = mount(Anunciador, { global: { plugins: [pinia] } })
+    expect(w.text()).not.toContain('pegou as cartas')
+    useRoomStore().onRoomState(roomState({ seats: seatsB([{}, {}, {}, { botPlaying: true }]), ranked: false }))
+    await w.vm.$nextTick()
+    expect(w.find('[data-anunciador]').text()).toContain('Um bot pegou as cartas de Duda')
+  })
+
+  it('"?" na BarraSinais abre a legenda com a tabela de sinais; Esc fecha e devolve o foco', async () => {
+    const w = mount(BarraSinais, { global: { plugins: [pinia] }, attachTo: document.body })
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    const ajuda = w.find('[data-sinais-ajuda]')
+    expect(ajuda.attributes('aria-label')).toBe('O que cada sinal significa')
+    ;(ajuda.element as HTMLElement).focus()
+    await ajuda.trigger('click')
+    await flushPromises()
+    const dialogo = document.querySelector('[role="dialog"]')
+    expect(dialogo?.querySelector('table')).not.toBeNull()
+    expect(dialogo?.textContent).toContain('Calma…')
+    expect(dialogo?.textContent).toContain('Mão fraca, não vai pedir.')
+    expect(dialogo?.contains(document.activeElement)).toBe(true)
+    // foco preso: Tab e Shift+Tab não saem do diálogo
+    for (const shiftKey of [false, true]) {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey, bubbles: true, cancelable: true }))
+      expect(dialogo?.contains(document.activeElement)).toBe(true)
+    }
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    // e o foco volta para o "?"
+    expect(document.activeElement).toBe(ajuda.element)
+  })
+})

@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { teamOf } from '@/game/seats'
 import type { HistoryItem } from '@/stores/players'
+import SeloBot from '@/components/ui/SeloBot.vue'
 
 const props = defineProps<{ item: HistoryItem; viewer: string }>()
 
@@ -14,10 +15,7 @@ const minhaDupla = computed(() => {
 })
 const parceiro = computed(() => props.item.players.find((p) => p.username !== props.viewer && teamOf(p.seat) === minhaDupla.value))
 const adversarios = computed(() =>
-  props.item.players
-    .filter((p) => teamOf(p.seat) !== minhaDupla.value)
-    .sort((a, b) => a.seat - b.seat)
-    .map((p) => p.displayName),
+  props.item.players.filter((p) => teamOf(p.seat) !== minhaDupla.value).sort((a, b) => a.seat - b.seat),
 )
 
 const resultado = computed(() => {
@@ -42,7 +40,8 @@ const dataTexto = computed(() => {
   const d = new Date(data.value)
   return Number.isNaN(d.getTime()) ? '' : quando.format(d)
 })
-const quem = (nomes: string[]) => (nomes.length <= 1 ? (nomes[0] ?? '') : `${nomes.slice(0, -1).join(', ')} e ${nomes.at(-1)}`)
+/** Separador entre nomes da lista "A, B e C". */
+const sep = (i: number, total: number) => (i === 0 ? '' : i === total - 1 ? ' e ' : ', ')
 </script>
 
 <template>
@@ -51,20 +50,35 @@ const quem = (nomes: string[]) => (nomes.length <= 1 ? (nomes[0] ?? '') : `${nom
     class="flex items-start justify-between gap-4 border-t-2 border-line/40 py-3 first:border-t-0"
   >
     <div class="min-w-0">
-      <p class="font-bold">
+      <p class="flex flex-wrap items-center gap-x-2 gap-y-1 font-bold">
         {{ resultado }}
+        <span
+          v-if="!item.ranked"
+          data-com-bots
+          class="rounded-placa px-1.5 py-px text-xs/4 font-bold text-ink-muted inset-ring-1 inset-ring-line"
+        >com bots</span>
       </p>
+      <!-- bots aparecem pelo nome, com selo e sem link de perfil -->
       <p
         v-if="parceiro"
         class="text-pretty text-ink-muted [overflow-wrap:anywhere]"
       >
-        com {{ parceiro.displayName }}
+        com {{ parceiro.displayName }}<SeloBot
+          v-if="parceiro.bot"
+          class="ml-1.5 align-middle"
+        />
       </p>
       <p
         v-if="adversarios.length"
         class="text-pretty text-ink-muted [overflow-wrap:anywhere]"
       >
-        contra {{ quem(adversarios) }}
+        contra <span
+          v-for="(p, i) in adversarios"
+          :key="p.seat"
+        >{{ sep(i, adversarios.length) }}{{ p.displayName }}<SeloBot
+          v-if="p.bot"
+          class="ml-1.5 align-middle"
+        /></span>
       </p>
       <p class="text-sm text-ink-muted">
         <time :datetime="data">{{ dataTexto }}</time>

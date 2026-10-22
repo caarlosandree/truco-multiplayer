@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Seat } from '@/protocol/engine'
 import type { SeatInfo } from '@/protocol/messages'
+import SeloBot from '@/components/ui/SeloBot.vue'
 
 const props = defineProps<{
   seat: Seat
@@ -12,6 +13,8 @@ const props = defineProps<{
   ally: boolean
   /** há lugar livre numa sala de espera: oferece "Convidar" ao lado de "Sentar" */
   canInvite: boolean
+  /** cadeira de bot que quem vê pode tomar ("Sentar aqui" no lugar do bot) */
+  canSwap?: boolean
 }>()
 const emit = defineEmits<{ take: []; kick: []; invite: [] }>()
 </script>
@@ -45,6 +48,7 @@ const emit = defineEmits<{ take: []; kick: []; invite: [] }>()
               class="sr-only"
             >Anfitrião. </span>
             <span class="truncate">{{ props.info.displayName }}</span>
+            <SeloBot v-if="props.info.bot" />
             <span
               v-if="props.isMe"
               class="shrink-0 font-normal text-giz-muted"
@@ -69,7 +73,7 @@ const emit = defineEmits<{ take: []; kick: []; invite: [] }>()
           ><path d="M3 8.5l3.2 3L13 4.5" /></svg>
         </span>
         <button
-          v-if="props.canKick"
+          v-if="props.canKick && !props.info.bot"
           type="button"
           data-acao="remover"
           class="group absolute -top-3.5 -right-3.5 grid size-11 place-items-center rounded-full active:translate-y-(--botao-pressao-y)"
@@ -120,6 +124,27 @@ const emit = defineEmits<{ take: []; kick: []; invite: [] }>()
           Desconectado
         </span>
       </p>
+      <!-- bot: o dono remove na hora (sem modal: não há ninguém para perder o lugar); os outros tomam o lugar -->
+      <button
+        v-if="props.info.bot && props.canSwap"
+        type="button"
+        data-acao="sentar"
+        class="flex min-h-11 w-full items-center justify-center rounded-placa border-2 border-dashed border-giz/60 px-3 text-sm font-bold text-giz hover:bg-giz/10 active:translate-y-(--botao-pressao-y)"
+        :aria-label="`Sentar no lugar de ${props.info.displayName}, lugar ${props.seat + 1}, ${props.ally ? 'nós' : 'eles'}`"
+        @click="emit('take')"
+      >
+        Sentar aqui
+      </button>
+      <button
+        v-if="props.info.bot && props.canKick"
+        type="button"
+        data-acao="remover"
+        class="flex min-h-11 w-full items-center justify-center rounded-botao-2 px-3 text-sm font-bold text-giz inset-ring-2 inset-ring-giz/40 hover:bg-giz/10 active:translate-y-(--botao-pressao-y)"
+        :aria-label="`Remover ${props.info.displayName}`"
+        @click="emit('kick')"
+      >
+        Remover
+      </button>
     </template>
     <template v-else>
       <button

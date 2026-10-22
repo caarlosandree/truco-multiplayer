@@ -3,13 +3,16 @@ import { computed } from 'vue'
 import type { RoomSummary } from '@/protocol/messages'
 import type { Seat } from '@/protocol/engine'
 import { teamOf } from '@/game/seats'
+import SeloBot from '@/components/ui/SeloBot.vue'
 
 const props = defineProps<{ room: RoomSummary }>()
 const emit = defineEmits<{ join: [seat?: Seat] }>()
 
-const open = computed(() => props.room.status === 'waiting' && props.room.seats.some((s) => s === null))
+// cadeira de bot também é vaga: quem entra senta no lugar dele (a sala com bot não é "cheia")
+const vaga = (s: RoomSummary['seats'][number]) => s === null || s.bot
+const open = computed(() => props.room.status === 'waiting' && props.room.seats.some(vaga))
 const playing = computed(() => props.room.status === 'playing')
-const free = computed(() => props.room.seats.filter((s) => s === null).length)
+const free = computed(() => props.room.seats.filter(vaga).length)
 const status = computed(() => {
   if (open.value) return free.value === 1 ? 'Falta 1 jogador' : `Faltam ${free.value} jogadores`
   return playing.value ? 'Em jogo' : 'Cheia'
@@ -69,17 +72,29 @@ const status = computed(() => {
         >
           Sentar
         </button>
+        <button
+          v-else-if="seat?.bot && open"
+          type="button"
+          :data-assento="i"
+          class="flex h-11 w-full flex-col items-center justify-center rounded-botao-2 border-2 border-dashed border-line/70 px-1 text-ink hover:bg-(--botao-fantasma-bg-hover) active:translate-y-(--botao-pressao-y)"
+          :aria-label="`Sentar no lugar ${i + 1} de ${room.name}, no lugar de ${seat.displayName} (bot)`"
+          @click="emit('join', i as Seat)"
+        >
+          <span class="w-full truncate text-center text-xs/4 font-bold">{{ seat.displayName }}</span>
+          <SeloBot />
+        </button>
         <span
           v-else
           :data-assento="i"
-          class="flex h-11 items-center justify-center truncate px-1 text-sm"
-          :class="seat ? 'font-bold' : 'italic'"
+          class="flex h-11 items-center justify-center px-1 text-sm"
+          :class="[seat ? 'font-bold' : 'italic', seat?.bot ? 'flex-col' : 'truncate']"
         >
           <span
             v-if="seat"
             class="sr-only"
           >Lugar {{ i + 1 }}, dupla {{ teamOf(i as Seat) + 1 }}: </span>
-          <span class="truncate">{{ seat ? seat.displayName : 'Livre' }}</span>
+          <span :class="seat?.bot ? 'w-full truncate text-center text-xs/4' : 'truncate'">{{ seat ? seat.displayName : 'Livre' }}</span>
+          <SeloBot v-if="seat?.bot" />
         </span>
         <!-- traço de giz da dupla: contínuo (dupla 0) ou pontilhado (dupla 1); o rótulo é o lugar na lista -->
         <span

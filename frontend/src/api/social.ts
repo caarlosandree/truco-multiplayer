@@ -15,6 +15,8 @@ export interface MatchPlayer {
   seat: number
   username: string
   displayName: string
+  /** cadeira ocupada por bot: aparece com selo e sem link de perfil */
+  bot: boolean
 }
 
 export type MatchStatus = 'in_progress' | 'finished' | 'abandoned'
@@ -30,6 +32,8 @@ export interface HistoryItem {
   finishedAt: string | null
   players: MatchPlayer[]
   endReason: EndReason
+  /** false: a partida teve bot e não contou no ranking */
+  ranked: boolean
 }
 
 export interface HistoryPage {

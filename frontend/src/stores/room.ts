@@ -10,6 +10,7 @@ import type {
 import { send } from '@/app/transport'
 import { teamOf } from '@/game/seats'
 import { useGameStore } from './game'
+import { useToastsStore } from './toasts'
 
 export type MatchSound = 'victory' | 'defeat'
 
@@ -25,6 +26,12 @@ export const useRoomStore = defineStore('room', {
     forfeitTeam: null as Team | null,
     ended: null as MatchEndedPayload | null,
     lastLeft: null as LeftReason | null,
+    /** a partida em curso começou com bot sentado (decide o texto do aviso quando um bot assume o lugar de alguém) */
+    startedWithBots: false,
+    /** lote mais recente de bots que assumiram o lugar de humanos (um room_state pode trazer vários); `key` muda a cada lote */
+    takeover: null as { key: number; assentos: { seat: Seat; nome: string }[] } | null,
+    /** assentos já avisados nesta partida: o aviso vale uma vez por assento por partida */
+    avisados: [] as Seat[],
   }),
   getters: {
     inRoom: (s) => s.room !== null,
@@ -47,6 +54,7 @@ export const useRoomStore = defineStore('room', {
       const wasPlaying = this.room?.status === 'playing'
       // outra sala ou outra partida: o fim de partida anterior não volta a aparecer
       if (this.room?.id !== p.id || (!wasPlaying && p.status === 'playing')) this.ended = null
+      this.trackBots(p, wasPlaying)
       this.room = p
       this.lastLeft = null
       if (wasPlaying && p.status === 'waiting') {
@@ -54,10 +62,44 @@ export const useRoomStore = defineStore('room', {
         useGameStore().reset()
       }
     },
+    /** Começou com bot? E algum humano acabou de ser substituído por um? (só transições observadas, não o estado inicial) */
+    trackBots(p: RoomStatePayload, wasPlaying: boolean) {
+      if (p.status !== 'playing') {
+        this.startedWithBots = false
+        this.avisados = []
+        this.takeover = null
+        return
+      }
+      const anterior = this.room
+      const mesmaSala = anterior !== null && anterior.id === p.id
+      if (!wasPlaying || !mesmaSala) {
+        this.startedWithBots = p.seats.some((x) => x?.bot === true)
+        this.avisados = []
+      }
+      if (!mesmaSala || !wasPlaying) return
+      const novos: { seat: Seat; nome: string }[] = []
+      p.seats.forEach((x, i) => {
+        if (!x?.botPlaying || anterior.seats[i]?.botPlaying || this.avisados.includes(i as Seat)) return
+        novos.push({ seat: i as Seat, nome: x.displayName })
+      })
+      if (novos.length === 0) return
+      this.avisados = [...this.avisados, ...novos.map((n) => n.seat)]
+      this.takeover = { key: (this.takeover?.key ?? 0) + 1, assentos: novos }
+      for (const { nome } of novos) {
+        useToastsStore().push(
+          this.startedWithBots
+            ? `${nome} saiu; um bot assumiu.`
+            : `${nome} saiu; um bot assumiu. Se ${nome} não voltar até o fim, a partida não conta no ranking — vocês ainda podem pedir W.O.`,
+        )
+      }
+    },
     onLeft(p: LeftRoomPayload) {
       this.room = null
       this.forfeitTeam = null
       this.ended = null
+      this.startedWithBots = false
+      this.avisados = []
+      this.takeover = null
       this.lastLeft = p.reason
       useGameStore().reset()
     },
@@ -67,6 +109,9 @@ export const useRoomStore = defineStore('room', {
       this.room = null
       this.forfeitTeam = null
       this.ended = null
+      this.startedWithBots = false
+      this.avisados = []
+      this.takeover = null
       this.lastLeft = null
       useGameStore().reset()
     },
@@ -87,6 +132,9 @@ export const useRoomStore = defineStore('room', {
     },
     setReady(ready: boolean) {
       return send({ type: 'set_ready', payload: { ready } })
+    },
+    startWithBots() {
+      return send({ type: 'start_with_bots' })
     },
     kick(seat: Seat) {
       return send({ type: 'kick', payload: { seat } })

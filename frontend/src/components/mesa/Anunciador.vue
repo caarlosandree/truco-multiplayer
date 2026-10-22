@@ -67,6 +67,14 @@ watch(
   },
 )
 
+// um bot pegou o lugar de quem caiu (tom da mesa; o aviso com o aviso do ranking é toast, do room store)
+watch(
+  () => room.takeover?.key,
+  () => {
+    for (const a of room.takeover?.assentos ?? []) dizer(`Um bot pegou as cartas de ${a.nome}`)
+  },
+)
+
 const convitesVistos = new Set<string>(invites.received.map((r) => r.inviteId))
 watch(
   () => invites.received.map((r) => r.inviteId),

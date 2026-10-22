@@ -20,10 +20,10 @@ const profile = vi.mocked(socialApi.profile)
 const history = vi.mocked(socialApi.history)
 
 const jogadores = (a: string, b: string, c: string, d: string) => [
-  { seat: 0, username: a, displayName: a.toUpperCase() },
-  { seat: 1, username: b, displayName: b.toUpperCase() },
-  { seat: 2, username: c, displayName: c.toUpperCase() },
-  { seat: 3, username: d, displayName: d.toUpperCase() },
+  { seat: 0, username: a, displayName: a.toUpperCase(), bot: false },
+  { seat: 1, username: b, displayName: b.toUpperCase(), bot: false },
+  { seat: 2, username: c, displayName: c.toUpperCase(), bot: false },
+  { seat: 3, username: d, displayName: d.toUpperCase(), bot: false },
 ]
 
 const partida = (over: Partial<HistoryItem> = {}): HistoryItem => ({
@@ -37,6 +37,7 @@ const partida = (over: Partial<HistoryItem> = {}): HistoryItem => ({
   finishedAt: '2026-10-20T15:30:00Z',
   players: jogadores('ana', 'bia', 'caio', 'duda'),
   endReason: 'game_over',
+  ranked: true,
   ...over,
 })
 
@@ -247,10 +248,10 @@ describe('LinhaPartida', () => {
 
   it('assentos fora de ordem: parceiro não vem de seat % 2 do índice', () => {
     const players = [
-      { seat: 3, username: 'duda', displayName: 'DUDA' },
-      { seat: 2, username: 'ana', displayName: 'ANA' },
-      { seat: 1, username: 'bia', displayName: 'BIA' },
-      { seat: 0, username: 'caio', displayName: 'CAIO' },
+      { seat: 3, username: 'duda', displayName: 'DUDA', bot: false },
+      { seat: 2, username: 'ana', displayName: 'ANA', bot: false },
+      { seat: 1, username: 'bia', displayName: 'BIA', bot: false },
+      { seat: 0, username: 'caio', displayName: 'CAIO', bot: false },
     ]
     const w = montar(partida({ players }))
     expect(w.text()).toContain('com CAIO')
@@ -374,5 +375,22 @@ describe('navegação', () => {
     expect(w.find('a[href="/jogadores/ana"]').exists()).toBe(true)
     expect(router.resolve({ name: 'jogador', params: { username: 'ana' } }).href).toBe('/jogadores/ana')
     expect(router.resolve({ name: 'jogador-partidas', params: { username: 'ana' } }).href).toBe('/jogadores/ana/partidas')
+  })
+})
+
+describe('LinhaPartida com bots', () => {
+  const montar = (item: HistoryItem) => mount(LinhaPartida, { props: { item, viewer: 'ana' } })
+
+  it('partida ranked=false mostra "com bots"; ranked=true não', () => {
+    expect(montar(partida({ ranked: false })).text()).toContain('com bots')
+    expect(montar(partida({ ranked: true })).text()).not.toContain('com bots')
+  })
+
+  it('jogador bot aparece com selo e sem link de perfil', () => {
+    const players = jogadores('ana', 'bot_seu_ze', 'caio', 'bot_dona_cida').map((p) => ({ ...p, bot: p.username.startsWith('bot_') }))
+    const w = montar(partida({ ranked: false, players }))
+    expect(w.findAll('[data-selo-bot]')).toHaveLength(2)
+    expect(w.find('a').exists()).toBe(false)
+    expect(w.text()).toContain('BOT_SEU_ZE')
   })
 })

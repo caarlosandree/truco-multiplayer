@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, useId } from 'vue'
 import type { Seat } from '@/protocol/engine'
 import { useRoomStore } from '@/stores/room'
 import { useToastsStore } from '@/stores/toasts'
@@ -9,6 +9,7 @@ import ListaConvites from './ListaConvites.vue'
 import SeletorPessoas from './SeletorPessoas.vue'
 import Toggle from '@/components/ui/Toggle.vue'
 import Botao from '@/components/ui/Botao.vue'
+import SeloBot from '@/components/ui/SeloBot.vue'
 import Modal from '@/components/ui/Modal.vue'
 
 const room = useRoomStore()
@@ -18,6 +19,7 @@ const r = computed(() => {
   return room.room
 })
 const inviteLink = computed(() => `${location.origin}/sala/${r.value.code}`)
+const botsDicaId = useId()
 const removendo = ref<Seat | null>(null)
 /** seletor de pessoas: fechado (null) ou aberto, com ou sem lugar escolhido */
 const convidando = ref<{ seat?: Seat } | null>(null)
@@ -48,6 +50,12 @@ async function copy() {
   }
 }
 
+/** Bot sai na hora (sem modal); humano pede confirmação. */
+function remover(seat: Seat) {
+  if (r.value.seats[seat]?.bot) void run(room.kick(seat))
+  else removendo.value = seat
+}
+
 async function confirmarRemocao() {
   const seat = removendo.value
   removendo.value = null
@@ -64,6 +72,10 @@ const seats = computed(() =>
 )
 const faltam = computed(() => r.value.seats.filter((s) => s === null).length)
 const faltamProntos = computed(() => r.value.seats.filter((s) => s !== null && !s.ready).length)
+const temBot = computed(() => r.value.seats.some((s) => s?.bot === true))
+/** humanos (fora o dono, que o servidor marca pronto) que ainda não estão prontos */
+const humanosNaoProntos = computed(() => r.value.seats.filter((s, i) => s !== null && !s.bot && !s.ready && i !== r.value.host).length)
+const podeComecarComBots = computed(() => room.isHost && room.freeSeats.length > 0)
 const resumo = computed(() => {
   if (faltam.value > 0) return faltam.value === 1 ? 'Falta 1 jogador.' : `Faltam ${faltam.value} jogadores.`
   if (faltamProntos.value > 0) return faltamProntos.value === 1 ? 'Falta 1 pronto.' : `Faltam ${faltamProntos.value} prontos.`
@@ -146,8 +158,9 @@ const resumo = computed(() => {
               :can-kick="room.isHost && s.info !== null && s.seat !== r.yourSeat"
               :ally="s.ally"
               :can-invite="room.canInvite"
+              :can-swap="!room.isHost && s.info?.bot === true"
               @take="run(room.takeSeat(s.seat))"
-              @kick="removendo = s.seat"
+              @kick="remover(s.seat)"
               @invite="convidando = { seat: s.seat }"
             />
           </li>
@@ -168,12 +181,45 @@ const resumo = computed(() => {
         </ul>
       </div>
 
-      <div class="textura-lousa rounded-painel px-4 py-2">
-        <Toggle
-          :model-value="room.amReady"
-          label="Estou pronto"
-          @update:model-value="run(room.setReady($event))"
-        />
+      <div class="flex flex-col items-center gap-4">
+        <div class="textura-lousa rounded-painel px-4 py-2">
+          <Toggle
+            :model-value="room.amReady"
+            label="Estou pronto"
+            @update:model-value="run(room.setReady($event))"
+          />
+        </div>
+        <div
+          v-if="podeComecarComBots"
+          class="flex flex-col items-center gap-1.5"
+        >
+          <Botao
+            data-acao="comecar-com-bots"
+            variant="secondary"
+            :disabled="humanosNaoProntos > 0"
+            style="--botao-desabilitado-opacidade: 0.8"
+            :aria-describedby="humanosNaoProntos > 0 ? botsDicaId : undefined"
+            @click="run(room.startWithBots())"
+          >
+            Começar com bots
+          </Botao>
+          <p
+            v-if="humanosNaoProntos > 0"
+            :id="botsDicaId"
+            data-bots-faltam
+            class="text-sm text-giz-muted"
+          >
+            Faltam {{ humanosNaoProntos }} prontos
+          </p>
+        </div>
+        <p
+          v-if="temBot"
+          data-aviso-bots
+          class="max-w-xs text-balance text-center text-sm text-giz-muted"
+        >
+          <SeloBot class="mr-2 align-middle" />
+          Partidas com bots não contam no ranking.
+        </p>
       </div>
     </section>
 

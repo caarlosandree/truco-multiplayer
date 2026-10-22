@@ -6,6 +6,7 @@ import { voteText } from '@/game/labels'
 import { useGameStore } from '@/stores/game'
 import { useRoomStore } from '@/stores/room'
 import { useSessionStore } from '@/stores/session'
+import SeloBot from '@/components/ui/SeloBot.vue'
 import Carta from './Carta.vue'
 import Prazo from './Prazo.vue'
 import BalaoSinal from './BalaoSinal.vue'
@@ -25,9 +26,13 @@ const deadline = computed(() => game.deadlines[props.seat])
 const active = computed(() =>
   game.pendingSeats.length > 0 ? game.pendingSeats.includes(props.seat) : game.view?.turn === props.seat,
 )
-const away = computed(() => presence.value !== null && (!presence.value.connected || presence.value.absent))
+const isBot = computed(() => presence.value?.bot === true)
+// humano ausente com bot jogando por ele: nome esmaecido + "bot jogando por Fulano"
+const botPlaying = computed(() => presence.value?.botPlaying === true)
+const away = computed(() => presence.value !== null && (!presence.value.connected || presence.value.absent || botPlaying.value))
 const estado = computed(() => {
   if (!presence.value) return null
+  if (botPlaying.value) return 'Bot'
   if (!presence.value.connected) return 'Desconectado'
   return presence.value.absent ? 'Ausente' : null
 })
@@ -80,6 +85,7 @@ const balao = computed(() => {
     <div class="relative max-w-full max-md:mb-1 md:mb-1.5">
       <!-- só a placa esmaece quando a pessoa cai; o texto de estado fica em opacidade total -->
       <div
+        :data-placa-esmaecida="away ? '' : undefined"
         class="rounded-placa px-3 py-1.5 text-center inset-ring-1 inset-ring-line/70"
         :class="[
           active ? 'bg-giz text-lousa' : 'textura-lousa',
@@ -87,15 +93,17 @@ const balao = computed(() => {
           props.position === 'bottom' ? 'min-w-24' : 'min-w-24 max-md:min-w-0',
         ]"
       >
-        <p class="truncate text-sm font-bold">
+        <p class="flex items-center justify-center gap-1.5 text-sm font-bold max-md:flex-col max-md:gap-0.5">
           <span class="sr-only">{{ ally ? 'Nós: ' : 'Eles: ' }}</span>
           <!-- eu: a mão faz as vezes de placa, então o nome só vai para leitores de tela -->
           <template v-if="isMe">
             <span class="sr-only">{{ nome }} (você)</span><span aria-hidden="true">Você</span>
           </template>
-          <template v-else>
-            {{ nome }}
-          </template>
+          <span
+            v-else
+            class="truncate"
+          >{{ nome }}</span>
+          <SeloBot v-if="isBot" />
         </p>
       </div>
       <!-- vez: contorno tracejado, mais fino que o foco (que é sólido) -->
@@ -187,11 +195,11 @@ const balao = computed(() => {
 
     <p
       v-if="estado"
-      class="inline-flex items-center gap-1.5 text-sm text-giz-muted"
+      class="inline-flex max-w-44 items-start gap-1.5 text-sm text-giz-muted"
     >
       <svg
         viewBox="0 0 16 16"
-        class="size-4 shrink-0"
+        class="mt-0.5 size-4 shrink-0"
         fill="none"
         stroke="currentColor"
         stroke-width="2"
@@ -199,8 +207,23 @@ const balao = computed(() => {
         stroke-linejoin="round"
         aria-hidden="true"
       >
+        <template v-if="estado === 'Bot'">
+          <path d="M8 2.5V4.5M3.5 6h9a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zM1 8.5v2M15 8.5v2" />
+          <circle
+            cx="6"
+            cy="9"
+            r=".6"
+            fill="currentColor"
+          />
+          <circle
+            cx="10"
+            cy="9"
+            r=".6"
+            fill="currentColor"
+          />
+        </template>
         <path
-          v-if="estado === 'Desconectado'"
+          v-else-if="estado === 'Desconectado'"
           d="M3 3l10 10M6 6.5a5 5 0 0 1 6 .5M2.5 8.5a8 8 0 0 1 3-1.8M6 11a3 3 0 0 1 3.5-.4"
         />
         <path
@@ -208,7 +231,12 @@ const balao = computed(() => {
           d="M8 3.5V8l3 2M8 14a6 6 0 1 0 0-12 6 6 0 0 0 0 12z"
         />
       </svg>
-      {{ estado }}
+      <template v-if="estado === 'Bot'">
+        bot jogando por {{ nome }}
+      </template>
+      <template v-else>
+        {{ estado }}
+      </template>
     </p>
   </div>
 </template>

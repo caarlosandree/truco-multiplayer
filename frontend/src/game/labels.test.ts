@@ -31,3 +31,8 @@ describe('inviteStateText', () => {
     expect(inviteStateText({ ...base, state: 'declined' })).toBe('agora não')
   })
 })
+
+it('traduz os erros de bots', () => {
+  expect(errorText('no_empty_seat')).toBe('Não há cadeira vazia.')
+  expect(errorText('not_waiting')).toBe('A partida já começou.')
+})

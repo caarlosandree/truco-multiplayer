@@ -14,7 +14,8 @@ export function normalizeCode(raw: string): string {
 }
 
 function hasFreeSeat(r: RoomSummary): boolean {
-  return r.seats.some((s) => s === null)
+  // cadeira de bot também é vaga: o humano pode sentar no lugar dela
+  return r.seats.some((s) => s === null || s.bot)
 }
 
 export const useLobbyStore = defineStore('lobby', {

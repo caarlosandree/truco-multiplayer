@@ -196,3 +196,81 @@ describe('SalaView', () => {
     expect(dialog()).toBeNull()
   })
 })
+
+describe('bots na sala de espera', () => {
+  const seat = (displayName: string, over: Partial<NonNullable<RoomStatePayload['seats'][number]>> = {}) => ({
+    userId: `u-${displayName}`, displayName, ready: false, connected: true, absent: false, bot: false, botPlaying: false, ...over,
+  })
+  const sala = (seats: RoomStatePayload['seats'], over: Partial<RoomStatePayload> = {}): RoomStatePayload => ({ ...base, seats, ...over })
+  const botSeat = (nome: string) => seat(nome, { ready: true, bot: true })
+
+  it('dono com cadeira vazia vê "Começar com bots" e o clique envia start_with_bots', async () => {
+    const send = vi.fn().mockResolvedValue(undefined)
+    setSender(send)
+    useRoomStore().onRoomState(sala([seat('Ana', { ready: true }), null, null, null]))
+    const w = mountEspera()
+    const botao = w.find('[data-acao="comecar-com-bots"]')
+    expect(botao.text()).toContain('Começar com bots')
+    expect(botao.attributes('disabled')).toBeUndefined()
+    await botao.trigger('click')
+    expect(send).toHaveBeenCalledWith({ type: 'start_with_bots' })
+  })
+
+  it('com outro humano não pronto o botão fica desabilitado e diz quantos faltam', () => {
+    useRoomStore().onRoomState(sala([seat('Ana'), seat('Bia'), null, null]))
+    const w = mountEspera()
+    expect(w.find('[data-acao="comecar-com-bots"]').attributes('disabled')).toBeDefined()
+    expect(w.text()).toContain('Faltam 1 prontos')
+  })
+
+  it('não dono não vê o botão; sem cadeira vazia (bots já sentados) o botão some', () => {
+    useRoomStore().onRoomState(sala([seat('Ana', { ready: true }), seat('Bia'), null, null], { host: 0, yourSeat: 1 }))
+    const w = mountEspera()
+    expect(w.find('[data-acao="comecar-com-bots"]').exists()).toBe(false)
+    useRoomStore().onRoomState(sala([seat('Ana'), botSeat('Seu Zé'), botSeat('Dona Cida'), botSeat('Tio Juca')]))
+    return w.vm.$nextTick().then(() => {
+      expect(w.find('[data-acao="comecar-com-bots"]').exists()).toBe(false)
+    })
+  })
+
+  it('cadeira de bot: nome, selo e pronto; aviso de ranking', () => {
+    useRoomStore().onRoomState(sala([seat('Ana'), botSeat('Seu Zé'), null, null]))
+    const w = mountEspera()
+    const bot = w.find('[data-assento="1"]')
+    expect(bot.text()).toContain('Seu Zé')
+    expect(bot.find('[data-selo-bot]').text()).toContain('bot')
+    expect(bot.text()).toContain('Pronto')
+    expect(w.text()).toContain('Partidas com bots não contam no ranking.')
+  })
+
+  it('sem bot não mostra o aviso de ranking', () => {
+    useRoomStore().onRoomState(base)
+    expect(mountEspera().text()).not.toContain('não contam no ranking')
+  })
+
+  it('não dono vê "Sentar aqui" na cadeira do bot e o clique envia take_seat', async () => {
+    const send = vi.fn().mockResolvedValue(undefined)
+    setSender(send)
+    useRoomStore().onRoomState(sala([seat('Ana'), seat('Bia'), botSeat('Seu Zé'), null], { yourSeat: 1 }))
+    const w = mountEspera()
+    const sentar = w.find('[data-assento="2"] [data-acao="sentar"]')
+    expect(sentar.text()).toContain('Sentar aqui')
+    expect(w.find('[data-assento="2"] [data-acao="remover"]').exists()).toBe(false)
+    await sentar.trigger('click')
+    expect(send).toHaveBeenCalledWith({ type: 'take_seat', payload: { seat: 2 } })
+  })
+
+  it('dono vê "Remover" na cadeira do bot, sem "Sentar aqui", e remove sem abrir o modal', async () => {
+    const send = vi.fn().mockResolvedValue(undefined)
+    setSender(send)
+    useRoomStore().onRoomState(sala([seat('Ana'), botSeat('Seu Zé'), null, null]))
+    const w = mountEspera()
+    expect(w.find('[data-assento="1"] [data-acao="sentar"]').exists()).toBe(false)
+    const remover = w.find('[data-assento="1"] [data-acao="remover"]')
+    expect(remover.text()).toContain('Remover')
+    await remover.trigger('click')
+    await flushPromises()
+    expect(dialog()).toBeNull()
+    expect(send).toHaveBeenCalledWith({ type: 'kick', payload: { seat: 1 } })
+  })
+})
