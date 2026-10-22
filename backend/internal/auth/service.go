@@ -64,7 +64,7 @@ type User struct {
 }
 
 func userFromRow(u dbgen.User) User {
-	return User{ID: u.ID, Username: u.Username, Email: deref(u.Email), DisplayName: u.DisplayName, IsAdmin: u.IsAdmin, CreatedAt: u.CreatedAt}
+	return User{ID: u.ID, Username: u.Username, Email: Deref(u.Email), DisplayName: u.DisplayName, IsAdmin: u.IsAdmin, CreatedAt: u.CreatedAt}
 }
 
 func (s *Service) Cookies() CookieConfig { return s.cookies }

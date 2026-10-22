@@ -16,6 +16,12 @@ SELECT * FROM users WHERE email = @email;
 -- name: GetUserByUsername :one
 SELECT * FROM users WHERE username = @username;
 
+-- name: GetHumanByEmail :one
+SELECT * FROM users WHERE kind = 'human' AND email = @email;
+
+-- name: GetHumanByUsername :one
+SELECT * FROM users WHERE kind = 'human' AND username = @username;
+
 -- name: MarkEmailVerified :exec
 UPDATE users SET email_verified_at = COALESCE(email_verified_at, @now::timestamptz), updated_at = @now
 WHERE id = @id;

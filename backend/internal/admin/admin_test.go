@@ -435,3 +435,36 @@ func TestPromoteAdmin(t *testing.T) {
 		t.Fatal("usuário inexistente deve falhar")
 	}
 }
+
+func TestListUsersExcludesBots(t *testing.T) {
+	e := newEnv(t)
+	page, err := e.svc.ListUsers(context.Background(), "bot", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 0 {
+		t.Fatalf("bots listados: %+v", page.Items)
+	}
+}
+
+func TestAdminActionsRefuseBotTarget(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	var bot string
+	if err := e.pool.QueryRow(ctx, "SELECT id::text FROM users WHERE username = 'bot_seu_ze'").Scan(&bot); err != nil {
+		t.Fatal(err)
+	}
+	for name, fn := range map[string]func() error{
+		"disable": func() error { return e.svc.DisableUser(ctx, e.actor, bot) },
+		"enable":  func() error { return e.svc.EnableUser(ctx, e.actor, bot) },
+		"force":   func() error { return e.svc.ForcePasswordReset(ctx, e.actor, bot) },
+	} {
+		if err := fn(); !errors.Is(err, admin.ErrNotFound) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	var n int
+	if err := e.pool.QueryRow(ctx, "SELECT count(*) FROM users WHERE username = 'bot_seu_ze' AND disabled_at IS NULL AND NOT must_reset_password").Scan(&n); err != nil || n != 1 {
+		t.Fatalf("bot alterado (n=%d, err=%v)", n, err)
+	}
+}

@@ -90,7 +90,7 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) error {
 		return err
 	}
 	if existing, err := s.q.GetUserByEmail(ctx, &email); err == nil {
-		s.sendLater(mail.AccountExists(deref(existing.Email), existing.DisplayName, s.link("/entrar"), s.link("/esqueci-senha")))
+		s.sendLater(mail.AccountExists(Deref(existing.Email), existing.DisplayName, s.link("/entrar"), s.link("/esqueci-senha")))
 		return nil
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return err
@@ -153,7 +153,7 @@ func (s *Service) sendVerification(ctx context.Context, user dbgen.User) error {
 	if err != nil {
 		return err
 	}
-	s.sendLater(mail.VerifyEmail(deref(user.Email), user.DisplayName, s.link("/verificar-email?token="+token)))
+	s.sendLater(mail.VerifyEmail(Deref(user.Email), user.DisplayName, s.link("/verificar-email?token="+token)))
 	return nil
 }
 
@@ -162,9 +162,9 @@ func (s *Service) Login(ctx context.Context, login, password string, meta Sessio
 	var row dbgen.User
 	var err error
 	if strings.Contains(login, "@") {
-		row, err = s.q.GetUserByEmail(ctx, &login)
+		row, err = s.q.GetHumanByEmail(ctx, &login)
 	} else {
-		row, err = s.q.GetUserByUsername(ctx, login)
+		row, err = s.q.GetHumanByUsername(ctx, login)
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		s.hasher.VerifyDummy(password)
@@ -233,7 +233,7 @@ func (s *Service) ForgotPassword(ctx context.Context, email string) error {
 // SendPasswordReset emite um link de reset; forced=true usa o texto do reset pedido pelo admin.
 func (s *Service) SendPasswordReset(ctx context.Context, userID string, forced bool) error {
 	user, err := s.q.GetUserByID(ctx, userID)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && user.Kind == "bot") { // bot não tem e-mail nem senha
 		return ErrUserNotFound
 	}
 	if err != nil {
@@ -245,9 +245,9 @@ func (s *Service) SendPasswordReset(ctx context.Context, userID string, forced b
 	}
 	link := s.link("/redefinir-senha?token=" + token)
 	if forced {
-		s.sendLater(mail.ForcedPasswordReset(deref(user.Email), user.DisplayName, link))
+		s.sendLater(mail.ForcedPasswordReset(Deref(user.Email), user.DisplayName, link))
 	} else {
-		s.sendLater(mail.PasswordReset(deref(user.Email), user.DisplayName, link))
+		s.sendLater(mail.PasswordReset(Deref(user.Email), user.DisplayName, link))
 	}
 	return nil
 }
@@ -269,7 +269,7 @@ func (s *Service) ResetPassword(ctx context.Context, token, password string) err
 		return err
 	}
 	// Valida antes de consumir: um erro de digitação não queima o link.
-	if msg := ValidatePassword(password, user.Username, deref(user.Email)); msg != "" {
+	if msg := ValidatePassword(password, user.Username, Deref(user.Email)); msg != "" {
 		return FieldErrors{"password": msg}
 	}
 	passwordHash, err := s.hasher.Hash(password)
@@ -294,7 +294,7 @@ func (s *Service) ResetPassword(ctx context.Context, token, password string) err
 	if err != nil {
 		return err
 	}
-	s.sendLater(mail.PasswordChanged(deref(user.Email), user.DisplayName))
+	s.sendLater(mail.PasswordChanged(Deref(user.Email), user.DisplayName))
 	return nil
 }
 
@@ -304,14 +304,14 @@ func (s *Service) ChangePassword(ctx context.Context, p Principal, current, next
 	if err != nil {
 		return "", err
 	}
-	ok, _, err := s.hasher.Verify(current, deref(user.PasswordHash))
+	ok, _, err := s.hasher.Verify(current, Deref(user.PasswordHash))
 	if err != nil {
 		return "", err
 	}
 	if !ok {
 		return "", ErrInvalidCredentials
 	}
-	if msg := ValidatePassword(next, user.Username, deref(user.Email)); msg != "" {
+	if msg := ValidatePassword(next, user.Username, Deref(user.Email)); msg != "" {
 		return "", FieldErrors{"newPassword": msg}
 	}
 	passwordHash, err := s.hasher.Hash(next)
@@ -337,7 +337,7 @@ func (s *Service) ChangePassword(ctx context.Context, p Principal, current, next
 	if err != nil {
 		return "", err
 	}
-	s.sendLater(mail.PasswordChanged(deref(user.Email), user.DisplayName))
+	s.sendLater(mail.PasswordChanged(Deref(user.Email), user.DisplayName))
 	return token, nil
 }
 
@@ -358,8 +358,8 @@ func (s *Service) UpdateDisplayName(ctx context.Context, userID, name string) (U
 
 func ptr(s string) *string { return &s }
 
-// deref lê um campo anulável de credencial. Nulo só ocorre em contas de bot, que nunca chegam aqui.
-func deref(p *string) string {
+// Deref lê um campo anulável de credencial (e-mail, hash). Nulo só ocorre em contas de bot, que nunca chegam aos fluxos de conta.
+func Deref(p *string) string {
 	if p == nil {
 		return ""
 	}

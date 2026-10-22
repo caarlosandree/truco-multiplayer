@@ -92,6 +92,7 @@ type MatchPlayer struct {
 	Seat        int    `json:"seat"`
 	Username    string `json:"username"`
 	DisplayName string `json:"displayName"`
+	Bot         bool   `json:"bot"`
 }
 
 // DirectoryEntry é o que o diretório de pessoas expõe: nunca o e-mail.
@@ -125,6 +126,7 @@ type HistoryItem struct {
 	FinishedAt *time.Time       `json:"finishedAt"`
 	Players    []MatchPlayer    `json:"players"`
 	EndReason  replay.EndReason `json:"endReason"`
+	Ranked     bool             `json:"ranked"`
 }
 
 type HistoryPage struct {
@@ -261,7 +263,7 @@ func (r *Reader) user(ctx context.Context, username string, viewerIsAdmin bool) 
 	if !pagination.ValidText(username) { // NUL ou UTF-8 inválido o Postgres recusa: é só "não encontrado"
 		return dbgen.User{}, ErrUserNotFound
 	}
-	u, err := r.q.GetUserByUsername(ctx, strings.ToLower(strings.TrimSpace(username)))
+	u, err := r.q.GetHumanByUsername(ctx, strings.ToLower(strings.TrimSpace(username)))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return dbgen.User{}, ErrUserNotFound
 	}
@@ -347,7 +349,7 @@ func (r *Reader) history(ctx context.Context, userID string, at *time.Time, id *
 		}
 		team := int(row.Seat) % 2
 		item := HistoryItem{ID: row.ID, Status: replay.Status(row.Status), Team: team, CreatedAt: row.CreatedAt,
-			FinishedAt: row.FinishedAt, Players: []MatchPlayer{}}
+			FinishedAt: row.FinishedAt, Players: []MatchPlayer{}, Ranked: row.Ranked}
 		if row.EndReason != nil {
 			item.EndReason = replay.EndReason(*row.EndReason)
 		}
@@ -374,7 +376,7 @@ func (r *Reader) history(ctx context.Context, userID string, at *time.Time, id *
 	}
 	for _, p := range players {
 		if it := byMatch[p.MatchID]; it != nil {
-			it.Players = append(it.Players, MatchPlayer{Seat: int(p.Seat), Username: p.Username, DisplayName: p.DisplayName})
+			it.Players = append(it.Players, MatchPlayer{Seat: int(p.Seat), Username: p.Username, DisplayName: p.DisplayName, Bot: p.Bot})
 		}
 	}
 	return page, nil

@@ -564,3 +564,138 @@ func TestDirectoryPagination(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func botSeat(t *testing.T, w world, username string) replay.PlayerSeat {
+	t.Helper()
+	var id string
+	if err := w.pool.QueryRow(context.Background(), "SELECT id::text FROM users WHERE username = $1 AND kind = 'bot'", username).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	return replay.PlayerSeat{UserID: id, DisplayName: username, Bot: true}
+}
+
+func TestRankingIgnoresUnrankedAndBots(t *testing.T) {
+	w := newWorld(t)
+	ctx := context.Background()
+	for i := range 3 {
+		w.playWith(t, uint64(100+i), w.players)
+	}
+	withBot := w.players
+	withBot[1], withBot[3] = botSeat(t, w, "bot_seu_ze"), botSeat(t, w, "bot_tio_juca")
+	for i := range 2 {
+		w.playWith(t, uint64(200+i), withBot)
+	}
+	var wantWins int
+	if err := w.pool.QueryRow(ctx, `SELECT count(*) FILTER (WHERE s.won) FROM match_player_stats s
+		JOIN users u ON u.id = s.user_id AND u.username = 'ana'`).Scan(&wantWins); err != nil {
+		t.Fatal(err)
+	}
+	for _, period := range []stats.Period{stats.PeriodAll, stats.PeriodWeek, stats.PeriodMonth} {
+		res := rank(t, w.reader(1), stats.RankingQuery{Period: period})
+		for _, e := range res.Items {
+			if len(e.Username) > 4 && e.Username[:4] == "bot_" {
+				t.Fatalf("%s: bot no ranking: %+v", period, e)
+			}
+			if e.Username == "ana" && (e.MatchesPlayed != 3 || e.Wins != wantWins) {
+				t.Fatalf("%s: ana = %+v (vitórias esperadas %d)", period, e, wantWins)
+			}
+		}
+	}
+	p, err := w.reader(1).Profile(ctx, "ana", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Stats.MatchesPlayed != 3 {
+		t.Fatalf("stats = %+v", p.Stats)
+	}
+}
+
+func TestPartnersIgnoreBotsAndUnranked(t *testing.T) {
+	w := newWorld(t)
+	ctx := context.Background()
+	for i := range 2 {
+		w.playWith(t, uint64(300+i), w.players)
+	}
+	withBot := w.players
+	withBot[2] = botSeat(t, w, "bot_seu_ze")
+	for i := range 4 {
+		w.playWith(t, uint64(400+i), withBot)
+	}
+	p, err := w.reader(1).Profile(ctx, "ana", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Partners) != 1 || p.Partners[0].Username != "caio" || p.Partners[0].Matches != 2 {
+		t.Fatalf("parceiros = %+v", p.Partners)
+	}
+}
+
+func TestHistoryShowsUnrankedWithBotFlag(t *testing.T) {
+	w := newWorld(t)
+	ctx := context.Background()
+	ranked := w.playWith(t, 500, w.players)
+	withBot := w.players
+	withBot[1] = botSeat(t, w, "bot_seu_ze")
+	unranked := w.playWith(t, 501, withBot)
+	page, err := w.reader(1).History(ctx, "ana", "", 20, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 2 {
+		t.Fatalf("histórico = %+v", page.Items)
+	}
+	for _, it := range page.Items {
+		switch it.ID {
+		case unranked:
+			if it.Ranked {
+				t.Fatal("partida com bot deveria vir ranked=false")
+			}
+			bots := 0
+			for _, pl := range it.Players {
+				if pl.Bot {
+					bots++
+					if pl.Username != "bot_seu_ze" {
+						t.Fatalf("bot inesperado: %+v", pl)
+					}
+				}
+			}
+			if bots != 1 {
+				t.Fatalf("bots marcados = %d (%+v)", bots, it.Players)
+			}
+		case ranked:
+			if !it.Ranked {
+				t.Fatal("partida só de humanos deveria vir ranked=true")
+			}
+			for _, pl := range it.Players {
+				if pl.Bot {
+					t.Fatalf("humano marcado como bot: %+v", pl)
+				}
+			}
+		default:
+			t.Fatalf("partida inesperada %s", it.ID)
+		}
+	}
+}
+
+func TestBotProfileIsNotFoundEvenForAdmin(t *testing.T) {
+	w := newWorld(t)
+	ctx := context.Background()
+	reader := w.reader(1)
+	if _, err := reader.Profile(ctx, "bot_seu_ze", true); !errors.Is(err, stats.ErrUserNotFound) {
+		t.Fatalf("Profile err = %v", err)
+	}
+	if _, err := reader.History(ctx, "bot_seu_ze", "", 20, true); !errors.Is(err, stats.ErrUserNotFound) {
+		t.Fatalf("History err = %v", err)
+	}
+}
+
+func TestDirectoryHidesBots(t *testing.T) {
+	w := newWorld(t)
+	page, err := w.reader(1).Directory(context.Background(), "bot", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 0 {
+		t.Fatalf("bots no diretório: %+v", page.Items)
+	}
+}

@@ -17,7 +17,7 @@ func (s *Service) ActiveUserByUsername(ctx context.Context, username string) (Us
 	if !pagination.ValidText(username) { // NUL ou UTF-8 inválido o Postgres recusa: nunca chega lá
 		return User{}, ErrUserNotFound
 	}
-	row, err := s.q.GetUserByUsername(ctx, NormalizeUsername(username))
+	row, err := s.q.GetHumanByUsername(ctx, NormalizeUsername(username))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return User{}, ErrUserNotFound
 	}

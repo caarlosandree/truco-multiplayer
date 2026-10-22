@@ -70,6 +70,54 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	return i, err
 }
 
+const getHumanByEmail = `-- name: GetHumanByEmail :one
+SELECT id, username, email, display_name, password_hash, is_admin, email_verified_at, disabled_at, must_reset_password, created_at, updated_at, kind FROM users WHERE kind = 'human' AND email = $1
+`
+
+func (q *Queries) GetHumanByEmail(ctx context.Context, email *string) (User, error) {
+	row := q.db.QueryRow(ctx, getHumanByEmail, email)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.DisplayName,
+		&i.PasswordHash,
+		&i.IsAdmin,
+		&i.EmailVerifiedAt,
+		&i.DisabledAt,
+		&i.MustResetPassword,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Kind,
+	)
+	return i, err
+}
+
+const getHumanByUsername = `-- name: GetHumanByUsername :one
+SELECT id, username, email, display_name, password_hash, is_admin, email_verified_at, disabled_at, must_reset_password, created_at, updated_at, kind FROM users WHERE kind = 'human' AND username = $1
+`
+
+func (q *Queries) GetHumanByUsername(ctx context.Context, username string) (User, error) {
+	row := q.db.QueryRow(ctx, getHumanByUsername, username)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.DisplayName,
+		&i.PasswordHash,
+		&i.IsAdmin,
+		&i.EmailVerifiedAt,
+		&i.DisabledAt,
+		&i.MustResetPassword,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Kind,
+	)
+	return i, err
+}
+
 const getUserByEmail = `-- name: GetUserByEmail :one
 SELECT id, username, email, display_name, password_hash, is_admin, email_verified_at, disabled_at, must_reset_password, created_at, updated_at, kind FROM users WHERE email = $1
 `

@@ -374,3 +374,26 @@ func TestResetPasswordInvalidatesOtherPendingResetLinks(t *testing.T) {
 		t.Fatalf("outro link pendente ainda vale após o reset: %v", err)
 	}
 }
+
+func TestLoginRefusesBot(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	if _, err := f.svc.Login(ctx, "bot_seu_ze", "qualquer-senha-123", SessionMeta{}); !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("login de bot: %v", err)
+	}
+}
+
+func TestSendPasswordResetRefusesBot(t *testing.T) {
+	f := newFixture(t)
+	var id string
+	if err := f.pool.QueryRow(context.Background(), "SELECT id::text FROM users WHERE username = 'bot_seu_ze'").Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.svc.SendPasswordReset(context.Background(), id, true); !errors.Is(err, ErrUserNotFound) {
+		t.Fatalf("reset de bot: %v", err)
+	}
+	var n int
+	if err := f.pool.QueryRow(context.Background(), "SELECT count(*) FROM user_tokens WHERE user_id = $1", id).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("tokens = %d, %v", n, err)
+	}
+}

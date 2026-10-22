@@ -47,3 +47,10 @@ func TestSendRoomInviteLink(t *testing.T) {
 		t.Fatalf("e-mail = %+v (ok=%v)", msg, ok)
 	}
 }
+
+func TestActiveUserByUsernameRefusesBot(t *testing.T) {
+	f := newFixture(t)
+	if _, err := f.svc.ActiveUserByUsername(context.Background(), "bot_tio_juca"); !errors.Is(err, ErrUserNotFound) {
+		t.Fatalf("bot = %v", err)
+	}
+}

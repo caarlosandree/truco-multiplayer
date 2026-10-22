@@ -74,7 +74,7 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Principal, er
 			return Principal{}, err
 		}
 	}
-	return Principal{UserID: row.UserID, SessionID: row.SessionID, Username: row.Username, Email: deref(row.Email),
+	return Principal{UserID: row.UserID, SessionID: row.SessionID, Username: row.Username, Email: Deref(row.Email),
 		DisplayName: row.DisplayName, IsAdmin: row.IsAdmin}, nil
 }
 
