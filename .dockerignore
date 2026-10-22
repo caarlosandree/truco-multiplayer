@@ -1,0 +1,11 @@
+.git
+.github
+.claude
+.superpowers
+.env
+.env.*
+docs
+**/node_modules
+frontend/dist
+frontend/playwright-report
+frontend/test-results
