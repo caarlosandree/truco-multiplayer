@@ -18,6 +18,7 @@ import (
 
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/admin"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/auth"
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/bot"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/engine"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/httpapi"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/lobby"
@@ -44,14 +45,17 @@ type game struct {
 	ws     *swapHandler
 	lobby  *lobby.Lobby
 	limits ws.Limits
+	solo   bool // lobby com roster de bots e runner (start_with_bots)
 }
 
 // fastBots libera o limite de mensagens: bots jogam a partida inteira em menos de um segundo,
 // o que um humano (20 msg/s, rajada de 40) nunca faria.
 func fastBots(l *ws.Limits) { l.RatePerSec, l.Burst = 10000, 10000 }
 
-func newGame(t *testing.T, tweak ...func(*ws.Limits)) *game {
-	g := &game{ws: &swapHandler{}, limits: ws.DefaultLimits}
+func newGame(t *testing.T, tweak ...func(*ws.Limits)) *game { return newGameMode(t, false, tweak...) }
+
+func newGameMode(t *testing.T, solo bool, tweak ...func(*ws.Limits)) *game {
+	g := &game{ws: &swapHandler{}, limits: ws.DefaultLimits, solo: solo}
 	for _, f := range tweak {
 		f(&g.limits)
 	}
@@ -74,8 +78,29 @@ func (g *game) Abort(ctx context.Context, id string) error { return g.lobby.Abor
 
 func (g *game) startLobby() {
 	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
-	g.lobby = lobby.New(context.Background(), lobby.Options{Timing: e2eTiming, MaxRooms: 10,
-		Store: lobby.NewMatchStore(g.h.store), Clock: g.h.clock, Rand: rand.NewChaCha8([32]byte{7}), Log: discard})
+	timing := e2eTiming
+	if g.solo {
+		// o único humano fica ausente (3 timeouts) até o fim da partida: sem isto o orçamento de ausência
+		// (todos os humanos ausentes) a abandonaria antes do fim. O relógio é manual, então não custa tempo real.
+		timing.AbsenceGrace, timing.AbsenceBudget = 6*time.Hour, 6*time.Hour
+	}
+	opts := lobby.Options{Timing: timing, MaxRooms: 10,
+		Store: lobby.NewMatchStore(g.h.store), Clock: g.h.clock, Rand: rand.NewChaCha8([32]byte{7}), Log: discard}
+	if g.solo {
+		bots, err := g.h.store.ListBots(context.Background())
+		if err != nil || len(bots) < 3 {
+			g.h.t.Fatalf("roster de bots: %d (%v)", len(bots), err)
+		}
+		for _, b := range bots {
+			opts.Bots = append(opts.Bots, room.BotIdentity{UserID: b.ID, DisplayName: b.DisplayName})
+		}
+		// BOT_DELAY_*=0 (BotDelay nil) e BOT_THINK_BUDGET_MS=50. O relógio do teste é manual (e fica no
+		// passado em relação ao relógio real), então o runner cai no bot simples: o que se valida aqui é
+		// a orquestração (assumir ausente, persistir source='bot', ranked=false), não a força do bot.
+		opts.Thinker = bot.NewRunner(bot.RunnerOptions{Strong: bot.DefaultStrong(), Fallback: bot.Simple{},
+			Budget: 50 * time.Millisecond, MaxConcurrent: 2})
+	}
+	g.lobby = lobby.New(context.Background(), opts)
 	g.ws.current.Store(&ws.Handler{Auth: g.auth, Lobby: g.lobby, Origin: origin, Limits: g.limits, Log: discard})
 }
 
@@ -401,5 +426,100 @@ func TestWebSocketLogoutAllClosesConnection(t *testing.T) {
 	}
 	if code := p.closedWith(); code != 4003 {
 		t.Fatalf("fechamento = %d", code)
+	}
+}
+
+// Partida solo: um humano cria a sala, começa com bots, joga uma carta e some. Após 3 timeouts o bot
+// assume o assento dele e a partida termina fora do ranking, sem estatísticas e com ações source='bot'.
+func TestSoloMatchWithBotsFinishesUnranked(t *testing.T) {
+	g := newGameMode(t, true, fastBots)
+	c := g.h.signup("ana")
+	p := g.connect(c)
+	p.expect("hello", nil)
+	p.send("create_room", map[string]any{"visibility": "private"})
+	p.expect("room_state", nil)
+	p.send("start_with_bots", nil)
+	var playing protocol.RoomStatePayload
+	for playing.Status != protocol.RoomPlaying {
+		p.expect("room_state", &playing)
+	}
+	for _, s := range playing.Seats[1:] {
+		if s == nil || !s.Bot {
+			t.Fatalf("assentos = %+v", playing.Seats)
+		}
+	}
+
+	// uma única jogada humana; depois o teste só avança o relógio e lê o que chega
+	played := false
+	var result protocol.MatchEndedPayload
+	deadline := time.Now().Add(90 * time.Second)
+	for done := false; !done; {
+		if time.Now().After(deadline) {
+			t.Fatal("a partida solo não terminou")
+		}
+		g.h.clock.Advance(200 * time.Millisecond)
+		time.Sleep(2 * time.Millisecond)
+	drain:
+		for {
+			select {
+			case m, ok := <-p.in:
+				if !ok {
+					t.Fatalf("conexão fechou: %v", p.err)
+				}
+				switch m.Type {
+				case "state":
+					var st protocol.StatePayload
+					if err := json.Unmarshal(m.Payload, &st); err != nil {
+						t.Fatal(err)
+					}
+					if !played && slices.Contains(st.PendingSeats, int(st.View.Seat)) {
+						typ, payload := legalMove(st.View)
+						p.send(typ, payload)
+						played = true
+					}
+				case "match_ended":
+					_ = json.Unmarshal(m.Payload, &result)
+					done = true
+				}
+			default:
+				break drain
+			}
+		}
+	}
+	if !played {
+		t.Fatal("o humano nunca ficou pendente")
+	}
+	if result.Reason != protocol.EndGameOver || result.Ranked {
+		t.Fatalf("match_ended = %+v", result)
+	}
+
+	ctx := context.Background()
+	var status string
+	var ranked bool
+	if err := g.h.pool.QueryRow(ctx, "SELECT status, ranked FROM matches WHERE id = $1", playing.MatchID).Scan(&status, &ranked); err != nil {
+		t.Fatal(err)
+	}
+	if status != "finished" || ranked {
+		t.Fatalf("partida no banco: status=%s ranked=%v", status, ranked)
+	}
+	var botActions, stats int
+	if err := g.h.pool.QueryRow(ctx, "SELECT count(*) FROM match_actions WHERE match_id = $1 AND source = 'bot'", playing.MatchID).Scan(&botActions); err != nil {
+		t.Fatal(err)
+	}
+	if botActions == 0 {
+		t.Fatal("nenhuma ação com source='bot'")
+	}
+	if err := g.h.pool.QueryRow(ctx, "SELECT count(*) FROM match_player_stats WHERE match_id = $1", playing.MatchID).Scan(&stats); err != nil {
+		t.Fatal(err)
+	}
+	if stats != 0 {
+		t.Fatalf("partida fora do ranking gerou %d linhas em match_player_stats", stats)
+	}
+	if err := g.h.pool.QueryRow(ctx, "SELECT count(*) FROM match_player_stats").Scan(&stats); err != nil || stats != 0 {
+		t.Fatalf("match_player_stats não está vazia: %d (%v)", stats, err)
+	}
+	r := c.get("/api/ranking")
+	if r.status != http.StatusOK || strings.Contains(string(r.body), "ana") {
+		t.Fatalf("ranking = %d %s", r.status, r.body)
 	}
 }

@@ -40,6 +40,11 @@ export STATIC_DIR="$PWD/frontend/dist"
 export TIMER_PLAY_SECONDS=5 TIMER_VOTE_SECONDS=5 TIMER_CHOICE_SECONDS=5 TIMER_BURN_SECONDS=5
 export TIMER_ABSENT_SECONDS=2 HAND_PAUSE_SECONDS=1
 export RANKING_MIN_MATCHES=1
+# bots do e2e (bots.spec.ts): sem pausa de "pensar" e orçamento curto de cálculo
+export BOT_DELAY_MIN_MS=0 BOT_DELAY_MAX_MS=0 BOT_THINK_BUDGET_MS=50
+# na partida solo o único humano fica ausente até o fim (o bot joga por ele a cada ~5 s): o orçamento
+# padrão (300 s) abandonaria a partida por "todos os humanos ausentes" antes do fim
+export ABSENCE_BUDGET_SECONDS=1200
 
 "$tmp/server" serve >"$log" 2>&1 &
 server=$!
