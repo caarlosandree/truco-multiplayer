@@ -36,10 +36,10 @@ func (r *Room) botControlled(s engine.Seat) bool {
 	return st != nil && r.status == protocol.RoomPlaying && (st.bot || st.isAbsent())
 }
 
-// anyHumanBotControlled diz se algum assento humano está agora nas mãos de um bot.
-func (r *Room) anyHumanBotControlled() bool {
+// humanBotControlledIn diz se algum assento humano da dupla t está agora nas mãos de um bot.
+func (r *Room) humanBotControlledIn(t engine.Team) bool {
 	for s, st := range r.seats {
-		if st != nil && !st.bot && r.botControlled(engine.Seat(s)) {
+		if st != nil && !st.bot && engine.TeamOf(engine.Seat(s)) == t && r.botControlled(engine.Seat(s)) {
 			return true
 		}
 	}

@@ -261,7 +261,8 @@ export interface RoomStatePayload {
   matchId?: string;
   yourSeat: engine.Seat;
   /**
-   * Ranked: "se a partida terminasse agora, contaria?"; null fora de playing.
+   * Ranked: false se a partida começou com bot (nunca conta), senão true; null fora de playing. O resultado
+   * definitivo (bot jogando por humano da dupla vencedora tira do ranking) vem em match_ended.ranked.
    */
   ranked: boolean | null;
 }

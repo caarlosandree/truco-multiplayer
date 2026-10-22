@@ -372,7 +372,9 @@ func (r *Room) roomState(seat engine.Seat) protocol.ServerMessage {
 		}
 	}
 	if r.status == protocol.RoomPlaying {
-		ranked := !r.startedWithBots && !r.anyHumanBotControlled()
+		// O vencedor só se conhece no fim: ao vivo, só a partida que começou com bot já está fora do ranking.
+		// O resultado definitivo vem em match_ended.ranked.
+		ranked := !r.startedWithBots
 		p.Ranked = &ranked
 	}
 	return protocol.Message(protocol.MsgRoomState, p)

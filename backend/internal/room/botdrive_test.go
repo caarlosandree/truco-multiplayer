@@ -206,7 +206,7 @@ func TestAbsentHumanIsPlayedByBot(t *testing.T) {
 	h := newHarness(t, withBots(th, time.Second))
 	h.startMatch()
 	h.send(room.Disconnected{UserID: "u1"})
-	if st := last[protocol.RoomStatePayload](t, h.out, "u0", protocol.MsgRoomState); !st.Seats[1].BotPlaying || st.Ranked == nil || *st.Ranked {
+	if st := last[protocol.RoomStatePayload](t, h.out, "u0", protocol.MsgRoomState); !st.Seats[1].BotPlaying || st.Ranked == nil || !*st.Ranked {
 		t.Fatalf("room_state = %+v (ranked %v)", st.Seats[1], st.Ranked)
 	}
 	h.moveOthersUntilPending(1, humanUsers())
@@ -445,13 +445,64 @@ func TestRankedDecidedAtFinish(t *testing.T) {
 			t.Fatalf("ranked = %v / %v, quer true", h.store.ranked["m1"], ended(h).Ranked)
 		}
 	})
-	t.Run("ausente até o game_over não conta", func(t *testing.T) {
+	// Humano da dupla vencedora com bot no lugar no fim: não conta. Da dupla perdedora: conta. Quem vence depende
+	// do jogo (determinístico no harness), então a expectativa sai do vencedor de cada partida.
+	absentRuns := func(t *testing.T, absent ...engine.Seat) (winner engine.Team, ranked bool, wantRanked bool) {
 		h := newHarness(t, withBots(auto(), 0))
 		h.startMatch()
-		h.send(room.Disconnected{UserID: "u1"})
-		playOthers(h, map[engine.Seat]bool{1: true}, humanUsers())
-		if v, ok := h.store.ranked["m1"]; !ok || v || ended(h).Ranked {
-			t.Fatalf("ranked = %v / %v, quer false", v, ended(h).Ranked)
+		skip := map[engine.Seat]bool{}
+		for _, s := range absent {
+			h.send(room.Disconnected{UserID: humanUsers()[s]})
+			skip[s] = true
+		}
+		playOthers(h, skip, humanUsers())
+		v, ok := h.store.ranked["m1"]
+		if !ok {
+			t.Fatal("Finish não foi chamado")
+		}
+		e := last[protocol.MatchEndedPayload](t, h.out, "u3", protocol.MsgMatchEnded)
+		if e.Winner == nil {
+			t.Fatal("partida sem vencedor")
+		}
+		if e.Ranked != v {
+			t.Fatalf("match_ended.ranked = %v, Finish = %v", e.Ranked, v)
+		}
+		want := true
+		for _, s := range absent {
+			if engine.TeamOf(s) == *e.Winner {
+				want = false
+			}
+		}
+		return *e.Winner, v, want
+	}
+	t.Run("humano da dupla vencedora com bot no fim não conta", func(t *testing.T) {
+		got := map[bool]bool{}
+		for _, seat := range []engine.Seat{0, 1, 2} {
+			w, ranked, want := absentRuns(t, seat)
+			if ranked != want {
+				t.Fatalf("ausente %d, vencedor %d: ranked = %v, quer %v", seat, w, ranked, want)
+			}
+			got[ranked] = true
+		}
+		if !got[false] || !got[true] {
+			t.Fatalf("o cenário não cobriu vencedor e perdedor com bot no fim: %v", got)
+		}
+	})
+	t.Run("humano da dupla perdedora com bot no fim conta", func(t *testing.T) {
+		// Ausente na dupla oposta à vencedora: procura entre os assentos o que cai no time perdedor.
+		for _, seat := range []engine.Seat{0, 1, 2} {
+			if w, ranked, _ := absentRuns(t, seat); engine.TeamOf(seat) != w {
+				if !ranked {
+					t.Fatalf("ausente %d (dupla perdedora): quer ranked = true", seat)
+				}
+				return
+			}
+		}
+		t.Fatal("nenhum cenário com ausente na dupla perdedora")
+	})
+	t.Run("humanos das duas duplas com bot no fim não contam", func(t *testing.T) {
+		if _, ranked, _ := absentRuns(t, 1, 2); ranked {
+			t.Fatal("ranked = true, quer false")
 		}
 	})
 	t.Run("W.O. com bot no controle conta", func(t *testing.T) {
@@ -459,8 +510,8 @@ func TestRankedDecidedAtFinish(t *testing.T) {
 		h.startMatch()
 		h.send(room.Disconnected{UserID: "u1"})
 		h.runFor(20*time.Second, 1)
-		if r := last[protocol.RoomStatePayload](t, h.out, "u0", protocol.MsgRoomState).Ranked; r == nil || *r {
-			t.Fatal("com o bot no controle a partida não contaria agora")
+		if r := last[protocol.RoomStatePayload](t, h.out, "u0", protocol.MsgRoomState).Ranked; r == nil || !*r {
+			t.Fatal("ranked ao vivo: partida que começou só com humanos segue true mesmo com bot no controle")
 		}
 		h.cmd("u2", protocol.TypeClaimForfeit, nil)
 		if v, ok := h.store.ranked["m1"]; !ok || !v || !ended(h).Ranked || ended(h).Reason != protocol.EndForfeit {

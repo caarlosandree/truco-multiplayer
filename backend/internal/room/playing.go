@@ -213,9 +213,13 @@ func (r *Room) broadcastState() {
 
 // finish grava o resultado. Falha de Finish não trava a sala: o Recover conclui no próximo boot.
 func (r *Room) finish(last engine.Action) {
-	// Conta no ranking só se nenhuma cadeira nasceu de bot e, ao fim, ou foi W.O. ou nenhum humano estava com
-	// um bot no controle (spec §6.2). Decidido aqui, antes de o estado da sala voltar à espera.
-	ranked := !r.startedWithBots && (last.Kind == engine.ActSysForfeit || !r.anyHumanBotControlled())
+	// Conta no ranking só se nenhuma cadeira nasceu de bot e, ao fim, ou foi W.O. ou nenhum humano da dupla
+	// VENCEDORA estava com um bot no controle; quem abandonou na dupla perdedora leva a derrota (spec §6.2).
+	// Decidido aqui, antes de o estado da sala voltar à espera.
+	ranked := !r.startedWithBots
+	if ranked && last.Kind != engine.ActSysForfeit && r.game.Winner != nil {
+		ranked = !r.humanBotControlledIn(*r.game.Winner)
+	}
 	ctx, cancel := r.storeCtx()
 	if err := r.opt.Store.Finish(ctx, r.matchID, ranked); err != nil {
 		r.opt.Log.Error("falha ao finalizar a partida; o Recover conclui no próximo boot", "match_id", r.matchID, "err", err)

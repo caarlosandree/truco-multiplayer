@@ -147,7 +147,7 @@ describe('bots', () => {
     r.onRoomState(state({ status: 'playing', seats: seatsBots([{}, {}, {}, { botPlaying: true }]), ranked: false }))
     expect(r.takeover?.assentos.map((a) => a.nome)).toEqual(['Duda'])
     expect(useToastsStore().items.at(-1)?.text).toBe(
-      'Duda saiu; um bot assumiu. Se Duda não voltar até o fim, a partida não conta no ranking — vocês ainda podem pedir W.O.',
+      'Duda saiu; um bot assumiu. Se a dupla de Duda vencer com o bot no lugar, a partida não conta no ranking — vocês ainda podem pedir W.O.',
     )
   })
 
@@ -157,7 +157,7 @@ describe('bots', () => {
     r.onRoomState(state({ status: 'playing', seats: seatsBots(), ranked: true }))
     r.onRoomState(state({ status: 'playing', seats: seatsBots([{}, {}, { botPlaying: true }]), ranked: false }))
     expect(useToastsStore().items.at(-1)?.text).toBe(
-      'Caio saiu; um bot assumiu. Se Caio não voltar até o fim, a partida não conta no ranking.',
+      'Caio saiu; um bot assumiu. Se vocês vencerem com o bot no lugar de Caio, a partida não conta no ranking.',
     )
   })
 

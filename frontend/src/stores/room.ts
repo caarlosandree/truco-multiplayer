@@ -93,10 +93,14 @@ export const useRoomStore = defineStore('room', {
           useToastsStore().push(base)
           continue
         }
-        const ranking = `Se ${nome} não voltar até o fim, a partida não conta no ranking`
-        // O W.O. só cabe aos adversários do ausente; o parceiro dele só é avisado do ranking.
+        // O W.O. só cabe aos adversários do ausente (e segue contando no ranking); a partida só sai do ranking
+        // se o bot estiver jogando por alguém da dupla vencedora (spec §6.2).
         const adversario = meuAssento !== null && teamOf(seat) !== teamOf(meuAssento)
-        useToastsStore().push(adversario ? `${base} ${ranking} — vocês ainda podem pedir W.O.` : `${base} ${ranking}.`)
+        useToastsStore().push(
+          adversario
+            ? `${base} Se a dupla de ${nome} vencer com o bot no lugar, a partida não conta no ranking — vocês ainda podem pedir W.O.`
+            : `${base} Se vocês vencerem com o bot no lugar de ${nome}, a partida não conta no ranking.`,
+        )
       }
     },
     onLeft(p: LeftRoomPayload) {

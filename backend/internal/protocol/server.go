@@ -67,7 +67,8 @@ type RoomStatePayload struct {
 	Seats      [4]*SeatInfo `json:"seats" tstype:"(SeatInfo | null)[],required"`
 	MatchID    string       `json:"matchId,omitempty"`
 	YourSeat   engine.Seat  `json:"yourSeat"`
-	// Ranked: "se a partida terminasse agora, contaria?"; null fora de playing.
+	// Ranked: false se a partida começou com bot (nunca conta), senão true; null fora de playing. O resultado
+	// definitivo (bot jogando por humano da dupla vencedora tira do ranking) vem em match_ended.ranked.
 	Ranked *bool `json:"ranked" tstype:"boolean | null,required"`
 }
 
