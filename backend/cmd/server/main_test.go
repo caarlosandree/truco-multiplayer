@@ -17,6 +17,7 @@ import (
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/enginetest"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/match"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/replay"
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/room"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/testdb"
 )
 
@@ -181,8 +182,74 @@ func TestServeResumesInProgressMatchesAndMountsWebSocket(t *testing.T) {
 
 // Sem People o lobby usa a implementação nula e ninguém consegue ser convidado: falha se a ligação com as contas sumir.
 func TestLobbyOptionsWirePeople(t *testing.T) {
-	opts := lobbyOptions(config.Config{}, nil, auth.NewService(auth.Options{}), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	opts := lobbyOptions(config.Config{}, nil, auth.NewService(auth.Options{}), slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
 	if got := fmt.Sprintf("%T", opts.People); got != "lobby.authPeople" {
 		t.Fatalf("People = %s, queria lobby.authPeople (cadastro de contas ligado)", got)
+	}
+}
+
+func TestBotDelayStaysInRange(t *testing.T) {
+	d := botDelay(config.BotConfig{DelayMin: time.Second, DelayMax: 3 * time.Second})
+	seen := map[time.Duration]bool{}
+	for range 200 {
+		v := d()
+		if v < time.Second || v > 3*time.Second {
+			t.Fatalf("atraso fora do intervalo: %v", v)
+		}
+		seen[v] = true
+	}
+	if len(seen) < 2 {
+		t.Fatal("atraso deveria variar")
+	}
+	if got := botDelay(config.BotConfig{DelayMin: time.Second, DelayMax: time.Second})(); got != time.Second {
+		t.Fatalf("min == max: %v", got)
+	}
+}
+
+func TestLobbyOptionsWireBots(t *testing.T) {
+	roster := []room.BotIdentity{{UserID: "b", DisplayName: "Seu Zé"}}
+	cfg := config.Config{Bots: config.BotConfig{ThinkBudget: time.Second, MaxConcurrent: 2}}
+	opts := lobbyOptions(cfg, nil, auth.NewService(auth.Options{}), slog.New(slog.NewTextHandler(io.Discard, nil)), roster)
+	if len(opts.Bots) != 1 || opts.Thinker == nil || opts.BotDelay == nil {
+		t.Fatalf("bots, Thinker e BotDelay devem estar ligados: %+v", opts)
+	}
+}
+
+// O boot carrega o roster semeado pela migração (8 bots) e o registra no log.
+func TestServerBootsWithBotRoster(t *testing.T) {
+	url := testdb.NewURL(t)
+	pool, err := db.Open(context.Background(), url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	roster, err := loadBots(context.Background(), match.NewStore(pool, nil))
+	if err != nil || len(roster) != 8 {
+		t.Fatalf("roster = %d, err = %v", len(roster), err)
+	}
+	var out bytes.Buffer
+	_, stop := startServer(t, url, &out)
+	if err := stop(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "bots carregados") || !strings.Contains(out.String(), "count=8") {
+		t.Fatalf("log do boot não registra o roster:\n%s", out.String())
+	}
+}
+
+// Roster incompleto (aqui, vazio) é erro de boot: start_with_bots não pode falhar com internal em runtime.
+func TestLoadBotsRejectsIncompleteRoster(t *testing.T) {
+	ctx := context.Background()
+	pool, err := db.Open(ctx, testdb.NewURL(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	if _, err := pool.Exec(ctx, `DELETE FROM users WHERE kind = 'bot'`); err != nil {
+		t.Fatal(err)
+	}
+	_, err = loadBots(ctx, match.NewStore(pool, nil))
+	if err == nil || !strings.Contains(err.Error(), "roster de bots incompleto") {
+		t.Fatalf("esperava erro de roster incompleto, veio %v", err)
 	}
 }

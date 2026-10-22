@@ -43,6 +43,7 @@
   - [Comandos disponíveis](#comandos-disponíveis)
   - [Variáveis de ambiente](#variáveis-de-ambiente)
 - [Usando o engine](#-usando-o-engine)
+- [Bots](#-bots)
 - [Testes](#-testes)
 - [Decisões de design](#-decisões-de-design)
 - [Convenções do projeto](#-convenções-do-projeto)
@@ -632,6 +633,20 @@ Copie `.env.example` para `.env` (não versionado) e ajuste os valores.
 | `WAITING_DISCONNECT_SECONDS` | `60` | Quem cai numa sala em espera perde o assento depois disso |
 | `MAX_ROOMS` | `50` | Salas simultâneas |
 | `SHUTDOWN_TIMEOUT_SECONDS` | `15` | Orçamento do desligamento gracioso |
+| `BOT_THINK_BUDGET_MS` / `BOT_MAX_CONCURRENT` | `800` / nº de CPUs | Orçamento de cálculo por decisão do bot (50..5000 ms) e cálculos simultâneos (1..64); ver [Bots](#-bots) |
+| `BOT_DELAY_MIN_MS` / `BOT_DELAY_MAX_MS` | `1000` / `3000` | Pausa de "pensar" do bot, sorteada no intervalo (0..10000 ms, máx ≥ mín) |
+
+---
+
+## 🤖 Bots
+
+Dá para jogar sem completar a mesa com humanos: o anfitrião de uma sala em espera usa **Começar com bots** (mensagem `start_with_bots`) e as cadeiras vazias são ocupadas por bots, que humanos que chegarem antes de a partida começar tomam no lugar (e o anfitrião pode remover bots). Os oito bots (`Seu Zé`, `Dona Cida`, `Tio Juca`, `Vó Nena`, `Compadre Tião`, `Dona Lurdes`, `Primo Dedé` e `Tia Fia`) são contas semeadas pela migração e carregadas no boot; o servidor não sobe se o roster não puder ser lido. O mesmo bot pode estar em várias mesas ao mesmo tempo e nunca entra no índice "um usuário, uma sala".
+
+- **Ranking:** partida que **começou** com bot nunca conta no ranking nem nas estatísticas. Nas demais, só deixa de contar se **terminar** com um bot controlando o assento de um humano (ausência com volta antes do fim continua valendo); um W.O. pedido conta se a partida não começou com bot. Os bots aparecem com um selo nos assentos.
+- **Como pensam:** política forte por simulação, com orçamento de tempo por decisão; se o cálculo estoura o prazo ou o limite global de cálculos simultâneos está cheio, a decisão sai pelo bot simples. O cálculo nunca roda no ator da sala e o bot só enxerga o que o assento dele veria (projeção por assento).
+- **Restart:** partidas com bots voltam jogando; o humano volta ausente, com um bot no lugar até reconectar.
+- **Configuração:** `BOT_THINK_BUDGET_MS` (`800`, 50..5000), `BOT_MAX_CONCURRENT` (nº de CPUs, 1..64), `BOT_DELAY_MIN_MS` (`1000`, 0..10000) e `BOT_DELAY_MAX_MS` (`3000`, mín..10000): a pausa de "pensar" é sorteada entre os dois.
+- **Benchmark de força:** `make bot-bench` joga 400 partidas do bot forte contra o simples e falha abaixo de 300 vitórias.
 
 ---
 

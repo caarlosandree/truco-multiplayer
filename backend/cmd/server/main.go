@@ -7,11 +7,12 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
+	crand "crypto/rand"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"os"
@@ -24,6 +25,7 @@ import (
 
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/admin"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/auth"
+	"github.com/caarlosandree/truco-multiplayer/backend/internal/bot"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/clock"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/config"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/db"
@@ -130,9 +132,42 @@ func newMailer(cfg config.Config, logger *slog.Logger) mail.Mailer {
 }
 
 // lobbyOptions monta as opções do lobby de produção; sem People ninguém poderia ser convidado (teste em main_test.go).
-func lobbyOptions(cfg config.Config, store room.MatchStore, authSvc *auth.Service, logger *slog.Logger) lobby.Options {
+func lobbyOptions(cfg config.Config, store room.MatchStore, authSvc *auth.Service, logger *slog.Logger,
+	bots []room.BotIdentity) lobby.Options {
+	runner := bot.NewRunner(bot.RunnerOptions{Strong: bot.DefaultStrong(), Fallback: bot.Simple{},
+		Budget: cfg.Bots.ThinkBudget, MaxConcurrent: cfg.Bots.MaxConcurrent})
 	return lobby.Options{Timing: room.Timing(cfg.Game), MaxRooms: cfg.MaxRooms, Store: store, Clock: clock.Real{},
-		Rand: rand.Reader, Log: logger, People: lobby.NewPeople(authSvc)}
+		Rand: crand.Reader, Log: logger, People: lobby.NewPeople(authSvc),
+		Bots: bots, Thinker: runner, BotDelay: botDelay(cfg.Bots)}
+}
+
+// botDelay sorteia a pausa de "pensar" uniformemente em [DelayMin, DelayMax]; math/rand/v2 é seguro para concorrência.
+func botDelay(c config.BotConfig) func() time.Duration {
+	return func() time.Duration {
+		if c.DelayMax <= c.DelayMin {
+			return c.DelayMin
+		}
+		return c.DelayMin + rand.N(c.DelayMax-c.DelayMin+1)
+	}
+}
+
+// minBots é o mínimo para sentar 3 bots numa mesa com um humano (start_with_bots).
+const minBots = 3
+
+// loadBots lê o roster de bots do banco; sem ao menos minBots o servidor não sobe (start_with_bots responderia internal).
+func loadBots(ctx context.Context, store *match.Store) ([]room.BotIdentity, error) {
+	bots, err := store.ListBots(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("carregar o roster de bots (rode a migração do banco): %w", err)
+	}
+	if len(bots) < minBots {
+		return nil, fmt.Errorf("roster de bots incompleto: %d no banco, precisa de ao menos %d (rode a migração)", len(bots), minBots)
+	}
+	roster := make([]room.BotIdentity, len(bots))
+	for i, b := range bots {
+		roster[i] = room.BotIdentity{UserID: b.ID, DisplayName: b.DisplayName}
+	}
+	return roster, nil
 }
 
 func serve(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger) error {
@@ -148,7 +183,12 @@ func serve(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, logger *s
 	if err != nil {
 		return fmt.Errorf("recuperar partidas: %w", err)
 	}
-	lob := lobby.New(context.Background(), lobbyOptions(cfg, lobby.NewMatchStore(store), authSvc, logger))
+	bots, err := loadBots(ctx, store)
+	if err != nil {
+		return err
+	}
+	logger.Info("bots carregados", "count", len(bots))
+	lob := lobby.New(context.Background(), lobbyOptions(cfg, lobby.NewMatchStore(store), authSvc, logger, bots))
 	if err := lob.Restore(recovered); err != nil {
 		return fmt.Errorf("restaurar salas: %w", err)
 	}

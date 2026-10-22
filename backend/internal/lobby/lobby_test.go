@@ -480,3 +480,56 @@ func TestInviteToBotSeatIsNotSeatTaken(t *testing.T) {
 		t.Fatalf("não esperava erro: %+v", ana.messages())
 	}
 }
+
+// Restore de partida solo (1 humano + 3 bots): só o humano entra no índice; o id de um bot continua livre.
+func TestRestoreSkipsBotsInIndex(t *testing.T) {
+	l := newLobby(t, 3)
+	rec, _ := enginetest.RandomRecord(4)
+	rec.Actions = rec.Actions[:12]
+	for s := 1; s < 4; s++ {
+		rec.Players[s].Bot = true
+	}
+	state, err := replay.Rebuild(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Restore([]match.Recovered{{Record: rec, State: state, NextPly: 12}}); err != nil {
+		t.Fatal(err)
+	}
+	ana := connect(l, rec.Players[0].UserID, "Ana")
+	if st := roomState(t, ana); st.Status != protocol.RoomPlaying || st.YourSeat != 0 {
+		t.Fatalf("room_state = %+v", st)
+	}
+	// o bot não está no índice: quem tem esse id não é levado para a sala restaurada.
+	b := connect(l, rec.Players[1].UserID, "Bot")
+	b.waitFor(t, protocol.MsgLobbySnapshot, nil)
+	if b.count(protocol.MsgRoomState) != 0 {
+		t.Fatal("bot não pode estar no índice do lobby")
+	}
+}
+
+// Duas mesas sentam o mesmo roster de bots ao mesmo tempo: ambas começam e o índice não guarda bots.
+func TestSameBotInTwoRooms(t *testing.T) {
+	l := newLobbyBots(t, 3, nil, botRoster)
+	ana, bia := connect(l, "u0", "Ana"), connect(l, "u1", "Bia")
+	for _, c := range []*fakeClient{ana, bia} {
+		dispatch(l, c, protocol.TypeCreateRoom, protocol.CreateRoomPayload{Visibility: protocol.VisibilityPublic})
+		roomState(t, c)
+		dispatch(l, c, protocol.TypeStartWithBots, nil)
+	}
+	for _, c := range []*fakeClient{ana, bia} {
+		c.waitFor(t, protocol.MsgRoomState, func(m protocol.ServerMessage) bool {
+			return m.Payload.(protocol.RoomStatePayload).Status == protocol.RoomPlaying
+		})
+		c.waitFor(t, protocol.MsgState, nil)
+		if c.count(protocol.MsgError) != 0 {
+			t.Fatalf("%s: erro inesperado: %+v", c.id, c.messages())
+		}
+	}
+	// ids de bot seguem livres no índice.
+	b := connect(l, "b0", "Seu Zé")
+	b.waitFor(t, protocol.MsgLobbySnapshot, nil)
+	if b.count(protocol.MsgRoomState) != 0 {
+		t.Fatal("bot não pode estar no índice do lobby")
+	}
+}

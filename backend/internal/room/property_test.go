@@ -105,6 +105,16 @@ func (h *harness) checkConsistency(t *testing.T, seed uint64, matchID string) {
 	if err != nil || !reflect.DeepEqual(rebuilt.Clone(), live) {
 		t.Fatalf("seed %d: o log não reconstrói o estado da sala (%v)", seed, err)
 	}
+	// o restore reconstrói, do log gravado, exatamente a memória por assento que a sala viva acumulou.
+	restored, err := room.SeatEventsOf(*h.store.records[matchID])
+	if err != nil {
+		t.Fatalf("seed %d: reprocessar o log: %v", seed, err)
+	}
+	for s := engine.Seat(0); s < 4; s++ {
+		if got := h.room.InputFor(s).Events; !reflect.DeepEqual(got, restored[s]) {
+			t.Fatalf("seed %d: assento %d: eventos do restore divergem da sala viva (%d vs %d)", seed, s, len(restored[s]), len(got))
+		}
+	}
 	for i, u := range users {
 		seat := engine.Seat(i)
 		var lastView *engine.PlayerView

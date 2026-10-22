@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/clock"
 	"github.com/caarlosandree/truco-multiplayer/backend/internal/match"
@@ -40,8 +41,10 @@ type Options struct {
 	Clock    clock.Clock
 	Rand     io.Reader
 	Log      *slog.Logger
-	Bots     []room.BotIdentity // roster dos bots que as salas podem sentar
-	People   People             // cadastro de contas para convidar; nil = ninguém pode ser convidado
+	Bots     []room.BotIdentity   // roster dos bots que as salas podem sentar
+	Thinker  room.Thinker         // calcula as decisões dos bots fora do ator; nil = bots só agem pelos prazos
+	BotDelay func() time.Duration // pausa de "pensar" de cada decisão de bot; nil = sem pausa
+	People   People               // cadastro de contas para convidar; nil = ninguém pode ser convidado
 }
 
 type member struct {
@@ -394,16 +397,27 @@ func (l *Lobby) Restore(recovered []match.Recovered) error {
 		name := "Sala de " + rc.Record.Players[0].DisplayName
 		var seats [4]*protocol.SeatSummary
 		for i, p := range rc.Record.Players {
-			seats[i] = &protocol.SeatSummary{DisplayName: p.DisplayName}
+			seats[i] = &protocol.SeatSummary{DisplayName: p.DisplayName, Bot: p.Bot}
 		}
 		score := rc.State.Score
-		actor := room.Start(l.ctx, l.roomOptions(id, code, name, true),
-			&room.Restored{MatchID: rc.Record.ID, Players: rc.Record.Players, State: rc.State, NextPly: rc.NextPly})
+		events, err := room.SeatEventsOf(rc.Record)
+		if err != nil {
+			return fmt.Errorf("reprocessar eventos da partida %s: %w", rc.Record.ID, err)
+		}
+		var bots [4]bool
+		for s, p := range rc.Record.Players {
+			bots[s] = p.Bot
+		}
+		actor := room.Start(l.ctx, l.roomOptions(id, code, name, true), &room.Restored{
+			MatchID: rc.Record.ID, Players: rc.Record.Players, State: rc.State, NextPly: rc.NextPly, Events: events, Bots: bots})
 		l.rooms[id] = &entry{actor: actor, summary: room.Summary{
 			Room:   protocol.RoomSummary{ID: id, Name: name, Status: protocol.RoomPlaying, Seats: seats, Score: &score},
 			Public: true, Code: code, MatchID: rc.Record.ID}}
 		l.codes[code] = id
 		for _, p := range rc.Record.Players {
+			if p.Bot {
+				continue // bots nunca entram no índice: a mesma conta joga em várias mesas
+			}
 			if prev, in := l.index[p.UserID]; in {
 				l.opt.Log.Warn("usuário em duas partidas recuperadas; mantida a primeira sala", "user_id", p.UserID,
 					"match_id", l.rooms[prev].summary.MatchID, "other_match_id", rc.Record.ID)
@@ -462,7 +476,8 @@ func (l *Lobby) Shutdown(ctx context.Context) error {
 
 func (l *Lobby) roomOptions(id, code, name string, public bool) room.Options {
 	return room.Options{ID: id, Code: code, Name: name, Public: public, Timing: l.opt.Timing, Store: l.opt.Store,
-		Out: l, Registry: l, Clock: l.opt.Clock, Rand: l.rand, Log: l.opt.Log.With("room_id", id), Bots: l.opt.Bots}
+		Out: l, Registry: l, Clock: l.opt.Clock, Rand: l.rand, Log: l.opt.Log.With("room_id", id), Bots: l.opt.Bots,
+		Thinker: l.opt.Thinker, BotDelay: l.opt.BotDelay}
 }
 
 func (l *Lobby) roomOfLocked(userID string) *entry {

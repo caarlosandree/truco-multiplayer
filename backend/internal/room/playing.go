@@ -173,7 +173,7 @@ func (r *Room) broadcastGame(evs []engine.Event) {
 			continue
 		}
 		seat := engine.Seat(s)
-		r.seatEvents[s] = append(r.seatEvents[s], engine.FilterEvents(evs, seat)...) // memória de cada assento (os bots só sabem isto)
+		appendSeatEvents(&r.seatEvents, seat, evs) // memória de cada assento (os bots só sabem isto)
 		if st.bot {
 			continue
 		}
@@ -182,6 +182,25 @@ func (r *Room) broadcastGame(evs []engine.Event) {
 		}
 		r.opt.Out.Send(st.userID, r.stateFor(seat))
 	}
+}
+
+// appendSeatEvents acrescenta à memória do assento só o que ele pode ver. É a única forma de acumular eventos
+// por assento, ao vivo e no restore (SeatEventsOf).
+func appendSeatEvents(dst *[4][]engine.Event, seat engine.Seat, evs []engine.Event) {
+	dst[seat] = append(dst[seat], engine.FilterEvents(evs, seat)...)
+}
+
+// SeatEventsOf reprocessa o log e reconstrói os eventos visíveis a cada assento, idênticos aos que a sala
+// acumula ao vivo; o restore (Restored.Events) usa isto para os bots verem o mesmo que veriam sem restart.
+func SeatEventsOf(rec replay.Record) ([4][]engine.Event, error) {
+	var events [4][]engine.Event
+	_, err := replay.Walk(rec, func(st replay.Step) error {
+		for s := range events {
+			appendSeatEvents(&events, engine.Seat(s), st.Events)
+		}
+		return nil
+	})
+	return events, err
 }
 
 func (r *Room) broadcastState() {
