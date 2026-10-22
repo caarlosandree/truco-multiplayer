@@ -2,7 +2,6 @@ package engine
 
 import (
 	"encoding/json"
-	"errors"
 	"math/rand/v2"
 	"testing"
 )
@@ -38,52 +37,34 @@ func playRandomGame(t *testing.T, seed uint64) {
 
 func applyRandomLegal(t *testing.T, g GameState, rng *rand.Rand, seed uint64) (GameState, []Event) {
 	t.Helper()
-	candidates := candidateActions(g)
-	rng.Shuffle(len(candidates), func(i, j int) { candidates[i], candidates[j] = candidates[j], candidates[i] })
-	for _, a := range candidates {
-		next, evs, err := Apply(g, a)
-		if err == nil {
-			return next, evs
-		}
-		var re *RuleError
-		if !errors.As(err, &re) {
-			t.Fatalf("seed %d: erro que não é RuleError: %v", seed, err)
-		}
+	candidates := legalCandidates(g)
+	if len(candidates) == 0 {
+		t.Fatalf("seed %d: nenhuma ação legal na fase %s", seed, g.Phase)
 	}
-	t.Fatalf("seed %d: nenhuma ação legal na fase %s", seed, g.Phase)
-	return g, nil
+	a := candidates[rng.IntN(len(candidates))]
+	next, evs, err := Apply(g, a)
+	if err != nil {
+		t.Fatalf("seed %d: LegalActions listou ação recusada %+v: %v", seed, a, err)
+	}
+	return next, evs
 }
 
-func candidateActions(g GameState) []Action {
+func legalCandidates(g GameState) []Action {
 	if g.Phase == PhaseWaiting || g.Phase == PhaseHandEnd {
 		return []Action{{Kind: ActSysStartHand}}
 	}
 	var out []Action
 	for s := Seat(0); s < 4; s++ {
-		out = append(out,
-			Action{Kind: ActChooseCard, Seat: s, Keep: 0},
-			Action{Kind: ActChooseCard, Seat: s, Keep: 1},
-			Action{Kind: ActPassBurn, Seat: s},
-			Action{Kind: ActSysTimeout, Seat: s},
-		)
-		for _, choice := range []VoteChoice{VoteAccept, VoteRun, VoteRaise, VotePlay} {
-			out = append(out, Action{Kind: ActVote, Seat: s, Choice: choice})
-		}
-		for slot := range 3 {
-			out = append(out,
-				Action{Kind: ActPlayCard, Seat: s, Slot: slot},
-				Action{Kind: ActPlayCard, Seat: s, Slot: slot, Covered: true},
-			)
-		}
-		for slot, card := range g.Hand.Hands[s] {
-			if card.Rank == 4 {
-				out = append(out, Action{Kind: ActBurn, Seat: s, Slots: []int{slot}})
+		for _, a := range LegalActions(g, s) {
+			// Truco só em mãos normais: a punição tem teste próprio e encerraria as partidas cedo demais.
+			if a.Kind == ActRequestRaise && g.Hand.Kind != HandNormal {
+				continue
 			}
+			out = append(out, a)
 		}
-	}
-	// Truco só em mãos normais: a punição tem teste próprio e encerraria as partidas cedo demais.
-	if g.Hand.Kind == HandNormal {
-		out = append(out, Action{Kind: ActRequestRaise, Seat: g.Hand.Turn})
+		if _, ok := DefaultAction(g, s); ok {
+			out = append(out, Action{Kind: ActSysTimeout, Seat: s})
+		}
 	}
 	return out
 }
